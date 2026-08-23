@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nammu-os-config
+  namespace: nammu-os
+data:
+  NODE_ENV: 'production'
+  PORT: '3000'
+  NEXT_TELEMETRY_DISABLED: '1'
+  APP_MODE: 'hosted'
+  CORS_ORIGIN: 'https://os.nammu.cloud'

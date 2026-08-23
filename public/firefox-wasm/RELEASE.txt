@@ -1,0 +1,7 @@
+Firefox-WASM Chrome demo v0.0.1
+Source: https://github.com/xnammu/firefox-wasm/releases/tag/v0.0.1
+Artifact: chrome-demo-v0.0.1.tar.gz
+SHA-256: c6fd1c2101722f12cc5a933ec405af8a20c6d0ae849c66a5f1703b6d26db8e8b
+
+The bundled Nammu Wisp discovery URL is replaced by scripts/patch-firefox-wasm-release.mjs
+so Firefox uses the same-origin /firefox-wisp/ server provided by server.mjs.

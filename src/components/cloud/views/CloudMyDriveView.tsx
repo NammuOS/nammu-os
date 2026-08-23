@@ -1,0 +1,1152 @@
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Edit3,
+  Eye,
+  File,
+  FileText,
+  Film,
+  Filter,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Grid2X2,
+  Image as ImageIcon,
+  Info,
+  List,
+  Loader2,
+  Music,
+  RefreshCw,
+  Search,
+  Star,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
+import type { CloudFile, CloudProvider } from '../types/cloudTypes';
+import {
+  cloudApi,
+  formatBytes,
+  formatDate,
+  getFilePreviewType,
+  getProviderColor,
+  getProviderName,
+} from '../services/cloudClient';
+
+interface MyDriveViewProps {
+  currentPath: string;
+  files: CloudFile[];
+  onNavigatePath: (path: string) => void;
+  onCreateFolder: (name: string) => Promise<void>;
+  onUploadFiles: (files: File[]) => Promise<void>;
+  onRenameFile: (fileId: string, newName: string) => Promise<void>;
+  onDeleteFile: (fileId: string) => Promise<void>;
+  onBulkDelete: (fileIds: string[]) => Promise<void>;
+  onToggleStar: (file: CloudFile) => Promise<void>;
+  onPreviewFile: (file: CloudFile) => void;
+  onShowDetails: (file: CloudFile) => void;
+  onDownloadFile?: (file: CloudFile) => void;
+  onRefresh: () => void;
+}
+
+const ALL_PROVIDERS: { id: CloudProvider; name: string }[] = [
+  { id: 'google_drive', name: 'Google Drive' },
+  { id: 'onedrive', name: 'OneDrive' },
+  { id: 'dropbox', name: 'Dropbox' },
+  { id: 'mega', name: 'MEGA' },
+  { id: 'pcloud', name: 'pCloud' },
+  { id: 'yandex', name: 'Yandex Disk' },
+  { id: 's3', name: 'S3-Compatible Storage' },
+];
+
+type SortColumn = 'name' | 'provider' | 'type' | 'modified' | 'size';
+type SortDirection = 'asc' | 'desc';
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  file: CloudFile;
+}
+
+export default function CloudMyDriveView({
+  currentPath,
+  files,
+  onNavigatePath,
+  onCreateFolder,
+  onUploadFiles,
+  onRenameFile,
+  onDeleteFile,
+  onBulkDelete,
+  onToggleStar,
+  onPreviewFile,
+  onShowDetails,
+  onDownloadFile,
+  onRefresh,
+}: MyDriveViewProps) {
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<CloudFile[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedProviderFilter, setSelectedProviderFilter] = useState<CloudProvider | 'all'>(
+    'all',
+  );
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+
+  // Sorting
+  const [sortColumn, setSortColumn] = useState<SortColumn>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Selection & Active
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+
+  // Context Menu
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  // Modals / Inputs
+  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [renamingFile, setRenamingFile] = useState<CloudFile | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  // Global / Subfolder search across entire cloud database
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await cloudApi.searchFiles(query);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('Search across folders failed:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Base displayed files before provider filtering
+  const rawDisplayedFiles = searchResults !== null ? searchResults : files;
+
+  // Filtered by provider
+  const providerFilteredFiles = useMemo(() => {
+    if (selectedProviderFilter === 'all') return rawDisplayedFiles;
+    return rawDisplayedFiles.filter((f) => f.provider === selectedProviderFilter);
+  }, [rawDisplayedFiles, selectedProviderFilter]);
+
+  // Sorted displayed files
+  const displayedFiles = useMemo(() => {
+    return [...providerFilteredFiles].sort((a, b) => {
+      // Folders always pinned to top
+      if (a.is_folder && !b.is_folder) return -1;
+      if (!a.is_folder && b.is_folder) return 1;
+
+      let compareVal = 0;
+      const nameA = a.file_name || (a as any).name || '';
+      const nameB = b.file_name || (b as any).name || '';
+
+      switch (sortColumn) {
+        case 'name':
+          compareVal = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+          break;
+        case 'provider':
+          compareVal = (a.provider || '').localeCompare(b.provider || '');
+          break;
+        case 'type':
+          compareVal = (a.mime_type || '').localeCompare(b.mime_type || '');
+          break;
+        case 'modified': {
+          const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          compareVal = timeA - timeB;
+          break;
+        }
+        case 'size':
+          compareVal = (Number(a.size) || 0) - (Number(b.size) || 0);
+          break;
+      }
+      return sortDirection === 'asc' ? compareVal : -compareVal;
+    });
+  }, [providerFilteredFiles, sortColumn, sortDirection]);
+
+  // Toggle sort column
+  const handleSort = (col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDirection('asc');
+    }
+  };
+
+  // Breadcrumbs calculation
+  const breadcrumbParts = useMemo(() => {
+    const parts = currentPath.split('/').filter(Boolean);
+    const crumbs = [{ label: 'Cloud', path: '/' }];
+    let acc = '/';
+    for (const part of parts) {
+      acc += `${part}/`;
+      crumbs.push({ label: part, path: acc });
+    }
+    return crumbs;
+  }, [currentPath]);
+
+  const activeFile = displayedFiles.find((f) => f.id === activeFileId);
+
+  const selectAll = () => {
+    if (selectedIds.size === displayedFiles.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayedFiles.map((f) => f.id)));
+    }
+  };
+
+  const handleItemClick = (file: CloudFile, e?: React.MouseEvent) => {
+    setContextMenu(null);
+    if (e?.ctrlKey || e?.metaKey) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(file.id)) next.delete(file.id);
+        else next.add(file.id);
+        return next;
+      });
+    } else {
+      setActiveFileId(file.id);
+    }
+  };
+
+  const handleItemDoubleClick = (file: CloudFile) => {
+    setContextMenu(null);
+    if (file.is_folder) {
+      const nextPath = `${file.virtual_path}${file.file_name}/`;
+      setSearchQuery('');
+      setSearchResults(null);
+      onNavigatePath(nextPath);
+    } else {
+      onPreviewFile(file);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, file: CloudFile) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveFileId(file.id);
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    const offsetX = rect ? e.clientX - rect.left : e.clientX;
+    const offsetY = rect ? e.clientY - rect.top : e.clientY;
+
+    setContextMenu({
+      x: Math.min(offsetX, (rect?.width || 800) - 180),
+      y: Math.min(offsetY, (rect?.height || 600) - 220),
+      file,
+    });
+  };
+
+  const handleDownloadFile = async (file: CloudFile) => {
+    if (onDownloadFile) {
+      onDownloadFile(file);
+      return;
+    }
+    const downloadUrl = cloudApi.getDownloadUrl(file.id);
+    try {
+      const res = await fetch(downloadUrl, { credentials: 'include' });
+      if (!res.ok) {
+        window.open(downloadUrl, '_blank');
+        return;
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = file.file_name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch {
+      window.open(downloadUrl, '_blank');
+    }
+  };
+
+  const handleBulkDownload = () => {
+    const selectedFiles = displayedFiles.filter((f) => selectedIds.has(f.id) && !f.is_folder);
+    for (const f of selectedFiles) {
+      handleDownloadFile(f);
+    }
+  };
+
+  // Keyboard navigation
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isNewFolderOpen || renamingFile) return;
+
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+        setSelectedIds(new Set());
+        if (searchQuery) {
+          setSearchQuery('');
+          setSearchResults(null);
+        }
+        return;
+      }
+
+      if (!displayedFiles.length) return;
+
+      const currentIndex = displayedFiles.findIndex((f) => f.id === activeFileId);
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = currentIndex < displayedFiles.length - 1 ? currentIndex + 1 : 0;
+        setActiveFileId(displayedFiles[nextIndex].id);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : displayedFiles.length - 1;
+        setActiveFileId(displayedFiles[prevIndex].id);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (activeFile) handleItemDoubleClick(activeFile);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedIds.size > 0) {
+          onBulkDelete(Array.from(selectedIds));
+          setSelectedIds(new Set());
+        } else if (activeFile) {
+          onDeleteFile(activeFile.id);
+        }
+      }
+    },
+    [
+      activeFile,
+      activeFileId,
+      displayedFiles,
+      isNewFolderOpen,
+      onDeleteFile,
+      onBulkDelete,
+      renamingFile,
+      searchQuery,
+    ],
+  );
+
+  const submitCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    await onCreateFolder(newFolderName.trim());
+    setNewFolderName('');
+    setIsNewFolderOpen(false);
+  };
+
+  const submitRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renamingFile || !renameValue.trim()) return;
+    await onRenameFile(renamingFile.id, renameValue.trim());
+    setRenamingFile(null);
+    setRenameValue('');
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploaded = Array.from(e.target.files || []);
+    if (uploaded.length) {
+      onUploadFiles(uploaded);
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const getFileIcon = (file: CloudFile) => {
+    if (file.is_folder) return <Folder size={14} className="shrink-0 text-[#4aa3ff]" />;
+    const type = getFilePreviewType(file.mime_type, file.file_name);
+    switch (type) {
+      case 'image':
+        return <ImageIcon size={14} className="shrink-0 text-[#2ee6a6]" />;
+      case 'video':
+        return <Film size={14} className="shrink-0 text-[#e68c2e]" />;
+      case 'audio':
+        return <Music size={14} className="shrink-0 text-[#9334e6]" />;
+      case 'pdf':
+        return <FileText size={14} className="shrink-0 text-[#ef4444]" />;
+      default:
+        return <File size={14} className="shrink-0 text-[#7f95a8]" />;
+    }
+  };
+
+  const renderSortIndicator = (col: SortColumn) => {
+    if (sortColumn !== col) return null;
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={9} className="ml-1 text-[#4aa3ff] inline" />
+    ) : (
+      <ArrowDown size={9} className="ml-1 text-[#4aa3ff] inline" />
+    );
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onClick={() => setContextMenu(null)}
+      className="relative flex flex-1 flex-col overflow-hidden bg-[#05080d] text-[11px] outline-none select-none"
+    >
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        {...({ webkitdirectory: '', directory: '' } as any)}
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+
+      {/* Action Toolbar */}
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-white/[0.06] bg-white/[0.01] px-3">
+        <button
+          onClick={() => setIsNewFolderOpen(true)}
+          className="flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[9px] text-[#8fa5b8] hover:bg-white/[0.05] hover:text-[#d6e5f0] transition-colors"
+        >
+          <FolderPlus size={11} className="text-[#4aa3ff]" />
+          <span>New Folder</span>
+        </button>
+
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[9px] text-[#8fa5b8] hover:bg-white/[0.05] hover:text-[#d6e5f0] transition-colors"
+        >
+          <Upload size={11} className="text-[#2ee6a6]" />
+          <span>Upload</span>
+        </button>
+
+        <button
+          onClick={() => folderInputRef.current?.click()}
+          className="hidden sm:flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[9px] text-[#8fa5b8] hover:bg-white/[0.05] hover:text-[#d6e5f0] transition-colors"
+        >
+          <FolderOpen size={11} />
+          <span>Upload Folder</span>
+        </button>
+
+        <button
+          onClick={onRefresh}
+          className="grid h-6 w-6 place-items-center rounded border border-white/[0.06] text-[#71889d] hover:bg-white/[0.04] hover:text-[#bcd0df]"
+          title="Refresh"
+        >
+          <RefreshCw size={10} />
+        </button>
+
+        {/* Breadcrumb Path */}
+        <div className="ml-2 flex min-w-0 items-center font-mono text-[9px] text-[#557087]">
+          {breadcrumbParts.map((crumb, idx) => (
+            <div key={crumb.path} className="flex items-center">
+              {idx > 0 && <ChevronRight size={10} className="mx-0.5 text-[#3d5366]" />}
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSearchResults(null);
+                  onNavigatePath(crumb.path);
+                }}
+                className={`truncate hover:text-[#4aa3ff] transition-colors ${
+                  idx === breadcrumbParts.length - 1
+                    ? 'text-[#9ab3c7] font-medium'
+                    : 'text-[#557087]'
+                }`}
+              >
+                {crumb.label}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Provider-Wise Filter Dropdown */}
+        <div className="relative ml-auto">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsFilterDropdownOpen(!isFilterDropdownOpen);
+            }}
+            className={`flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[9px] uppercase tracking-wider transition-all ${
+              selectedProviderFilter !== 'all'
+                ? 'border-[#4aa3ff]/50 bg-[#4aa3ff]/15 text-[#badeff]'
+                : 'border-white/[0.06] bg-white/[0.02] text-[#8fa5b8] hover:bg-white/[0.05] hover:text-[#d6e5f0]'
+            }`}
+          >
+            <Filter
+              size={10}
+              className={selectedProviderFilter !== 'all' ? 'text-[#4aa3ff]' : ''}
+            />
+            {selectedProviderFilter !== 'all' ? (
+              <div className="flex items-center gap-1">
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: getProviderColor(selectedProviderFilter) }}
+                />
+                <span>{getProviderName(selectedProviderFilter)}</span>
+              </div>
+            ) : (
+              <span>All Providers</span>
+            )}
+            <ChevronDown size={9} className="opacity-70" />
+          </button>
+
+          {isFilterDropdownOpen && (
+            <div
+              className="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-white/[0.08] bg-[#080d15] p-1 shadow-2xl backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => {
+                  setSelectedProviderFilter('all');
+                  setIsFilterDropdownOpen(false);
+                }}
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
+                  selectedProviderFilter === 'all'
+                    ? 'bg-[#4aa3ff]/15 text-[#a8d3ff] font-medium'
+                    : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
+                }`}
+              >
+                <span>All Providers</span>
+                <span className="font-mono text-[8px] opacity-60">{rawDisplayedFiles.length}</span>
+              </button>
+
+              <div className="my-1 border-t border-white/[0.04]" />
+
+              {ALL_PROVIDERS.map((prov) => {
+                const count = rawDisplayedFiles.filter((f) => f.provider === prov.id).length;
+                const isSelected = selectedProviderFilter === prov.id;
+                return (
+                  <button
+                    key={prov.id}
+                    onClick={() => {
+                      setSelectedProviderFilter(prov.id);
+                      setIsFilterDropdownOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
+                      isSelected
+                        ? 'bg-[#4aa3ff]/15 text-[#a8d3ff] font-medium'
+                        : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: getProviderColor(prov.id) }}
+                      />
+                      <span>{prov.name}</span>
+                    </div>
+                    <span className="font-mono text-[8px] opacity-60">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Search filter (Global Across All Subfolders) */}
+        <div className="flex w-44 items-center gap-1.5 border border-white/[0.06] bg-black/30 px-2 py-1 rounded">
+          {isSearching ? (
+            <Loader2 size={10} className="animate-spin text-[#4aa3ff]" />
+          ) : (
+            <Search size={10} className="text-[#4aa3ff]" />
+          )}
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search all folders..."
+            className="min-w-0 flex-1 bg-transparent text-[9px] text-[#c9d8e4] outline-none placeholder:text-[#4d6477]"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSearchResults(null);
+              }}
+              className="text-[#556f84] hover:text-white"
+            >
+              <X size={10} />
+            </button>
+          )}
+        </div>
+
+        {/* View mode toggle */}
+        <div className="flex items-center gap-0.5 border-l border-white/[0.06] pl-1.5">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-1 transition-colors ${viewMode === 'list' ? 'text-[#4aa3ff]' : 'text-[#52697c]'}`}
+            title="List view"
+          >
+            <List size={12} />
+          </button>
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`p-1 transition-colors ${viewMode === 'grid' ? 'text-[#4aa3ff]' : 'text-[#52697c]'}`}
+            title="Grid view"
+          >
+            <Grid2X2 size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* Global Search / Provider Filter Header Banner */}
+      {(searchResults !== null || selectedProviderFilter !== 'all') && (
+        <div className="flex h-7 items-center justify-between border-b border-[#4aa3ff]/20 bg-[#4aa3ff]/10 px-3 font-mono text-[9px] text-[#bde0ff]">
+          <div className="flex items-center gap-2">
+            {searchResults !== null ? (
+              <>
+                <Search size={10} className="text-[#4aa3ff]" />
+                <span>
+                  Search "{searchQuery}"
+                  {selectedProviderFilter !== 'all' &&
+                    ` on ${getProviderName(selectedProviderFilter)}`}
+                  : {displayedFiles.length} result{displayedFiles.length === 1 ? '' : 's'}
+                </span>
+              </>
+            ) : (
+              <>
+                <Filter size={10} className="text-[#4aa3ff]" />
+                <span className="flex items-center gap-1">
+                  Provider Filter:
+                  <span
+                    className="h-1.5 w-1.5 rounded-full inline-block ml-1"
+                    style={{
+                      backgroundColor: getProviderColor(selectedProviderFilter as CloudProvider),
+                    }}
+                  />
+                  <strong className="text-white">
+                    {getProviderName(selectedProviderFilter as CloudProvider)}
+                  </strong>
+                  ({displayedFiles.length} items in path)
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2 font-mono text-[8px] uppercase tracking-wider">
+            {selectedProviderFilter !== 'all' && (
+              <button
+                onClick={() => setSelectedProviderFilter('all')}
+                className="text-[#84a3be] hover:text-white flex items-center gap-1"
+              >
+                <span>Clear Provider Filter</span>
+                <X size={9} />
+              </button>
+            )}
+            {searchResults !== null && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSearchResults(null);
+                }}
+                className="text-[#84a3be] hover:text-white flex items-center gap-1"
+              >
+                <span>Exit Search</span>
+                <X size={9} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Selection Action Bar */}
+      {selectedIds.size > 0 && searchResults === null && (
+        <div className="flex h-7 items-center justify-between border-b border-[#4aa3ff]/20 bg-[#4aa3ff]/10 px-3 font-mono text-[9px] text-[#bde0ff]">
+          <div className="flex items-center gap-2">
+            <span>
+              {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
+            </span>
+            <button onClick={selectAll} className="text-[#72b8f8] hover:underline">
+              {selectedIds.size === displayedFiles.length ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDownload}
+              className="flex items-center gap-1 rounded bg-[#2ee6a6]/20 px-2 py-0.5 text-[#2ee6a6] hover:bg-[#2ee6a6]/30"
+            >
+              <Download size={10} /> Download Selected
+            </button>
+            <button
+              onClick={() => {
+                onBulkDelete(Array.from(selectedIds));
+                setSelectedIds(new Set());
+              }}
+              className="flex items-center gap-1 rounded bg-red-500/20 px-2 py-0.5 text-red-300 hover:bg-red-500/30"
+            >
+              <Trash2 size={10} /> Delete Selected
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-[#84a3be] hover:text-white"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Center Explorer & Side Inspector */}
+      <div className="flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-auto os-scrollbar p-2">
+          {viewMode === 'list' && (
+            <div className="grid grid-cols-[1fr_120px_110px_90px_70px_28px] border-b border-white/[0.05] px-3 py-1 font-mono text-[8px] uppercase tracking-[0.12em] text-[#43586b]">
+              <button
+                onClick={() => handleSort('name')}
+                className="flex items-center text-left hover:text-[#bcd2e4] transition-colors"
+              >
+                <span>Name</span>
+                {renderSortIndicator('name')}
+              </button>
+              <button
+                onClick={() => handleSort('provider')}
+                className="flex items-center text-left hover:text-[#bcd2e4] transition-colors"
+              >
+                <span>{searchResults !== null ? 'Path / Location' : 'Provider'}</span>
+                {renderSortIndicator('provider')}
+              </button>
+              <button
+                onClick={() => handleSort('type')}
+                className="flex items-center text-left hover:text-[#bcd2e4] transition-colors"
+              >
+                <span>Type</span>
+                {renderSortIndicator('type')}
+              </button>
+              <button
+                onClick={() => handleSort('modified')}
+                className="flex items-center text-left hover:text-[#bcd2e4] transition-colors"
+              >
+                <span>Modified</span>
+                {renderSortIndicator('modified')}
+              </button>
+              <button
+                onClick={() => handleSort('size')}
+                className="flex items-center justify-end text-right hover:text-[#bcd2e4] transition-colors"
+              >
+                <span>Size</span>
+                {renderSortIndicator('size')}
+              </button>
+              <span />
+            </div>
+          )}
+
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2 p-1">
+              {displayedFiles.map((file) => {
+                const isSelected = selectedIds.has(file.id);
+                const isActive = activeFileId === file.id;
+                const providerColor = getProviderColor(file.provider);
+                return (
+                  <div
+                    key={file.id}
+                    onClick={(e) => handleItemClick(file, e)}
+                    onDoubleClick={() => handleItemDoubleClick(file)}
+                    onContextMenu={(e) => handleContextMenu(e, file)}
+                    className={`group relative flex min-h-28 flex-col items-center justify-between rounded border p-2.5 transition-all cursor-pointer ${
+                      isActive || isSelected
+                        ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/10'
+                        : 'border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] hover:border-white/[0.08]'
+                    }`}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: providerColor }}
+                        title={getProviderName(file.provider)}
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleStar(file);
+                        }}
+                        className={`transition-opacity ${
+                          file.is_starred
+                            ? 'text-amber-400 opacity-100'
+                            : 'text-[#476077] opacity-0 group-hover:opacity-100 hover:text-white'
+                        }`}
+                        title={file.is_starred ? 'Starred' : 'Add to Starred'}
+                      >
+                        <Star size={11} fill={file.is_starred ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
+
+                    <div className="my-1">{getFileIcon(file)}</div>
+
+                    <div className="w-full text-center">
+                      <div className="truncate text-[10px] text-[#c6d4df]">{file.file_name}</div>
+                      {searchResults !== null ? (
+                        <div className="truncate font-mono text-[7.5px] text-[#4d697f]">
+                          {file.virtual_path}
+                        </div>
+                      ) : (
+                        <div className="font-mono text-[8px] text-[#536a7d]">
+                          {file.is_folder ? 'Folder' : formatBytes(file.size)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="divide-y divide-white/[0.02]">
+              {displayedFiles.map((file) => {
+                const isSelected = selectedIds.has(file.id);
+                const isActive = activeFileId === file.id;
+                const providerColor = getProviderColor(file.provider);
+                return (
+                  <div
+                    key={file.id}
+                    onClick={(e) => handleItemClick(file, e)}
+                    onDoubleClick={() => handleItemDoubleClick(file)}
+                    onContextMenu={(e) => handleContextMenu(e, file)}
+                    className={`grid w-full grid-cols-[1fr_120px_110px_90px_70px_28px] items-center px-3 py-1.5 text-left transition-colors cursor-pointer ${
+                      isActive || isSelected
+                        ? 'bg-[#4aa3ff]/10 text-[#e4f0fa]'
+                        : 'hover:bg-white/[0.025] text-[#c9d7e2]'
+                    }`}
+                  >
+                    {/* 1. Name with direct icon */}
+                    <div className="flex min-w-0 items-center gap-2">
+                      {getFileIcon(file)}
+                      <span className="truncate text-[11px] font-normal">{file.file_name}</span>
+                    </div>
+
+                    {/* 2. Path (if searching) or Provider */}
+                    {searchResults !== null ? (
+                      <span className="truncate font-mono text-[8px] text-[#6d859a]">
+                        {file.virtual_path}
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: providerColor }}
+                        />
+                        <span className="truncate font-mono text-[8px] text-[#6d859a]">
+                          {getProviderName(file.provider)}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* 3. Type */}
+                    <span className="truncate font-mono text-[8px] text-[#536a7d]">
+                      {file.is_folder ? 'Folder' : file.mime_type || 'File'}
+                    </span>
+
+                    {/* 4. Modified */}
+                    <span className="font-mono text-[8px] text-[#465c6f]">
+                      {formatDate(file.updated_at)}
+                    </span>
+
+                    {/* 5. Size */}
+                    <span className="text-right font-mono text-[8px] text-[#465c6f]">
+                      {file.is_folder ? '—' : formatBytes(file.size)}
+                    </span>
+
+                    {/* 6. Star on the right */}
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleStar(file);
+                        }}
+                        className={`transition-colors ${
+                          file.is_starred
+                            ? 'text-amber-400 opacity-100'
+                            : 'text-[#3d5366] hover:text-[#8ea9bf] opacity-40 hover:opacity-100'
+                        }`}
+                        title={file.is_starred ? 'Starred' : 'Add to Starred'}
+                      >
+                        <Star size={11} fill={file.is_starred ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!displayedFiles.length && (
+            <div className="grid h-48 place-items-center font-mono text-[10px] text-[#43586b]">
+              <div className="flex flex-col items-center gap-2">
+                <Folder size={24} strokeWidth={1} />
+                <span>
+                  {searchResults !== null
+                    ? `No cloud resources matching "${searchQuery}"${
+                        selectedProviderFilter !== 'all'
+                          ? ` for ${getProviderName(selectedProviderFilter)}`
+                          : ''
+                      }`
+                    : selectedProviderFilter !== 'all'
+                      ? `No resources in this folder for ${getProviderName(selectedProviderFilter)}`
+                      : 'No resources found in this path'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Side Inspector Panel (Files app aesthetic) */}
+        <aside className="hidden w-48 shrink-0 border-l border-white/[0.06] bg-white/[0.01] p-3 md:block">
+          <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-[#43586b]">
+            Resource Inspector
+          </div>
+          {activeFile ? (
+            <div className="mt-4 space-y-3">
+              <div className="grid h-16 place-items-center rounded border border-white/[0.05] bg-white/[0.015]">
+                {getFileIcon(activeFile)}
+              </div>
+              <div className="break-all font-medium text-[11px] text-[#d1deea]">
+                {activeFile.file_name}
+              </div>
+              <div className="space-y-1 font-mono text-[8px] leading-relaxed text-[#536a7d]">
+                <div>TYPE: {activeFile.is_folder ? 'Folder' : activeFile.mime_type || 'File'}</div>
+                <div>PATH: {activeFile.virtual_path}</div>
+                <div>SIZE: {activeFile.is_folder ? '—' : formatBytes(activeFile.size)}</div>
+                <div>PROVIDER: {getProviderName(activeFile.provider)}</div>
+                <div>MODIFIED: {formatDate(activeFile.updated_at)}</div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 pt-2">
+                {!activeFile.is_folder && (
+                  <>
+                    <button
+                      onClick={() => onPreviewFile(activeFile)}
+                      className="flex w-full items-center justify-center gap-1 rounded border border-[#4aa3ff]/30 bg-[#4aa3ff]/10 py-1 font-mono text-[8px] uppercase tracking-wider text-[#93c7fa] hover:bg-[#4aa3ff]/20"
+                    >
+                      <Eye size={10} /> Preview
+                    </button>
+                    <button
+                      onClick={() => handleDownloadFile(activeFile)}
+                      className="flex w-full items-center justify-center gap-1 rounded border border-[#2ee6a6]/30 bg-[#2ee6a6]/10 py-1 font-mono text-[8px] uppercase tracking-wider text-[#79ecd4] hover:bg-[#2ee6a6]/20"
+                    >
+                      <Download size={10} /> Download
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => {
+                    setRenamingFile(activeFile);
+                    setRenameValue(activeFile.file_name);
+                  }}
+                  className="flex w-full items-center justify-center gap-1 rounded border border-white/[0.06] bg-white/[0.02] py-1 font-mono text-[8px] uppercase tracking-wider text-[#8fa5b8] hover:bg-white/[0.05]"
+                >
+                  <Edit3 size={10} /> Rename
+                </button>
+                <button
+                  onClick={() => onShowDetails(activeFile)}
+                  className="flex w-full items-center justify-center gap-1 rounded border border-white/[0.06] bg-white/[0.02] py-1 font-mono text-[8px] uppercase tracking-wider text-[#8fa5b8] hover:bg-white/[0.05]"
+                >
+                  <Info size={10} /> Properties
+                </button>
+                <button
+                  onClick={() => onDeleteFile(activeFile.id)}
+                  className="flex w-full items-center justify-center gap-1 rounded border border-red-500/20 bg-red-500/10 py-1 font-mono text-[8px] uppercase tracking-wider text-red-400 hover:bg-red-500/20"
+                >
+                  <Trash2 size={10} /> Delete
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 font-mono text-[8px] text-[#43586b]">Select a resource</div>
+          )}
+        </aside>
+      </div>
+
+      {/* Custom Context Menu */}
+      {contextMenu && (
+        <div
+          className="absolute z-50 w-44 overflow-hidden rounded-lg border border-white/[0.08] bg-[#090e17]/95 p-1 shadow-2xl backdrop-blur-2xl text-[10px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="truncate px-2 py-1 font-mono text-[8px] text-[#5e788e] border-b border-white/[0.04]">
+            {contextMenu.file.file_name}
+          </div>
+          {!contextMenu.file.is_folder && (
+            <>
+              <button
+                onClick={() => {
+                  onPreviewFile(contextMenu.file);
+                  setContextMenu(null);
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#cadbe8] hover:bg-white/[0.06] hover:text-white"
+              >
+                <Eye size={11} className="text-[#4aa3ff]" />
+                <span>Preview</span>
+              </button>
+              <button
+                onClick={() => {
+                  handleDownloadFile(contextMenu.file);
+                  setContextMenu(null);
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#cadbe8] hover:bg-white/[0.06] hover:text-white"
+              >
+                <Download size={11} className="text-[#2ee6a6]" />
+                <span>Download</span>
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => {
+              onToggleStar(contextMenu.file);
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#cadbe8] hover:bg-white/[0.06] hover:text-white"
+          >
+            <Star
+              size={11}
+              className={
+                contextMenu.file.is_starred ? 'text-amber-400 fill-amber-400' : 'text-[#8da3b5]'
+              }
+            />
+            <span>{contextMenu.file.is_starred ? 'Unstar' : 'Add to Starred'}</span>
+          </button>
+          <button
+            onClick={() => {
+              setRenamingFile(contextMenu.file);
+              setRenameValue(contextMenu.file.file_name);
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#cadbe8] hover:bg-white/[0.06] hover:text-white"
+          >
+            <Edit3 size={11} className="text-amber-400" />
+            <span>Rename</span>
+          </button>
+          <button
+            onClick={() => {
+              onShowDetails(contextMenu.file);
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#cadbe8] hover:bg-white/[0.06] hover:text-white"
+          >
+            <Info size={11} className="text-[#9ab7ce]" />
+            <span>Properties</span>
+          </button>
+          <div className="my-1 border-t border-white/[0.04]" />
+          <button
+            onClick={() => {
+              onDeleteFile(contextMenu.file.id);
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-red-400 hover:bg-red-500/10 hover:text-red-300"
+          >
+            <Trash2 size={11} />
+            <span>Delete</span>
+          </button>
+        </div>
+      )}
+
+      {/* Footer status */}
+      <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
+        <span>
+          {displayedFiles.length} cloud resources
+          {selectedProviderFilter !== 'all' &&
+            ` (Filter: ${getProviderName(selectedProviderFilter)})`}
+          {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
+        </span>
+        <span>
+          {searchResults !== null
+            ? `Global Search: "${searchQuery}"`
+            : `${currentPath} · Unified Virtual Namespace`}
+        </span>
+      </div>
+
+      {/* New Folder Modal (Scoped Absolute) */}
+      {isNewFolderOpen && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          onClick={() => setIsNewFolderOpen(false)}
+        >
+          <form
+            onSubmit={submitCreateFolder}
+            className="w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#070b12] p-4 text-[#d5e0ea] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-medium text-[12px] text-white">Create New Folder</div>
+            <p className="mt-1 font-mono text-[9px] text-[#557187]">
+              Directory will be created in {currentPath}
+            </p>
+            <input
+              autoFocus
+              required
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="Folder name"
+              className="mt-3 w-full rounded border border-white/[0.08] bg-black/40 px-3 py-1.5 text-[11px] text-[#e0ecf7] outline-none focus:border-[#4aa3ff]/50"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsNewFolderOpen(false)}
+                className="rounded border border-white/[0.08] px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[#7990a4] hover:bg-white/[0.04]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded border border-[#4aa3ff]/30 bg-[#4aa3ff]/15 px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[#a5d2ff] hover:bg-[#4aa3ff]/25"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Rename Modal (Scoped Absolute) */}
+      {renamingFile && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          onClick={() => setRenamingFile(null)}
+        >
+          <form
+            onSubmit={submitRename}
+            className="w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#070b12] p-4 text-[#d5e0ea] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-medium text-[12px] text-white">Rename Resource</div>
+            <input
+              autoFocus
+              required
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              className="mt-3 w-full rounded border border-white/[0.08] bg-black/40 px-3 py-1.5 text-[11px] text-[#e0ecf7] outline-none focus:border-[#4aa3ff]/50"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRenamingFile(null)}
+                className="rounded border border-white/[0.08] px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[#7990a4] hover:bg-white/[0.04]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded border border-[#4aa3ff]/30 bg-[#4aa3ff]/15 px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[#a5d2ff] hover:bg-[#4aa3ff]/25"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

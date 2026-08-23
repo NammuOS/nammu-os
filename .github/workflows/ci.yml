@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  validate-and-build:
+    name: Typecheck, Lint, Test & Build (Bun)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun Runtime
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prettier Code Style Check
+        run: bun run format:check
+
+      - name: Run ESLint
+        run: bun run lint
+
+      - name: Typecheck TypeScript
+        run: bun run typecheck
+
+      - name: Run Test Suite
+        run: bun test
+
+      - name: Next.js Production Build
+        run: bun run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_ENV: production

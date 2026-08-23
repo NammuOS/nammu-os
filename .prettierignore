@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+build
+.git
+.github
+coverage
+bun.lock
+bun.lockb
+package-lock.json
+drizzle
+*.min.js
+*.min.css
+tsconfig.tsbuildinfo
