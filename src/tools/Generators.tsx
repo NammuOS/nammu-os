@@ -433,7 +433,7 @@ export function NameGenerator() {
         'Omni',
         'Aura',
         'Cloud',
-        'Orbit',
+        'Nova',
         'Vortex',
       ],
       last: [

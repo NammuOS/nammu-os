@@ -42,7 +42,7 @@ const CATEGORY_COLORS: Record<
 const INITIAL_EVENTS: CalendarEvent[] = [
   {
     id: 'evt-1',
-    title: 'Aether Runtime Review',
+    title: 'Core Runtime Review',
     date: new Date().toISOString().split('T')[0],
     startTime: '10:00',
     endTime: '11:30',
@@ -62,7 +62,7 @@ const INITIAL_EVENTS: CalendarEvent[] = [
   },
   {
     id: 'evt-3',
-    title: 'Orbit Stream Milestone',
+    title: 'Signal Stream Milestone',
     date: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
     startTime: '09:00',
     endTime: '10:00',

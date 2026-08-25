@@ -42,7 +42,7 @@ export interface ProjectItem {
 const INITIAL_PROJECTS: ProjectItem[] = [
   {
     id: 'proj-1',
-    name: 'Aether Runtime',
+    name: 'Core Runtime',
     space: 'Deep Work',
     description: 'Strict-mode runtime, WebAssembly optimization, and residual checks',
     status: 'in-progress',
@@ -104,7 +104,7 @@ const INITIAL_PROJECTS: ProjectItem[] = [
     id: 'proj-3',
     name: 'Polar Window Downlink',
     space: 'Field',
-    description: 'Orbit visibility, telemetry carrier signals, and doppler correction',
+    description: 'Satellite visibility, telemetry carrier signals, and doppler correction',
     status: 'archived',
     color: '#2ee6a6',
     dueDate: '2026-08-15',
@@ -599,7 +599,7 @@ export function ProjectsApp() {
                   required
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Orbit Telemetry Engine"
+                  placeholder="e.g. Telemetry Engine"
                   className="os-input w-full text-xs"
                   autoFocus
                 />

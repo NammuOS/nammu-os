@@ -33,9 +33,9 @@ import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 
 const FILES = [
-  ['dir', 'aether', '—', '12:41'],
+  ['dir', 'core', '—', '12:41'],
   ['dir', 'tidal', '—', '11:08'],
-  ['dir', 'orbit', '—', '09:32'],
+  ['dir', 'signal', '—', '09:32'],
   ['file', 'runtime.ts', '4.8 KB', '12:38'],
   ['file', 'field-notes.md', '2.1 KB', '10:16'],
   ['file', 'signal.json', '918 B', '08:47'],
@@ -56,7 +56,7 @@ const INITIAL_FILES: ExplorerItem[] = [
   {
     id: 1,
     kind: 'folder',
-    name: 'aether',
+    name: 'core',
     size: '—',
     modified: '12:41',
     location: 'Home',
@@ -74,7 +74,7 @@ const INITIAL_FILES: ExplorerItem[] = [
   {
     id: 3,
     kind: 'folder',
-    name: 'orbit',
+    name: 'signal',
     size: '—',
     modified: '09:32',
     location: 'Home',
@@ -129,21 +129,21 @@ const INITIAL_FILES: ExplorerItem[] = [
 
 const EDITOR_FILES: Record<string, string> = {
   'runtime.ts':
-    'const core = await nammu.restore({\n  session: 7,\n  strict: true,\n});\n\ncore.bind("orbit");\ncore.listen();',
+    'const core = await nammu.restore({\n  session: 7,\n  strict: true,\n});\n\ncore.bind("signal");\ncore.listen();',
   'field-notes.md':
-    '# Field notes\n\n- residual drift below 0.3°\n- preserve the quiet channel\n- review Aether runtime',
+    '# Field notes\n\n- residual drift below 0.3°\n- preserve the quiet channel\n- review core runtime',
   'signal.json': '{\n  "channel": "private",\n  "quality": "lossless",\n  "status": "online"\n}',
 };
 
 const NOTES = [
   {
     id: 1,
-    title: 'Aether handoff',
+    title: 'Runtime handoff',
     body: 'Resume runtime.ts from session 7. Keep strict mode enabled and verify the residual types.',
   },
   {
     id: 2,
-    title: 'Orbit pass',
+    title: 'Polar pass',
     body: 'Polar pass at 04:12. Confirm KEP-12 and SENT-3B visibility before the window closes.',
   },
   {
@@ -168,7 +168,7 @@ const MAIL = [
   },
   {
     id: 3,
-    from: 'Orbit Desk',
+    from: 'Signal Desk',
     subject: 'Polar window',
     body: 'A short visibility window opens at 04:12 local. Residual remains below tolerance.',
   },
@@ -512,7 +512,7 @@ function TerminalApp() {
             : command === 'date'
               ? new Date().toISOString()
               : command === 'ls'
-                ? 'aether  tidal  orbit  notes  listen'
+                ? 'core  tidal  signal  notes  listen'
                 : command === 'status'
                   ? 'cpu 18%  mem 41%  net 2.1  core ok'
                   : command
@@ -604,68 +604,6 @@ function MailApp() {
   );
 }
 
-function OrbitApp() {
-  const satellites = [
-    ['KEP-12', '041°', '62°'],
-    ['AQUA', '188°', '24°'],
-    ['NOAA-21', '302°', '11°'],
-    ['SENT-3B', '074°', '48°'],
-    ['ISS', '219°', '07°'],
-  ];
-  return (
-    <div className="flex h-full">
-      <div className="relative flex-1">
-        <div className="absolute inset-4 rounded-full border border-white/[0.06]" />
-        <div className="absolute inset-10 rounded-full border border-[#4aa3ff]/15" />
-        <div className="absolute inset-16 rounded-full border border-white/[0.04]" />
-        <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4aa3ff] shadow-[0_0_10px_#4aa3ff]" />
-        <div className="absolute left-[62%] top-[28%] h-1 w-1 rounded-full bg-[#2ee6a6]" />
-        <div className="absolute left-[34%] top-[40%] h-1 w-1 rounded-full bg-[#6ec8d4]" />
-        <div className="absolute left-[70%] top-[58%] h-1 w-1 rounded-full bg-[#d7c4a3]" />
-      </div>
-      <div className="w-44 overflow-auto border-l border-white/[0.05] py-2">
-        {satellites.map(([name, azimuth, elevation]) => (
-          <div key={name} className="flex items-center justify-between px-2.5 py-1.5">
-            <span className="font-mono text-[10px] text-[#d5e0ea]">{name}</span>
-            <span className="font-mono text-[8px] text-[#5a6d7c]">
-              {azimuth} {elevation}
-            </span>
-            <span className="h-1.5 w-1.5 rounded-full bg-[#2ee6a6]" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AetherApp() {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="grid grid-cols-3 border-b border-white/[0.05]">
-        {[
-          ['AE-17', 'Runtime', 67],
-          ['TD-04', 'Tidal', 42],
-          ['OR-09', 'Orbit', 81],
-        ].map(([code, name, progress]) => (
-          <div key={String(code)} className="border-r border-white/[0.05] px-3 py-2 last:border-0">
-            <div className="font-mono text-[8px] text-[#4a5c6c]">{code}</div>
-            <div className="text-[12px] text-[#d5e0ea]">{name}</div>
-            <div className="mt-1 h-0.5 bg-white/[0.06]">
-              <span className="block h-full bg-[#4aa3ff]" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-[#9ec3b0]">
-        <div className="text-[#4aa3ff]">aether · jit-4</div>
-        <div>compiled 48 units · cache hit 0.81</div>
-        <div>strict mode · no residual types</div>
-        <div className="mt-2 text-[#6d8294]">open runtime.ts from sessions to continue</div>
-      </div>
-    </div>
-  );
-}
-
 export function SystemAppContent({ appId }: { appId: SystemAppId }) {
   switch (appId) {
     case 'calculator':
@@ -694,10 +632,6 @@ export function SystemAppContent({ appId }: { appId: SystemAppId }) {
       return <MapApp />;
     case 'calendar':
       return <CalendarApp />;
-    case 'orbit':
-      return <OrbitApp />;
-    case 'aether':
-      return <AetherApp />;
     case 'settings':
       return <SettingsApp />;
     case 'projects':

@@ -468,7 +468,7 @@ export default function Window({
 
         {/* Window content */}
         <div
-          className="flex-1 overflow-auto os-scrollbar relative"
+          className={`relative flex-1 ${win.toolId === 'subdomain-discovery' ? 'overflow-hidden' : 'overflow-auto os-scrollbar'}`}
           style={{ background: 'rgba(5,5,5,0.92)' }}
         >
           {children}

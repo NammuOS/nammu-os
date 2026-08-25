@@ -1,5 +1,4 @@
 import {
-  Box,
   Calendar,
   Cloud,
   Folder,
@@ -7,7 +6,7 @@ import {
   Layers3,
   Mail,
   MapPinned,
-  Orbit,
+  PanelsTopLeft,
   Settings,
   Sparkles,
   SquareTerminal,
@@ -33,8 +32,6 @@ export type SystemAppId =
   | 'mail'
   | 'maps'
   | 'calendar'
-  | 'orbit'
-  | 'aether'
   | 'settings'
   | 'projects'
   | 'spaces'
@@ -161,20 +158,6 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     keywords: ['calendar', 'schedule', 'events', 'agenda', 'date', 'planner'],
   },
   {
-    id: 'orbit',
-    windowId: 'system:orbit',
-    title: 'Orbit',
-    icon: Orbit,
-    keywords: ['orbit', 'satellites', 'telemetry', 'downlink', 'carrier', 'graph'],
-  },
-  {
-    id: 'aether',
-    windowId: 'system:aether',
-    title: 'Aether',
-    icon: Box,
-    keywords: ['aether', 'runtime', 'jit', 'compiler', 'spatial', '3d'],
-  },
-  {
     id: 'settings',
     windowId: 'system:settings',
     title: 'Settings',
@@ -193,7 +176,7 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     id: 'spaces',
     windowId: 'system:spaces',
     title: 'Spaces',
-    icon: Orbit,
+    icon: PanelsTopLeft,
     startMenu: true,
     keywords: ['spaces', 'desktops', 'modes', 'focus'],
   },

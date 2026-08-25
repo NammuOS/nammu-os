@@ -3,7 +3,17 @@
 import 'leaflet/dist/leaflet.css';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Crosshair, Layers3, LocateFixed, MapPin, Minus, Plus, Search, X } from 'lucide-react';
+import {
+  ChevronDown,
+  Crosshair,
+  Layers3,
+  LocateFixed,
+  MapPin,
+  Minus,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react';
 import type {
   CircleMarker as LeafletCircleMarker,
   Map as LeafletMap,
@@ -16,75 +26,52 @@ const INITIAL_CENTER: [number, number] = [41.2257, 1.7249];
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 20;
 
-const OSM_CREDIT = {
-  label: '© OpenStreetMap',
-  url: 'https://www.openstreetmap.org/copyright',
-};
-const CARTO_CREDIT = { label: '© CARTO', url: 'https://carto.com/attributions' };
-
-type MapCredit = {
-  label: string;
-  url: string;
-};
-
 type MapStyleDefinition = {
   label: string;
   url: string;
-  credits: readonly MapCredit[];
   subdomains?: string;
   maxNativeZoom?: number;
   filter?: string;
 };
 
+// Tile providers used here: OpenStreetMap, CARTO, OpenTopoMap, HOT, and Esri.
 const MAP_STYLES = {
   streets: {
     label: 'Street atlas',
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    credits: [OSM_CREDIT],
     maxNativeZoom: 19,
   },
   voyager: {
     label: 'Voyager',
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    credits: [OSM_CREDIT, CARTO_CREDIT],
     subdomains: 'abcd',
   },
   terrain: {
     label: 'Topographic',
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    credits: [OSM_CREDIT, { label: '© OpenTopoMap', url: 'https://opentopomap.org' }],
     subdomains: 'abc',
     maxNativeZoom: 17,
   },
   humanitarian: {
     label: 'Humanitarian',
     url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    credits: [OSM_CREDIT, { label: '© HOT', url: 'https://www.hotosm.org' }],
     subdomains: 'abc',
     maxNativeZoom: 19,
   },
   satellite: {
     label: 'Satellite',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    credits: [
-      {
-        label: 'Imagery © Esri & providers',
-        url: 'https://www.esri.com/en-us/legal/terms/data-attributions',
-      },
-    ],
     maxNativeZoom: 19,
   },
   midnight: {
     label: 'Midnight blue',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    credits: [OSM_CREDIT, CARTO_CREDIT],
     subdomains: 'abcd',
     filter: 'sepia(1) saturate(4.2) hue-rotate(158deg) brightness(.78) contrast(1.14)',
   },
   ultraviolet: {
     label: 'Ultraviolet',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    credits: [OSM_CREDIT, CARTO_CREDIT],
     subdomains: 'abcd',
     filter: 'sepia(1) saturate(5.2) hue-rotate(226deg) brightness(.8) contrast(1.18)',
   },
@@ -99,6 +86,38 @@ type SearchResult = {
   latitude: number;
   longitude: number;
   type: string;
+};
+
+type NetworkLocation = {
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  label?: string;
+  error?: string;
+};
+
+const requestBrowserLocation = (options: PositionOptions) =>
+  new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+
+const requestDeviceLocation = async () => {
+  const attempts: PositionOptions[] = [
+    { enableHighAccuracy: false, timeout: 1500, maximumAge: 60 * 60 * 1000 },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 },
+  ];
+  let lastError: unknown;
+
+  for (const options of attempts) {
+    try {
+      return await requestBrowserLocation(options);
+    } catch (error) {
+      lastError = error;
+      if ((error as GeolocationPositionError).code === 1) throw error;
+    }
+  }
+
+  throw lastError;
 };
 
 export default function MapApp() {
@@ -310,44 +329,91 @@ export default function MapApp() {
     setStatus(result.name);
   };
 
-  const locateUser = () => {
+  const locateUser = async () => {
+    if (!window.isSecureContext) {
+      setStatus('Location requires HTTPS or localhost');
+      return;
+    }
     if (!navigator.geolocation) {
       setStatus('Location is not supported');
       return;
     }
 
     setLocating(true);
-    setStatus('Finding your location');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const map = mapRef.current;
-        const L = leafletRef.current;
-        if (!map || !L) {
-          setLocating(false);
-          return;
+    setStatus('Checking device location');
+    try {
+      if ('permissions' in navigator) {
+        try {
+          const permission = await navigator.permissions.query({ name: 'geolocation' });
+          if (permission.state === 'denied') {
+            setStatus('Enable location access in browser settings');
+            return;
+          }
+        } catch {
+          // Some browsers expose Permissions API but do not support geolocation queries.
         }
-        locationRef.current?.remove();
-        locationRef.current = L.circleMarker([coords.latitude, coords.longitude], {
-          radius: 7,
-          color: '#dff6ff',
-          weight: 2,
-          fillColor: '#4aa3ff',
-          fillOpacity: 1,
-        })
-          .bindPopup('Your location', { closeButton: false })
-          .addTo(map);
-        map.stop();
-        map.flyTo([coords.latitude, coords.longitude], 15, { duration: 0.7 });
-        setCoordinates([coords.latitude, coords.longitude]);
-        setStatus(`Located within ${Math.round(coords.accuracy)} m`);
-        setLocating(false);
-      },
-      (error) => {
-        setStatus(error.code === 1 ? 'Location permission denied' : 'Unable to determine location');
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
-    );
+      }
+
+      let latitude: number;
+      let longitude: number;
+      let accuracy: number;
+      let locationLabel = 'Your location';
+      let approximate = false;
+
+      try {
+        const { coords } = await requestDeviceLocation();
+        latitude = coords.latitude;
+        longitude = coords.longitude;
+        accuracy = coords.accuracy;
+      } catch (error) {
+        const locationError = error as GeolocationPositionError;
+        if (locationError.code === locationError.PERMISSION_DENIED) throw error;
+
+        setStatus('Using approximate network location');
+        const response = await fetch('/api/maps/location', { cache: 'no-store' });
+        const fallback = (await response.json()) as NetworkLocation;
+        if (!response.ok) throw new Error(fallback.error || 'Network location is unavailable');
+
+        latitude = Number(fallback.latitude);
+        longitude = Number(fallback.longitude);
+        accuracy = Number(fallback.accuracy) || 25000;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          throw new Error('Network location returned invalid coordinates');
+        }
+        locationLabel = fallback.label || 'Approximate network location';
+        approximate = true;
+      }
+
+      const map = mapRef.current;
+      const L = leafletRef.current;
+      if (!map || !L) return;
+
+      locationRef.current?.remove();
+      locationRef.current = L.circleMarker([latitude, longitude], {
+        radius: 7,
+        color: '#dff6ff',
+        weight: 2,
+        fillColor: '#4aa3ff',
+        fillOpacity: 1,
+      })
+        .bindPopup(locationLabel, { closeButton: false })
+        .addTo(map);
+      map.stop();
+      map.flyTo([latitude, longitude], approximate ? 11 : 15, { duration: 0.7 });
+      setCoordinates([latitude, longitude]);
+      setStatus(
+        approximate ? `${locationLabel} · approximate` : `Located within ${Math.round(accuracy)} m`,
+      );
+    } catch (error) {
+      const locationError = error as GeolocationPositionError;
+      const message =
+        locationError.code === locationError.PERMISSION_DENIED
+          ? 'Enable location access in browser settings'
+          : 'Enable device location services and try again';
+      setStatus(message);
+    } finally {
+      setLocating(false);
+    }
   };
 
   const resetMap = () => {
@@ -363,8 +429,6 @@ export default function MapApp() {
     setCoordinates(INITIAL_CENTER);
     setStatus('View reset');
   };
-
-  const activeStyle = MAP_STYLES[mapStyle];
 
   return (
     <div className={styles.app}>
@@ -433,18 +497,21 @@ export default function MapApp() {
           <span>
             <Layers3 size={12} aria-hidden="true" /> Map style
           </span>
-          <select
-            value={mapStyle}
-            disabled={changingStyle}
-            onChange={(event) => changeStyle(event.target.value as MapStyleId)}
-            aria-label="Map style"
-          >
-            {Object.entries(MAP_STYLES).map(([id, config]) => (
-              <option key={id} value={id}>
-                {config.label}
-              </option>
-            ))}
-          </select>
+          <div className={styles.styleSelect}>
+            <select
+              value={mapStyle}
+              disabled={changingStyle}
+              onChange={(event) => changeStyle(event.target.value as MapStyleId)}
+              aria-label="Map style"
+            >
+              {Object.entries(MAP_STYLES).map(([id, config]) => (
+                <option key={id} value={id}>
+                  {config.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
+          </div>
         </div>
 
         <button
@@ -459,18 +526,16 @@ export default function MapApp() {
 
         <div className={styles.footer}>
           <div className={styles.telemetry}>
-            <span className={styles.statusDot} />
-            <span>{status}</span>
-            <code>
-              Z{zoom} · {coordinates[0].toFixed(4)}, {coordinates[1].toFixed(4)}
-            </code>
-          </div>
-          <div className={styles.credits} aria-label="Map credits">
-            {activeStyle.credits.map((credit) => (
-              <a key={credit.label} href={credit.url} target="_blank" rel="noreferrer">
-                {credit.label}
-              </a>
-            ))}
+            <div className={styles.statusLine}>
+              <span className={styles.statusDot} />
+              <span>{status}</span>
+            </div>
+            <div className={styles.coordinateLine}>
+              <span>Coordinates</span>
+              <code>
+                {coordinates[0].toFixed(5)}, {coordinates[1].toFixed(5)} · Z{zoom}
+              </code>
+            </div>
           </div>
         </div>
       </section>
@@ -502,7 +567,7 @@ export default function MapApp() {
         aria-label="Reset map"
         title="Reset map"
       >
-        <Crosshair size={14} />
+        <Crosshair size={15} />
       </button>
     </div>
   );

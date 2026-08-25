@@ -81,6 +81,7 @@ import { CALCULATOR_TOOLS } from '../../tools/CalculatorSuite';
 import { GENERATOR_TOOLS } from '../../tools/Generators';
 import { TEXT_TOOLS } from '../../tools/TextTools';
 import { COLOR_TOOLS } from '../../tools/ColorTools';
+import SubdomainDiscovery from '../../tools/SubdomainDiscovery';
 import { Music } from '../os/Music';
 
 const TOOL_COMPONENTS: Record<string, React.FC<any>> = {
@@ -102,6 +103,7 @@ const TOOL_COMPONENTS: Record<string, React.FC<any>> = {
   JsonCsv,
   UnixTimestamp,
   OvenTemp,
+  SubdomainDiscovery,
   ImgCompress,
   ImgResize,
   ImgCrop,
@@ -345,7 +347,7 @@ export default function DesktopApp() {
           setRecentTools(recent);
           localStorage.setItem('nammu-recent', JSON.stringify(recent));
         }
-      })
+      });
     // Initialize OS Theme
     try {
       const saved = localStorage.getItem('nammu-settings');
@@ -445,7 +447,11 @@ export default function DesktopApp() {
               {systemApp ? (
                 <SystemAppContent appId={systemApp.id} />
               ) : Component ? (
-                <div className="h-full p-3">
+                <div
+                  className={
+                    tool?.id === 'subdomain-discovery' ? 'h-full overflow-hidden' : 'h-full p-3'
+                  }
+                >
                   <Component initialData={win.data} />
                 </div>
               ) : null}

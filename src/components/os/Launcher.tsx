@@ -63,8 +63,6 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   mail: 'Email client and messaging inbox',
   maps: 'Interactive maps with place search, map styles, pins, and current location',
   calendar: 'Calendar, events and scheduled tasks',
-  orbit: 'Workspace visual graph and flow automation',
-  aether: 'Spatial 3D universe visualizer and node mapping',
   settings: 'System configuration, appearance and performance',
   projects: 'Project directories and repository manager',
   spaces: 'Virtual workspaces and multi-monitor layouts',

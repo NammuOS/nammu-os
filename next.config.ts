@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
           {
             key: 'Permissions-Policy',
-            value: 'cross-origin-isolated=(self "https://google.com")',
+            value: 'geolocation=(self), cross-origin-isolated=(self "https://google.com")',
           },
         ],
       },

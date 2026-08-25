@@ -44,10 +44,10 @@ const INITIAL_NOTES: NoteItem[] = [
   },
   {
     id: 'note-2',
-    title: 'Orbit Satellite Telemetry Protocol',
-    content: `# Orbit Satellite Telemetry\n\nDirect carrier downlink telemetry notes:\n- Frequency band: 2.4 GHz ISM / S-band\n- Jitter buffer: 12ms target\n- Modulation: QPSK with forward error correction.\n\n*Check antenna azimuth during next pass.*`,
+    title: 'Satellite Telemetry Protocol',
+    content: `# Satellite Telemetry\n\nDirect carrier downlink telemetry notes:\n- Frequency band: 2.4 GHz ISM / S-band\n- Jitter buffer: 12ms target\n- Modulation: QPSK with forward error correction.\n\n*Check antenna azimuth during next pass.*`,
     folder: 'ideas',
-    tags: ['Orbit', 'Telemetry', 'Hardware'],
+    tags: ['Signal', 'Telemetry', 'Hardware'],
     pinned: false,
     createdAt: Date.now() - 86400000 * 4,
     updatedAt: Date.now() - 86400000,

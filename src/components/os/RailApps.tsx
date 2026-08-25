@@ -22,7 +22,7 @@ type Project = {
 const INITIAL_PROJECTS: Project[] = [
   {
     id: 1,
-    name: 'Aether runtime',
+    name: 'Core runtime',
     space: 'Deep Work',
     description: 'Strict-mode runtime and residual checks',
     status: 'active',
@@ -40,7 +40,7 @@ const INITIAL_PROJECTS: Project[] = [
     id: 3,
     name: 'Polar window',
     space: 'Field',
-    description: 'Orbit visibility and carrier telemetry',
+    description: 'Satellite visibility and carrier telemetry',
     status: 'archived',
     color: '#2ee6a6',
   },
@@ -165,7 +165,7 @@ export function SpacesApp() {
   const spaces = [
     { name: 'Deep Work', description: 'Code, notes, and uninterrupted focus', accent: '#4aa3ff' },
     { name: 'Studio', description: 'Images, sound, and creative tooling', accent: '#6ec8d4' },
-    { name: 'Field', description: 'Orbit, telemetry, and live signals', accent: '#2ee6a6' },
+    { name: 'Field', description: 'Telemetry and live signals', accent: '#2ee6a6' },
   ];
   const [current, setCurrent] = useState('Deep Work');
   return (
@@ -213,7 +213,7 @@ export function SessionsApp() {
   const [sessions, setSessions] = useState<Session[]>([
     {
       id: 1,
-      name: 'Aether handoff',
+      name: 'Runtime handoff',
       space: 'Deep Work',
       status: 'suspended',
       surfaces: 4,

@@ -43,6 +43,7 @@ import {
   ThermometerSun,
   Database,
   CreditCard,
+  Radar,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -986,6 +987,26 @@ export const TOOLS: ToolDef[] = [
     keywords: ['url', 'parse', 'uri', 'components', 'protocol', 'query'],
     fileTypes: ['text/plain'],
     component: 'UrlParser',
+  },
+  {
+    id: 'subdomain-discovery',
+    name: 'Subdomain Inspector',
+    category: 'Developer',
+    description: 'Discover public subdomains from certificate transparency records',
+    icon: Radar,
+    keywords: [
+      'subdomain',
+      'subdomain inspector',
+      'domain',
+      'certificate transparency',
+      'ct logs',
+      'dns recon',
+      'attack surface',
+      'crt name',
+      'website hosts',
+    ],
+    fileTypes: ['text/plain'],
+    component: 'SubdomainDiscovery',
   },
   {
     id: 'url-slug',
