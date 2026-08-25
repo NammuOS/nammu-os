@@ -1,0 +1,125 @@
+@layer reset,
+base,
+layout,
+panel;
+
+@layer reset {
+  *,
+  *::after,
+  *::before {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+@layer base {
+  :root {
+    --bg: #f0ece3;
+    --fg: #0d0d14;
+    --muted: #9a9aaa;
+    --accent: #3a6e00;
+    --font-mono: "DM Mono", ui-monospace, monospace;
+    --font-display: "Bebas Neue", sans-serif;
+    --line: 0.0625rem;
+    --border: color-mix(in oklab, var(--fg) 12%, #fff);
+    --surface: hsla(0, 0%, 100%, 0.88);
+  }
+
+  body,
+  html {
+    block-size: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-mono);
+  }
+}
+
+@layer layout {
+  #map_canvas {
+    background: var(--bg);
+    inset: 0;
+    position: fixed;
+    z-index: 1;
+  }
+}
+
+@layer panel {
+  .ctrl-panel {
+    -webkit-backdrop-filter: blur(0.75rem);
+    backdrop-filter: blur(0.75rem);
+    background: var(--surface);
+    border: var(--line) solid var(--border);
+    inline-size: 16rem;
+    inset-block-start: 1.25rem;
+    inset-inline-end: 1.25rem;
+    padding-block: 0.75rem;
+    padding-inline: 0.875rem;
+    position: fixed;
+    z-index: 1000;
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    line-height: 1;
+  }
+
+  .panel-eyebrow {
+    color: var(--accent);
+  }
+
+  .panel-eyebrow,
+  .panel-main {
+    display: block;
+    font-size: 1.5rem;
+    letter-spacing: 0.03em;
+  }
+
+  .panel-main {
+    color: var(--fg);
+  }
+
+  .panel-footer,
+  .panel-styles {
+    border-block-start: var(--line) solid var(--border);
+    margin-block-start: 0.5rem;
+    padding-block-start: 0.5rem;
+  }
+
+  .micro-label {
+    color: var(--muted);
+    display: block;
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .style-select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: var(--line) solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    inline-size: 100%;
+    letter-spacing: 0;
+    outline: none;
+    padding-block: 0.3rem;
+    padding-inline: 0.4rem;
+  }
+
+  .style-select:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
+
+  .style-select:focus-visible {
+    border-color: var(--accent);
+  }
+}

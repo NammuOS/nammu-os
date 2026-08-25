@@ -34,7 +34,8 @@ export function useWindowManager() {
     const isBrowser =
       toolId.includes('browser') ||
       toolId.includes('firefox') ||
-      toolId.includes('whatsapp');
+      toolId.includes('whatsapp') ||
+      toolId.includes('maps');
     const width = isBrowser
       ? Math.min(1060, Math.max(480, workspaceWidth - 32))
       : Math.min(900, Math.max(320, workspaceWidth - 48));

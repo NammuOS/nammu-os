@@ -61,6 +61,7 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   editor: 'Code and text editor with syntax highlighting',
   notes: 'Quick scratchpad, notes and markdown support',
   mail: 'Email client and messaging inbox',
+  maps: 'Interactive maps with place search, map styles, pins, and current location',
   calendar: 'Calendar, events and scheduled tasks',
   orbit: 'Workspace visual graph and flow automation',
   aether: 'Spatial 3D universe visualizer and node mapping',

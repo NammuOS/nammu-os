@@ -6,6 +6,7 @@ import {
   Globe,
   Layers3,
   Mail,
+  MapPinned,
   Orbit,
   Settings,
   Sparkles,
@@ -30,6 +31,7 @@ export type SystemAppId =
   | 'editor'
   | 'notes'
   | 'mail'
+  | 'maps'
   | 'calendar'
   | 'orbit'
   | 'aether'
@@ -142,6 +144,14 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     title: 'Mail',
     icon: Mail,
     keywords: ['mail', 'email', 'inbox', 'messages', 'relay'],
+  },
+  {
+    id: 'maps',
+    windowId: 'system:maps',
+    title: 'Maps',
+    icon: MapPinned,
+    startMenu: true,
+    keywords: ['maps', 'map', 'places', 'location', 'navigation', 'directions', 'gps'],
   },
   {
     id: 'calendar',

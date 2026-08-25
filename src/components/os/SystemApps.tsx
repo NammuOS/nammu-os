@@ -28,6 +28,7 @@ import CloudApp from '../cloud/CloudApp';
 import BrowserApp from '../browser/BrowserApp';
 import FirefoxApp from '../firefox/FirefoxApp';
 import WhatsAppApp from '../whatsapp/WhatsAppApp';
+import MapApp from '../maps/MapApp';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 
@@ -689,6 +690,8 @@ export function SystemAppContent({ appId }: { appId: SystemAppId }) {
       return <NotesApp />;
     case 'mail':
       return <MailApp />;
+    case 'maps':
+      return <MapApp />;
     case 'calendar':
       return <CalendarApp />;
     case 'orbit':

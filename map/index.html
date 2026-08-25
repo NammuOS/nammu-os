@@ -1,0 +1,98 @@
+<!--
+    =============================================================================
+    LEAFLET + GOOGLE MUTANT + SNAZZY MAPS DEMO
+    =============================================================================
+
+    Overview
+    --------
+    This demo uses Leaflet as the primary map framework and attempts to display
+    custom Google Maps styling using the Leaflet.GoogleMutant plugin.
+    https://gitlab.com/IvanSanchez/Leaflet.GridLayer.GoogleMutant
+
+    Styles can be provided either from a Snazzy Maps proxy endpoint or directly
+    inside the JavaScript configuration. If Google Maps or styling cannot be
+    loaded, the map automatically falls back to CARTO Light tiles.
+
+    Rendering Flow
+    --------------
+    1. Leaflet initializes the map.
+    2. app.js attempts to resolve a Google Maps API key:
+       - via map-proxy.php
+       - or via CONFIG.directKey
+    3. Google Maps JavaScript API is loaded.
+    4. app.js attempts to load map styles:
+       - via snazzy-proxy.php
+       - or via CONFIG.directStyles
+    5. If Google Maps and a valid style are available:
+       - Google road tiles are rendered through GoogleMutant
+       - The selected style is applied
+    6. If any step fails:
+       - The map automatically falls back to CARTO Light tiles.
+
+    Dependencies
+    ------------
+    - Leaflet 1.9.4
+    - Leaflet.GoogleMutant
+    - Google Maps JavaScript API
+    - Snazzy Maps (optional)
+    - CARTO Light fallback tiles
+
+    Configuration Options
+    ---------------------
+    Google API Key:
+    - CONFIG.proxyUrl
+    - CONFIG.directKey
+
+    Map Styles:
+    - CONFIG.snazzyProxyUrl
+    - CONFIG.directStyles
+
+    Fallback Strategy
+    -----------------
+    Google API Proxy
+            ↓
+    Direct Google API Key
+            ↓
+    Google Maps API
+            ↓
+    Direct Styles
+            ↓
+    Snazzy Proxy Styles
+            ↓
+    CARTO Light Tiles
+
+    Proxy Examples
+    --------------
+    Example PHP proxy implementations are available in gist:
+
+    map-proxy.php
+    https://gist.github.com/arenagroove/2a1f27f87168136f25a876a878034504#file-map-proxy-php
+
+    snazzy-proxy.php
+    https://gist.github.com/arenagroove/2a1f27f87168136f25a876a878034504#file-snazzy-proxy-php
+
+    Notes
+    -----
+    This demo intentionally separates API key handling from style handling,
+    allowing either component to be served through a proxy or configured
+    directly in JavaScript for local development and testing.
+
+    =============================================================================
+    -->
+<div id="app_root">
+  <div id="map_canvas"></div>
+  <aside class="ctrl-panel" aria-label="demo info">
+    <h1 class="panel-title">
+      <span class="panel-eyebrow">Leaflet</span>
+      <span class="panel-main">Snazzy Maps</span>
+    </h1>
+    <div class="panel-footer">
+      <span class="micro-label" id="status_label">loading</span>
+    </div>
+    <div class="panel-styles">
+      <select id="style_select" class="style-select" disabled>
+        <option>loading styles…</option>
+      </select>
+    </div>
+  </aside>
+</div>
