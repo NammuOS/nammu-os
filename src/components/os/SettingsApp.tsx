@@ -22,14 +22,21 @@ import {
   Cpu,
   VolumeX,
   Eye,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   WALLPAPERS,
+  getMatrixWallpaperVariant,
+  getSavedMatrixEffectSettings,
   getSavedWallpaper,
   getSavedWallpaperMask,
   getWallpaperName,
+  saveMatrixEffectSettings,
   saveWallpaper,
   saveWallpaperMask,
+  type MatrixEffectSettings,
+  type MatrixEffectSettingsMap,
+  type MatrixWallpaperVariant,
 } from '../../lib/wallpapers';
 
 export interface SystemSettings {
@@ -124,7 +131,7 @@ export function SettingsApp() {
   });
 
   const [activeTab, setActiveTab] = useState<
-    'appearance' | 'audio' | 'taskbar' | 'storage' | 'about'
+    'appearance' | 'wallpaper' | 'audio' | 'taskbar' | 'storage' | 'about'
   >('appearance');
   const [volume, setVolume] = useState<number>(() => {
     try {
@@ -139,6 +146,10 @@ export function SettingsApp() {
   const [importStatus, setImportStatus] = useState<string>('');
   const [wallpaperSrc, setWallpaperSrc] = useState<string | null>(() => getSavedWallpaper());
   const [wallpaperMask, setWallpaperMask] = useState<boolean>(() => getSavedWallpaperMask());
+  const [matrixEffectSettings, setMatrixEffectSettings] = useState<MatrixEffectSettingsMap>(() =>
+    getSavedMatrixEffectSettings(),
+  );
+  const activeMatrixEffect = getMatrixWallpaperVariant(wallpaperSrc);
 
   const selectWallpaper = (src: string | null) => {
     setWallpaperSrc(src);
@@ -149,6 +160,16 @@ export function SettingsApp() {
     const next = !wallpaperMask;
     setWallpaperMask(next);
     saveWallpaperMask(next);
+  };
+
+  const updateMatrixEffectSetting = <Key extends keyof MatrixEffectSettings>(
+    variant: MatrixWallpaperVariant,
+    key: Key,
+    value: MatrixEffectSettings[Key],
+  ) => {
+    const next = { ...matrixEffectSettings[variant], [key]: value };
+    setMatrixEffectSettings((current) => ({ ...current, [variant]: next }));
+    saveMatrixEffectSettings(variant, next);
   };
 
   // Uptime counter
@@ -315,6 +336,7 @@ export function SettingsApp() {
 
           {[
             { id: 'appearance', label: 'Appearance', icon: Palette },
+            { id: 'wallpaper', label: 'Wallpaper', icon: ImageIcon },
             { id: 'audio', label: 'Sound & Audio', icon: Volume2 },
             { id: 'taskbar', label: 'Taskbar & Clock', icon: Monitor },
             { id: 'storage', label: 'Storage & Backup', icon: Database },
@@ -471,84 +493,6 @@ export function SettingsApp() {
               </div>
             </div>
 
-            {/* Desktop Wallpaper */}
-            <div className="bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-medium text-[#c5d4e2] block">
-                  Desktop Wallpaper
-                </label>
-                <span className="font-mono text-[9px] uppercase tracking-wider text-[#64748b]">
-                  Active: {getWallpaperName(wallpaperSrc)}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => selectWallpaper(null)}
-                  className={`group relative flex flex-col rounded overflow-hidden border transition-all ${
-                    wallpaperSrc === null
-                      ? 'border-white bg-white/[0.08] ring-1 ring-white/20 shadow-md'
-                      : 'border-white/[0.06] bg-white/[0.015] hover:border-white/[0.2]'
-                  }`}
-                >
-                  <span
-                    className="block h-14 w-full"
-                    style={{
-                      background: 'radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #050505 100%)',
-                    }}
-                  />
-                  <span className="flex items-center justify-between gap-1 px-2 py-1.5 bg-white/[0.02]">
-                    <span className="text-[10px] text-[#c5d4e2] truncate">Default</span>
-                    {wallpaperSrc === null && (
-                      <Check size={11} className="text-[#2ee6a6] shrink-0" />
-                    )}
-                  </span>
-                </button>
-
-                {WALLPAPERS.map((wp) => {
-                  const isSelected = wallpaperSrc === wp.src;
-                  return (
-                    <button
-                      key={wp.id}
-                      onClick={() => selectWallpaper(wp.src)}
-                      className={`group relative flex flex-col rounded overflow-hidden border transition-all ${
-                        isSelected
-                          ? 'border-white bg-white/[0.08] ring-1 ring-white/20 shadow-md'
-                          : 'border-white/[0.06] bg-white/[0.015] hover:border-white/[0.2]'
-                      }`}
-                    >
-                      <span
-                        className="block h-14 w-full bg-cover bg-center"
-                        style={{ backgroundImage: `url("${encodeURI(wp.src)}")` }}
-                      />
-                      <span className="flex items-center justify-between gap-1 px-2 py-1.5 bg-white/[0.02]">
-                        <span className="text-[10px] text-[#c5d4e2] truncate">{wp.name}</span>
-                        {isSelected && <Check size={11} className="text-[#2ee6a6] shrink-0" />}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-white/[0.04]">
-                <div>
-                  <div className="text-[11px] text-[#d5e0ea] font-medium">Dark Edge Mask</div>
-                  <div className="text-[9.5px] text-[#61788c]">
-                    Vignette shading on wallpaper edges for text readability
-                  </div>
-                </div>
-                <button
-                  onClick={toggleWallpaperMask}
-                  className={`px-2.5 py-1 rounded text-[9.5px] font-mono font-semibold transition-colors ${
-                    wallpaperMask
-                      ? 'bg-os-accent/20 border border-os-accent text-os-accent'
-                      : 'bg-white/[0.04] border border-white/[0.08] text-[#71889d]'
-                  }`}
-                >
-                  {wallpaperMask ? 'ENABLED' : 'OFF'}
-                </button>
-              </div>
-            </div>
-
             {/* Visual Effects */}
             <div className="bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-3">
               <div className="flex items-center justify-between">
@@ -586,6 +530,223 @@ export function SettingsApp() {
                   }`}
                 >
                   {settings.reduceMotion ? 'RESTRAINED' : 'SMOOTH'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WALLPAPER */}
+        {activeTab === 'wallpaper' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Desktop Wallpaper</h2>
+              <p className="text-[10px] text-[#71889d]">
+                Choose a still image or a native real-time Nammu OS effect.
+              </p>
+            </div>
+
+            <div className="settings-card space-y-3 rounded border border-white/[0.05] bg-[#05070b] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-medium text-[#c5d4e2]">Wallpaper Library</div>
+                  <div className="text-[9.5px] text-[#61788c]">
+                    Dynamic effects are rendered locally with the Nammu canvas engine.
+                  </div>
+                </div>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-[#64748b]">
+                  Active: {getWallpaperName(wallpaperSrc)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => selectWallpaper(null)}
+                  aria-pressed={wallpaperSrc === null}
+                  className={`group relative flex flex-col overflow-hidden rounded border text-left transition-all ${
+                    wallpaperSrc === null
+                      ? 'border-white bg-white/[0.08] ring-1 ring-white/20 shadow-md'
+                      : 'border-white/[0.06] bg-white/[0.015] hover:border-white/[0.2]'
+                  }`}
+                >
+                  <span
+                    className="block h-20 w-full"
+                    style={{
+                      background: 'radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #050505 100%)',
+                    }}
+                  />
+                  <span className="flex min-w-0 items-center justify-between gap-1 bg-white/[0.02] px-2 py-1.5">
+                    <span className="min-w-0">
+                      <span className="block truncate text-[10px] text-[#c5d4e2]">Default</span>
+                      <span className="block truncate text-[8.5px] text-[#61788c]">Nammu base</span>
+                    </span>
+                    {wallpaperSrc === null && (
+                      <Check size={11} className="shrink-0 text-[#2ee6a6]" />
+                    )}
+                  </span>
+                </button>
+
+                {WALLPAPERS.map((wallpaper) => {
+                  const isSelected = wallpaperSrc === wallpaper.src;
+                  const previewStyle =
+                    wallpaper.kind === 'image'
+                      ? { backgroundImage: `url("${encodeURI(wallpaper.src)}")` }
+                      : { background: wallpaper.preview };
+
+                  return (
+                    <button
+                      key={wallpaper.id}
+                      type="button"
+                      onClick={() => selectWallpaper(wallpaper.src)}
+                      aria-pressed={isSelected}
+                      className={`group relative flex flex-col overflow-hidden rounded border text-left transition-all ${
+                        isSelected
+                          ? 'border-white bg-white/[0.08] ring-1 ring-white/20 shadow-md'
+                          : 'border-white/[0.06] bg-white/[0.015] hover:border-white/[0.2]'
+                      }`}
+                    >
+                      <span
+                        className="relative block h-20 w-full overflow-hidden bg-cover bg-center"
+                        style={previewStyle}
+                      >
+                        {wallpaper.kind === 'effect' && (
+                          <>
+                            <span className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)] opacity-60" />
+                            <span className="absolute bottom-1.5 left-2 rounded-sm border border-white/15 bg-black/45 px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-[0.14em] text-white/75 backdrop-blur-sm">
+                              Dynamic
+                            </span>
+                          </>
+                        )}
+                      </span>
+                      <span className="flex min-w-0 items-center justify-between gap-1 bg-white/[0.02] px-2 py-1.5">
+                        <span className="min-w-0">
+                          <span className="block truncate text-[10px] text-[#c5d4e2]">
+                            {wallpaper.name}
+                          </span>
+                          <span className="block truncate text-[8.5px] text-[#61788c]">
+                            {wallpaper.description}
+                          </span>
+                        </span>
+                        {isSelected && <Check size={11} className="shrink-0 text-[#2ee6a6]" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeMatrixEffect && (
+                <div className="space-y-3 border-t border-white/[0.04] pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-medium text-[#d5e0ea]">
+                        {activeMatrixEffect === 'synth-rain' ? 'Synth Rain' : 'Chaos Flow'} Controls
+                      </div>
+                      <div className="text-[9.5px] text-[#61788c]">
+                        Changes are applied to the desktop in real time.
+                      </div>
+                    </div>
+                    <span className="rounded-sm border border-os-accent/30 bg-os-accent/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-os-accent">
+                      Live
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <label className="flex min-w-0 flex-col gap-2 rounded border border-white/[0.06] bg-white/[0.018] p-2.5">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-medium text-[#c5d4e2]">Color</span>
+                        <span className="font-mono text-[8.5px] uppercase text-[#71889d]">
+                          {matrixEffectSettings[activeMatrixEffect].color}
+                        </span>
+                      </span>
+                      <span className="flex h-7 items-center gap-2 rounded-sm border border-white/[0.08] bg-black/25 p-1">
+                        <input
+                          type="color"
+                          value={matrixEffectSettings[activeMatrixEffect].color}
+                          onChange={(event) =>
+                            updateMatrixEffectSetting(
+                              activeMatrixEffect,
+                              'color',
+                              event.target.value,
+                            )
+                          }
+                          className="h-5 w-full cursor-pointer border-0 bg-transparent p-0"
+                          aria-label={`${activeMatrixEffect} color`}
+                        />
+                      </span>
+                    </label>
+
+                    <label className="flex min-w-0 flex-col gap-2 rounded border border-white/[0.06] bg-white/[0.018] p-2.5">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-medium text-[#c5d4e2]">Speed</span>
+                        <span className="font-mono text-[8.5px] text-[#71889d]">
+                          {matrixEffectSettings[activeMatrixEffect].speed}%
+                        </span>
+                      </span>
+                      <input
+                        type="range"
+                        min="25"
+                        max="200"
+                        step="5"
+                        value={matrixEffectSettings[activeMatrixEffect].speed}
+                        onChange={(event) =>
+                          updateMatrixEffectSetting(
+                            activeMatrixEffect,
+                            'speed',
+                            Number(event.target.value),
+                          )
+                        }
+                        className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-white/15 bg-white/10 accent-os-accent"
+                        aria-label={`${activeMatrixEffect} speed`}
+                      />
+                    </label>
+
+                    <label className="flex min-w-0 flex-col gap-2 rounded border border-white/[0.06] bg-white/[0.018] p-2.5">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-medium text-[#c5d4e2]">Size</span>
+                        <span className="font-mono text-[8.5px] text-[#71889d]">
+                          {matrixEffectSettings[activeMatrixEffect].size}px
+                        </span>
+                      </span>
+                      <input
+                        type="range"
+                        min="10"
+                        max="28"
+                        step="1"
+                        value={matrixEffectSettings[activeMatrixEffect].size}
+                        onChange={(event) =>
+                          updateMatrixEffectSetting(
+                            activeMatrixEffect,
+                            'size',
+                            Number(event.target.value),
+                          )
+                        }
+                        className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-white/15 bg-white/10 accent-os-accent"
+                        aria-label={`${activeMatrixEffect} character size`}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between border-t border-white/[0.04] pt-3">
+                <div>
+                  <div className="text-[11px] font-medium text-[#d5e0ea]">Readability Mask</div>
+                  <div className="text-[9.5px] text-[#61788c]">
+                    Add subtle edge shading behind desktop controls
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleWallpaperMask}
+                  aria-pressed={wallpaperMask}
+                  className={`rounded px-2.5 py-1 font-mono text-[9.5px] font-semibold transition-colors ${
+                    wallpaperMask
+                      ? 'border border-os-accent bg-os-accent/20 text-os-accent'
+                      : 'border border-white/[0.08] bg-white/[0.04] text-[#71889d]'
+                  }`}
+                >
+                  {wallpaperMask ? 'ENABLED' : 'OFF'}
                 </button>
               </div>
             </div>

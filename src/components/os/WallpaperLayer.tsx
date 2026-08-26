@@ -2,16 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import {
+  MATRIX_EFFECT_SETTINGS_CHANGE_EVENT,
   WALLPAPER_CHANGE_EVENT,
   WALLPAPER_MASK_CHANGE_EVENT,
+  getMatrixWallpaperVariant,
+  getSavedMatrixEffectSettings,
   getSavedWallpaper,
   getSavedWallpaperMask,
+  type MatrixEffectSettingsMap,
 } from '../../lib/wallpapers';
+import MatrixWallpaper from './wallpapers/MatrixWallpaper';
 
 export default function WallpaperLayer() {
   const [src, setSrc] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [maskEnabled, setMaskEnabled] = useState(true);
+  const [effectSettings, setEffectSettings] = useState<MatrixEffectSettingsMap>(() =>
+    getSavedMatrixEffectSettings(),
+  );
 
   useEffect(() => {
     const saved = getSavedWallpaper();
@@ -27,16 +35,24 @@ export default function WallpaperLayer() {
       const enabled = (e as CustomEvent<{ enabled: boolean }>).detail?.enabled;
       setMaskEnabled(enabled !== false);
     };
+    const handleEffectSettingsChange = () => {
+      setEffectSettings(getSavedMatrixEffectSettings());
+    };
     window.addEventListener(WALLPAPER_CHANGE_EVENT, handleChange);
     window.addEventListener(WALLPAPER_MASK_CHANGE_EVENT, handleMaskChange);
+    window.addEventListener(MATRIX_EFFECT_SETTINGS_CHANGE_EVENT, handleEffectSettingsChange);
     return () => {
       window.removeEventListener(WALLPAPER_CHANGE_EVENT, handleChange);
       window.removeEventListener(WALLPAPER_MASK_CHANGE_EVENT, handleMaskChange);
+      window.removeEventListener(MATRIX_EFFECT_SETTINGS_CHANGE_EVENT, handleEffectSettingsChange);
     };
   }, []);
 
   useEffect(() => {
-    if (!src) return;
+    if (!src || getMatrixWallpaperVariant(src)) {
+      setReady(Boolean(src));
+      return;
+    }
     const img = new Image();
     img.onload = () => setReady(true);
     img.onerror = () => setReady(true);
@@ -45,6 +61,8 @@ export default function WallpaperLayer() {
 
   if (!src) return null;
 
+  const effect = getMatrixWallpaperVariant(src);
+
   return (
     <div
       aria-hidden
@@ -52,10 +70,14 @@ export default function WallpaperLayer() {
         ready ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <div
-        className="w-full h-full bg-cover bg-center"
-        style={{ backgroundImage: `url("${encodeURI(src)}")` }}
-      />
+      {effect ? (
+        <MatrixWallpaper variant={effect} settings={effectSettings[effect]} />
+      ) : (
+        <div
+          className="w-full h-full bg-cover bg-center"
+          style={{ backgroundImage: `url("${encodeURI(src)}")` }}
+        />
+      )}
       {maskEnabled && (
         <div
           className="wallpaper-mask absolute inset-0"

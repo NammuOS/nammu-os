@@ -69,16 +69,6 @@ export default function Identity({
 
   return (
     <header className="nammu-identity absolute left-24 right-73 top-0 z-20 overflow-visible">
-      <div className="dark-mask pointer-events-none absolute -top-16 left-1/2 h-85 w-180 -translate-x-1/2">
-        <img
-          src="/images/planet.png"
-          alt=""
-          className="h-full w-full object-cover object-[50%_18%] opacity-90"
-        />
-        <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-void" />
-        <div className="absolute inset-0 bg-linear-to-r from-void via-transparent to-void opacity-40" />
-      </div>
-
       <div className="pointer-events-none absolute left-[12%] top-6 font-mono text-[8px] tracking-[0.28em] text-cyan/35">
         18.42° · RING LOCK
       </div>
