@@ -1937,7 +1937,10 @@ export default function BrowserApp() {
                         updatePreference('defaultZoom', level);
                         setZoomLevel(level);
                       }}
-                      className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-white/10 bg-white/10 accent-[#4aa3ff]"
+                      className="os-range"
+                      style={{
+                        background: `linear-gradient(90deg, var(--color-os-accent) ${((preferences.defaultZoom - 50) / 150) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                      }}
                     />
                   </div>
                 </div>

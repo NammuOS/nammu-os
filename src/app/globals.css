@@ -253,80 +253,104 @@ button {
 
 .os-lock-submit {
   color: var(--color-os-accent);
-  background: color-mix(in srgb, var(--color-os-accent) 13%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-os-accent) 45%, transparent);
-  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-os-accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-os-accent) 32%, transparent);
+  border-radius: 0;
   transition:
     color 150ms ease,
     background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease;
+    border-color 150ms ease;
 }
 
 .os-lock-submit:hover:not(:disabled) {
   color: var(--color-os-text);
-  background: color-mix(in srgb, var(--color-os-accent) 22%, transparent);
-  border-color: color-mix(in srgb, var(--color-os-accent) 75%, transparent);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--color-os-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--color-os-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-os-accent) 50%, transparent);
 }
 
 .os-lock-screen {
   isolation: isolate;
-  background:
-    radial-gradient(
-      circle at 50% 38%,
-      color-mix(in srgb, var(--color-os-accent) 13%, transparent),
-      transparent 34%
-    ),
-    linear-gradient(
-      145deg,
-      var(--color-os-bg),
-      color-mix(in srgb, var(--color-os-panel) 76%, black)
-    );
+  background: var(--color-os-bg);
 }
 
-.os-lock-atmosphere {
-  position: absolute;
-  inset: -20%;
-  z-index: -1;
-  opacity: 0.38;
-  background-image:
+.os-lock-screen .wallpaper-layer {
+  z-index: 0;
+}
+
+.os-lock-scrim {
+  z-index: 1;
+  background:
     linear-gradient(
-      color-mix(in srgb, var(--color-os-border) 24%, transparent) 1px,
-      transparent 1px
+      180deg,
+      color-mix(in srgb, var(--color-os-bg) 44%, transparent),
+      color-mix(in srgb, var(--color-os-bg) 68%, transparent)
     ),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--color-os-border) 24%, transparent) 1px,
-      transparent 1px
+    radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--color-os-bg) 18%, transparent),
+      color-mix(in srgb, var(--color-os-bg) 72%, transparent)
     );
-  background-size: 56px 56px;
-  mask-image: radial-gradient(circle at center, black, transparent 68%);
+  backdrop-filter: blur(3px) saturate(0.78);
+}
+
+.os-lock-menubar {
+  color: var(--color-os-text);
+  background: color-mix(in srgb, var(--color-os-bg) 86%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-os-text) 7%, transparent);
+  backdrop-filter: blur(20px);
 }
 
 .os-lock-card {
   color: var(--color-os-text);
-  background: color-mix(in srgb, var(--color-os-panel) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-os-border) 68%, transparent);
-  border-radius: 10px;
-  box-shadow:
-    0 28px 90px rgba(0, 0, 0, 0.52),
-    inset 0 1px rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(28px) saturate(1.25);
+  background: color-mix(in srgb, var(--color-os-bg) 82%, var(--color-os-panel));
+  border: 1px solid color-mix(in srgb, var(--color-os-text) 8%, transparent);
+  border-radius: 0;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(22px);
+}
+
+.os-lock-card-header,
+.os-lock-card-footer {
+  background: color-mix(in srgb, var(--color-os-text) 1.5%, transparent);
+  border-color: color-mix(in srgb, var(--color-os-text) 6%, transparent);
+}
+
+.os-lock-card-header {
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+}
+
+.os-lock-card-footer {
+  border-top-style: solid;
+  border-top-width: 1px;
+}
+
+.os-lock-avatar {
+  background: color-mix(in srgb, var(--color-os-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-os-accent) 26%, transparent);
 }
 
 .os-lock-field {
-  background: color-mix(in srgb, var(--color-os-surface) 50%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-os-border) 55%, transparent);
-  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-os-text) 2.5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-os-text) 8%, transparent);
+  border-radius: 0;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
 }
 
 .os-lock-field:focus-within {
-  border-color: color-mix(in srgb, var(--color-os-accent) 70%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-os-accent) 11%, transparent);
+  border-color: color-mix(in srgb, var(--color-os-accent) 42%, transparent);
+  box-shadow: inset 2px 0 var(--color-os-accent);
+}
+
+.os-lock-reveal {
+  border-left: 1px solid color-mix(in srgb, var(--color-os-text) 6%, transparent);
+}
+
+.os-lock-error {
+  background: color-mix(in srgb, var(--color-os-red) 7%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--color-os-red) 55%, transparent);
 }
 
 .os-window-docked,
@@ -596,13 +620,15 @@ button {
   transform: scaleY(0.18);
 }
 
-.seek {
+.seek,
+.os-range {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 3px;
   border-radius: 0;
-  background: rgba(130, 160, 210, 0.16);
+  border: 0;
+  background: color-mix(in srgb, var(--color-os-text) 8%, transparent);
   cursor: pointer;
   display: block;
   margin: 0;
@@ -610,34 +636,38 @@ button {
   vertical-align: middle;
 }
 
-.seek::-webkit-slider-thumb {
+.seek::-webkit-slider-thumb,
+.os-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 8px;
   height: 8px;
   border: none;
   border-radius: 50%;
-  background: #e8eef4;
-  box-shadow: 0 0 8px rgba(74, 163, 255, 0.6);
+  background: var(--color-os-text);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-os-accent) 60%, transparent);
   cursor: pointer;
   margin-top: -2.5px;
 }
 
-.seek::-moz-range-thumb {
+.seek::-moz-range-thumb,
+.os-range::-moz-range-thumb {
   width: 8px;
   height: 8px;
   border: none;
   border-radius: 50%;
-  background: #e8eef4;
-  box-shadow: 0 0 8px rgba(74, 163, 255, 0.6);
+  background: var(--color-os-text);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-os-accent) 60%, transparent);
   cursor: pointer;
 }
 
-.seek::-webkit-slider-runnable-track {
+.seek::-webkit-slider-runnable-track,
+.os-range::-webkit-slider-runnable-track {
   height: 3px;
 }
 
-.seek::-moz-range-track {
+.seek::-moz-range-track,
+.os-range::-moz-range-track {
   height: 3px;
   border: 0;
   background: transparent;
@@ -1554,28 +1584,18 @@ html[data-theme='macos'][data-appearance='dark'] {
 
 [data-theme='macos'] .os-lock-screen {
   font-family: var(--font-sans);
-  background:
-    radial-gradient(
-      circle at 50% 30%,
-      rgba(var(--os-accent-rgb, 0, 136, 255), 0.2),
-      transparent 42%
-    ),
-    var(--color-os-bg);
-}
-
-[data-theme='macos'] .os-lock-atmosphere {
-  display: none;
+  background: var(--color-os-bg);
 }
 
 [data-theme='macos'] .os-lock-card {
-  border-radius: 22px !important;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  border-radius: 0 !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.26);
 }
 
 [data-theme='macos'] .os-lock-field {
-  background: rgba(118, 118, 128, 0.12);
+  background: rgba(118, 118, 128, 0.08);
   border-color: var(--mac-separator);
-  border-radius: 9px;
+  border-radius: 0;
 }
 
 [data-theme='macos'] .taskbar-power-action,
@@ -1583,7 +1603,7 @@ html[data-theme='macos'][data-appearance='dark'] {
   color: white;
   background: var(--color-os-accent);
   border-color: transparent;
-  border-radius: 9px;
+  border-radius: 0;
 }
 
 [data-theme='macos'] .taskbar-power-action {

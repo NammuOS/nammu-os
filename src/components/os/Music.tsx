@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
+import { useMasterVolume } from '../../hooks/useMasterVolume';
+import { getEffectiveMediaVolume } from '../../lib/osVolume';
 
 interface Track {
   id: string;
@@ -115,6 +117,18 @@ const TRACKS: Track[] = [
 ];
 
 const SHUFFLE_ORDER = [2, 5, 1, 7, 3, 0, 6, 4];
+const MUSIC_VOLUME_STORAGE_KEY = 'nammu-music-volume';
+
+function getSavedMusicVolume(): number {
+  try {
+    const stored = localStorage.getItem(MUSIC_VOLUME_STORAGE_KEY);
+    if (stored === null) return 0.72;
+    const parsed = Number(stored);
+    return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.72;
+  } catch {
+    return 0.72;
+  }
+}
 
 const fmtTime = (seconds: number) => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -132,13 +146,15 @@ interface MusicProps {
 export function Music({ isOpen, onMinimize }: MusicProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeTimerRef = useRef<number | null>(null);
-  const volumeRef = useRef(0.72);
+  const { volume: masterVolume } = useMasterVolume();
+  const masterVolumeRef = useRef(masterVolume);
   const [trackIndex, setTrackIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>('all');
   const [liked, setLiked] = useState<Record<string, boolean>>({ t1: true, t6: true });
-  const [volume, setVolume] = useState(0.72);
+  const [volume, setVolume] = useState(getSavedMusicVolume);
+  const volumeRef = useRef(volume);
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -153,7 +169,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     const audio = audioRef.current;
     if (audio) {
       audio.src = TRACKS[0].url;
-      audio.volume = volumeRef.current;
+      audio.volume = getEffectiveMediaVolume(volumeRef.current, masterVolumeRef.current);
       audio.load();
     }
     return () => {
@@ -163,19 +179,11 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
   }, []);
 
   useEffect(() => {
-    const handleVolumeSync = (e: Event) => {
-      const customEvent = e as CustomEvent<{ volume: number }>;
-      if (typeof customEvent.detail?.volume === 'number') {
-        const v = customEvent.detail.volume;
-        setVolume(v);
-        volumeRef.current = v;
-        if (audioRef.current) audioRef.current.volume = v;
-        if (v > 0) setMuted(false);
-      }
-    };
-    window.addEventListener('nammu-volume-change', handleVolumeSync);
-    return () => window.removeEventListener('nammu-volume-change', handleVolumeSync);
-  }, []);
+    masterVolumeRef.current = masterVolume;
+    if (audioRef.current) {
+      audioRef.current.volume = getEffectiveMediaVolume(volumeRef.current, masterVolume);
+    }
+  }, [masterVolume]);
 
   const showVolumeInteraction = () => {
     setShowVolumeOverlay(true);
@@ -193,7 +201,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     audio.pause();
     audio.src = selectedTrack.url;
     audio.load();
-    audio.volume = volumeRef.current;
+    audio.volume = getEffectiveMediaVolume(volumeRef.current, masterVolumeRef.current);
     audio.muted = muted;
     if (autoplay) {
       void audio.play().catch(() => setPlaying(false));
@@ -257,9 +265,12 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     volumeRef.current = clampedVolume;
     setVolume(clampedVolume);
     setMuted(false);
+    try {
+      localStorage.setItem(MUSIC_VOLUME_STORAGE_KEY, String(clampedVolume));
+    } catch {}
     const audio = audioRef.current;
     if (audio) {
-      audio.volume = clampedVolume;
+      audio.volume = getEffectiveMediaVolume(clampedVolume, masterVolumeRef.current);
       audio.muted = false;
     }
     if (showOverlay) showVolumeInteraction();
@@ -348,6 +359,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     >
       <audio
         ref={audioRef}
+        data-nammu-volume-managed="local"
         preload="metadata"
         loop={repeat === 'one'}
         onPlay={() => setPlaying(true)}
@@ -543,7 +555,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
           onChange={(event) => seek(Number(event.target.value))}
           className="seek"
           style={{
-            background: `linear-gradient(90deg, #4aa3ff ${pct}%, rgba(255,255,255,0.08) ${pct}%)`,
+            background: `linear-gradient(90deg, var(--color-os-accent) ${pct}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
           }}
           aria-label="Track position"
         />

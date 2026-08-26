@@ -8,6 +8,7 @@ import {
   saveLockProfile,
   verifyLockPassword,
 } from '../../lib/osLock';
+import WallpaperLayer from './WallpaperLayer';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -73,117 +74,135 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   };
 
   return (
-    <main className="os-lock-screen relative grid h-screen w-screen overflow-hidden text-os-text">
-      <div className="os-lock-atmosphere" aria-hidden="true" />
-      <div className="os-scanline" aria-hidden="true" />
+    <main className="os-lock-screen relative flex h-screen w-screen items-center justify-center overflow-hidden text-os-text">
+      <WallpaperLayer />
+      <div className="os-lock-scrim absolute inset-0" aria-hidden="true" />
 
-      <div className="absolute left-6 top-5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.24em] text-os-text-muted">
-        <span className="status-dot" /> Nammu OS secure session
-      </div>
-
-      <div className="absolute right-6 top-5 text-right font-mono">
-        <div className="text-[11px] font-semibold tracking-[0.14em] text-os-text">
-          {time.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          })}
+      <header className="os-lock-menubar absolute inset-x-0 top-0 z-10 flex h-9 items-center justify-between px-4">
+        <div className="flex items-center gap-2 font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-os-text-muted">
+          <span className="h-1 w-1 bg-os-accent" /> Nammu OS
+          <span className="text-os-text-dim">/</span>
+          <span>Secure session</span>
         </div>
-        <div className="mt-0.5 text-[8px] uppercase tracking-[0.15em] text-os-text-muted">
-          {time.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-          })}
+        <div className="flex items-center gap-3 font-mono text-[8px] uppercase tracking-[0.12em] text-os-text-muted">
+          <span>
+            {time.toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </span>
+          <span className="font-semibold text-os-text">
+            {time.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })}
+          </span>
         </div>
-      </div>
+      </header>
 
-      <section className="os-lock-card relative z-10 m-auto w-[min(92vw,390px)] px-8 py-8 text-center">
-        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border border-os-accent/35 bg-os-accent/10 shadow-[0_0_36px_rgba(var(--os-accent-rgb,74,163,255),0.14)]">
-          {initials ? (
-            <span className="font-display text-2xl font-semibold tracking-[0.08em] text-os-accent">
-              {initials}
-            </span>
-          ) : (
-            <UserRound size={30} className="text-os-accent" />
-          )}
+      <section className="os-lock-card relative z-10 w-[min(92vw,380px)]">
+        <div className="os-lock-card-header flex h-9 items-center justify-between px-3">
+          <span className="flex items-center gap-1.5 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
+            <LockKeyhole size={11} className="text-os-accent" /> Authentication
+          </span>
+          <span className="font-mono text-[7.5px] uppercase tracking-[0.12em] text-os-text-dim">
+            Local profile
+          </span>
         </div>
 
-        <div className="mt-4">
-          <div className="text-[17px] font-semibold tracking-tight text-os-text">{displayName}</div>
-          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-os-text-muted">
-            {isFirstRun ? 'Create local profile' : `@${profile.username}`}
+        <div className="p-5">
+          <div className="flex items-center gap-3 border-b border-os-border/20 pb-4">
+            <div className="os-lock-avatar grid h-14 w-14 shrink-0 place-items-center">
+              {initials ? (
+                <span className="font-display text-[18px] font-semibold tracking-[0.08em] text-os-accent">
+                  {initials}
+                </span>
+              ) : (
+                <UserRound size={23} className="text-os-accent" />
+              )}
+            </div>
+            <div className="min-w-0 text-left">
+              <div className="truncate text-[15px] font-semibold text-os-text">{displayName}</div>
+              <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
+                {isFirstRun ? 'Create local profile' : `@${profile.username}`}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-3 text-left">
-          {isFirstRun && (
+          <form onSubmit={handleSubmit} className="mt-4 space-y-3 text-left">
+            {isFirstRun && (
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
+                  Username
+                </span>
+                <div className="os-lock-field flex items-center gap-2 px-3">
+                  <UserRound size={12} className="shrink-0 text-os-text-muted" />
+                  <input
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    autoComplete="username"
+                    maxLength={32}
+                    className="h-9 min-w-0 flex-1 bg-transparent text-[11px] text-os-text outline-none"
+                    aria-label="Username"
+                  />
+                </div>
+              </label>
+            )}
+
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.16em] text-os-text-muted">
-                Username
+              <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
+                {isFirstRun ? 'Create password' : 'Password'}
               </span>
               <div className="os-lock-field flex items-center gap-2 px-3">
-                <UserRound size={13} className="shrink-0 text-os-accent" />
+                <LockKeyhole size={12} className="shrink-0 text-os-text-muted" />
                 <input
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  autoComplete="username"
-                  maxLength={32}
-                  className="h-10 min-w-0 flex-1 bg-transparent text-[12px] text-os-text outline-none"
-                  aria-label="Username"
+                  ref={passwordRef}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={isFirstRun ? 'new-password' : 'current-password'}
+                  className="h-9 min-w-0 flex-1 bg-transparent text-[11px] text-os-text outline-none"
+                  placeholder={isFirstRun ? 'At least 6 characters' : 'Enter your password'}
+                  aria-label={isFirstRun ? 'Create password' : 'Password'}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="os-lock-reveal grid h-7 w-7 place-items-center text-os-text-muted transition-colors hover:text-os-accent"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={12} /> : <Eye size={12} />}
+                </button>
               </div>
             </label>
-          )}
 
-          <label className="block">
-            <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.16em] text-os-text-muted">
-              {isFirstRun ? 'Create password' : 'Password'}
-            </span>
-            <div className="os-lock-field flex items-center gap-2 px-3 focus-within:border-os-accent/60">
-              <LockKeyhole size={13} className="shrink-0 text-os-accent" />
-              <input
-                ref={passwordRef}
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={isFirstRun ? 'new-password' : 'current-password'}
-                className="h-10 min-w-0 flex-1 bg-transparent text-[12px] text-os-text outline-none"
-                placeholder={isFirstRun ? 'At least 6 characters' : 'Enter your password'}
-                aria-label={isFirstRun ? 'Create password' : 'Password'}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                className="grid h-7 w-7 place-items-center rounded text-os-text-muted transition-colors hover:bg-os-accent/10 hover:text-os-accent"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+            {error && (
+              <div
+                role="alert"
+                className="os-lock-error px-2.5 py-2 font-mono text-[8px] leading-relaxed text-os-red"
               >
-                {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-            </div>
-          </label>
+                {error}
+              </div>
+            )}
 
-          {error && (
-            <div role="alert" className="font-mono text-[9px] leading-relaxed text-os-red">
-              {error}
-            </div>
-          )}
+            <button
+              type="submit"
+              disabled={isSubmitting || !password || (isFirstRun && normalizedUsername.length < 2)}
+              className="os-lock-submit flex h-9 w-full items-center justify-center gap-2 font-mono text-[8px] font-medium uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Power size={12} />
+              <span>
+                {isSubmitting ? 'Verifying…' : isFirstRun ? 'Set password & power on' : 'Power on'}
+              </span>
+            </button>
+          </form>
+        </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting || !password || (isFirstRun && normalizedUsername.length < 2)}
-            className="os-lock-submit flex h-10 w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Power size={14} />
-            <span>
-              {isSubmitting ? 'Verifying…' : isFirstRun ? 'Set password & power on' : 'Power on'}
-            </span>
-          </button>
-        </form>
-
-        <div className="mt-5 flex items-center justify-center gap-1.5 font-mono text-[8px] uppercase tracking-[0.13em] text-os-text-dim">
+        <div className="os-lock-card-footer flex h-9 items-center justify-center gap-1.5 px-3 font-mono text-[7.5px] uppercase tracking-[0.12em] text-os-text-dim">
           <ShieldCheck size={10} className="text-os-accent" />
-          {isFirstRun ? 'Password stays on this device' : 'Workspace locked locally'}
+          {isFirstRun ? 'Credentials remain on this device' : 'Workspace locked locally'}
         </div>
       </section>
     </main>

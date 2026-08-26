@@ -1,27 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Settings,
   Palette,
   Volume2,
   Monitor,
   Database,
   Info,
   Check,
-  RefreshCw,
   Trash2,
   Download,
   Upload,
-  Shield,
-  Sliders,
-  Sparkles,
   Moon,
   Sun,
-  Bell,
-  HardDrive,
-  Wifi,
-  Cpu,
   VolumeX,
-  Eye,
   Image as ImageIcon,
 } from 'lucide-react';
 import {
@@ -38,6 +28,7 @@ import {
   type MatrixEffectSettingsMap,
   type MatrixWallpaperVariant,
 } from '../../lib/wallpapers';
+import { useMasterVolume } from '../../hooks/useMasterVolume';
 
 export interface SystemSettings {
   accentColor: string;
@@ -133,14 +124,7 @@ export function SettingsApp() {
   const [activeTab, setActiveTab] = useState<
     'appearance' | 'wallpaper' | 'audio' | 'taskbar' | 'storage' | 'about'
   >('appearance');
-  const [volume, setVolume] = useState<number>(() => {
-    try {
-      const v = localStorage.getItem('nammu-volume');
-      return v !== null ? Number(v) : 75;
-    } catch {
-      return 75;
-    }
-  });
+  const { volume, setVolume: handleVolumeChange } = useMasterVolume();
 
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [importStatus, setImportStatus] = useState<string>('');
@@ -200,32 +184,12 @@ export function SettingsApp() {
     );
   }, [settings]);
 
-  // Sync volume with whole OS
-  const handleVolumeChange = (val: number) => {
-    setVolume(val);
-    try {
-      localStorage.setItem('nammu-volume', String(val));
-    } catch {}
-
-    document.querySelectorAll('audio, video').forEach((el) => {
-      try {
-        (el as HTMLMediaElement).volume = val / 100;
-      } catch {}
-    });
-
-    window.dispatchEvent(
-      new CustomEvent('nammu-volume-change', {
-        detail: { volume: val / 100 },
-      }),
-    );
-  };
-
   const updateSetting = <K extends keyof SystemSettings>(key: K, val: SystemSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: val }));
   };
 
   // Calculate local storage size
-  const storageStats = useMemo(() => {
+  const storageStats = (() => {
     let totalBytes = 0;
     const items: { key: string; bytes: number; count: string }[] = [];
 
@@ -252,7 +216,7 @@ export function SettingsApp() {
     });
 
     return { totalBytes, items };
-  }, [settings]);
+  })();
 
   // Export full OS Data as JSON
   const exportAllData = () => {
@@ -294,7 +258,7 @@ export function SettingsApp() {
         });
         setImportStatus('Backup restored successfully! Refreshing...');
         setTimeout(() => window.location.reload(), 1200);
-      } catch (err) {
+      } catch {
         setImportStatus('Failed to parse backup file');
       }
     };
@@ -696,7 +660,10 @@ export function SettingsApp() {
                             Number(event.target.value),
                           )
                         }
-                        className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-white/15 bg-white/10 accent-os-accent"
+                        className="os-range"
+                        style={{
+                          background: `linear-gradient(90deg, var(--color-os-accent) ${((matrixEffectSettings[activeMatrixEffect].speed - 25) / 175) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                        }}
                         aria-label={`${activeMatrixEffect} speed`}
                       />
                     </label>
@@ -721,7 +688,10 @@ export function SettingsApp() {
                             Number(event.target.value),
                           )
                         }
-                        className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-white/15 bg-white/10 accent-os-accent"
+                        className="os-range"
+                        style={{
+                          background: `linear-gradient(90deg, var(--color-os-accent) ${((matrixEffectSettings[activeMatrixEffect].size - 10) / 18) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                        }}
                         aria-label={`${activeMatrixEffect} character size`}
                       />
                     </label>
@@ -787,9 +757,9 @@ export function SettingsApp() {
                     max="100"
                     value={volume}
                     onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                    className="w-full h-1.5 bg-[#172033] border border-white/20 rounded-full cursor-pointer appearance-none accent-[#4aa3ff]"
+                    className="os-range"
                     style={{
-                      background: `linear-gradient(90deg, #4aa3ff 0%, #4aa3ff ${volume}%, rgba(255,255,255,0.12) ${volume}%, rgba(255,255,255,0.12) 100%)`,
+                      background: `linear-gradient(90deg, var(--color-os-accent) ${volume}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
                     }}
                   />
                 </div>

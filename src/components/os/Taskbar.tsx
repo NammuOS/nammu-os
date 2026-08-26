@@ -22,6 +22,8 @@ import { findToolById } from '../../lib/toolRegistry';
 import { findSystemApp, findSystemAppByWindowId, type SystemAppId } from './systemAppRegistry';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
+import { useMasterVolume } from '../../hooks/useMasterVolume';
+import { applyMasterVolumeToMedia } from '../../lib/osVolume';
 
 interface TaskbarProps {
   windows: WindowState[];
@@ -86,14 +88,7 @@ export default function Taskbar({
   onPowerOff,
 }: TaskbarProps) {
   const [time, setTime] = useState(new Date());
-  const [volume, setVolume] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('nammu-volume');
-      return saved !== null ? Number(saved) : 72;
-    } catch {
-      return 72;
-    }
-  });
+  const { volume, setVolume: updateVolume } = useMasterVolume();
   const [lastVolume, setLastVolume] = useState<number>(72);
   const [showVolume, setShowVolume] = useState(false);
   const [showWheelTooltip, setShowWheelTooltip] = useState(false);
@@ -138,27 +133,24 @@ export default function Taskbar({
     };
   }, [closeFlyouts, showClock, showNotifications, showPower, showVolume]);
 
-  const updateVolume = useCallback((val: number) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(val)));
-    setVolume(clamped);
-    try {
-      localStorage.setItem('nammu-volume', String(clamped));
-    } catch {}
-
-    // Synchronize HTMLMediaElements across the whole OS
-    document.querySelectorAll('audio, video').forEach((el) => {
-      try {
-        (el as HTMLMediaElement).volume = clamped / 100;
-      } catch {}
+  useEffect(() => {
+    applyMasterVolumeToMedia(volume);
+    const observer = new MutationObserver((records) => {
+      if (
+        records.some((record) =>
+          Array.from(record.addedNodes).some(
+            (node) =>
+              node instanceof HTMLMediaElement ||
+              (node instanceof Element && Boolean(node.querySelector('audio, video'))),
+          ),
+        )
+      ) {
+        applyMasterVolumeToMedia(volume);
+      }
     });
-
-    // Broadcast system volume event
-    window.dispatchEvent(
-      new CustomEvent('nammu-volume-change', {
-        detail: { volume: clamped / 100 },
-      }),
-    );
-  }, []);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [volume]);
 
   const toggleMute = () => {
     if (volume > 0) {
@@ -621,7 +613,7 @@ export default function Taskbar({
                       max="100"
                       value={volume}
                       onChange={(e) => updateVolume(Number(e.target.value))}
-                      className="h-1 w-full cursor-pointer appearance-none bg-os-surface accent-os-accent focus:outline-none"
+                      className="os-range"
                       style={{
                         background: `linear-gradient(90deg, var(--color-os-accent) 0%, var(--color-os-accent) ${volume}%, color-mix(in srgb, var(--color-os-text) 10%, transparent) ${volume}%, color-mix(in srgb, var(--color-os-text) 10%, transparent) 100%)`,
                       }}
