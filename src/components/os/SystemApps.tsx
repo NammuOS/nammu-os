@@ -26,7 +26,6 @@ import { CalculatorTool } from '../../tools/CalculatorSuite';
 import { QrGen } from '../../tools/Utilities';
 import CloudApp from '../cloud/CloudApp';
 import BrowserApp from '../browser/BrowserApp';
-import FirefoxApp from '../firefox/FirefoxApp';
 import WhatsAppApp from '../whatsapp/WhatsAppApp';
 import MapApp from '../maps/MapApp';
 import { useContextMenu } from '../context-menu/useContextMenu';
@@ -610,8 +609,6 @@ export function SystemAppContent({ appId }: { appId: SystemAppId }) {
       return <CalculatorTool />;
     case 'qr-gen':
       return <QrGen />;
-    case 'firefox':
-      return <FirefoxApp />;
     case 'whatsapp':
       return <WhatsAppApp />;
     case 'browser':

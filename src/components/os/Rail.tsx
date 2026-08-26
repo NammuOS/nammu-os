@@ -14,7 +14,6 @@ import {
   SquareTerminal,
   X,
   MessageSquare,
-  Flame,
 } from 'lucide-react';
 import type { WindowState } from '../../hooks/useWindowManager';
 import type { SystemAppId } from './systemAppRegistry';
@@ -35,7 +34,6 @@ interface RailProps {
 
 const ITEMS = [
   { id: 'home', label: 'Home', icon: Home },
-  { id: 'firefox', label: 'Firefox', icon: Flame, app: 'firefox' as SystemAppId },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, app: 'whatsapp' as SystemAppId },
   { id: 'browser', label: 'Browser', icon: Globe, app: 'browser' as SystemAppId },
   { id: 'projects', label: 'Projects', icon: Layers3, app: 'projects' as SystemAppId },

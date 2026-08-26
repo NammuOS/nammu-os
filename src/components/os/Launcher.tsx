@@ -52,7 +52,6 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   calculator:
     'Complete calculator with standard, scientific, programmer, converter, date, and finance tools',
   'qr-gen': 'Vector SVG and high-resolution QR code generator Studio',
-  firefox: 'WebAssembly-powered Firefox web browser',
   whatsapp: 'End-to-end encrypted messaging and calls',
   browser: 'Proxy web browser with multi-tab browsing',
   files: 'File manager, workspace browser and cloud storage',

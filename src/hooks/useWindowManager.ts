@@ -32,10 +32,7 @@ export function useWindowManager() {
     const workspaceWidth = Math.max(360, window.innerWidth - 36 - rightInset);
     const workspaceHeight = Math.max(260, window.innerHeight - 32);
     const isBrowser =
-      toolId.includes('browser') ||
-      toolId.includes('firefox') ||
-      toolId.includes('whatsapp') ||
-      toolId.includes('maps');
+      toolId.includes('browser') || toolId.includes('whatsapp') || toolId.includes('maps');
     const width = isBrowser
       ? Math.min(1060, Math.max(480, workspaceWidth - 32))
       : Math.min(900, Math.max(320, workspaceWidth - 48));

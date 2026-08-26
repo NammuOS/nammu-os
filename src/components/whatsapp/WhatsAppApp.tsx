@@ -10,7 +10,6 @@ import {
   QrCode,
   Edit2,
   RotateCw,
-  Flame,
   AlertTriangle,
 } from 'lucide-react';
 import {
@@ -251,7 +250,7 @@ export default function WhatsAppApp() {
           runtimeWindow.geckoEvalChrome(script),
           new Promise<never>((_, reject) => {
             timeoutId = window.setTimeout(
-              () => reject(new Error('Gecko did not answer the WhatsApp command in time.')),
+              () => reject(new Error('WhatsApp did not answer the command in time.')),
               15_000,
             );
           }),
@@ -286,11 +285,7 @@ export default function WhatsAppApp() {
       if (event.data?.type === 'NAMMU_GECKO_ERROR') {
         engineReadyRef.current = false;
         setEngineState('error');
-        setEngineError(
-          typeof event.data.message === 'string'
-            ? event.data.message
-            : 'The WhatsApp engine could not finish starting.',
-        );
+        setEngineError('WhatsApp could not finish opening. Please try again.');
         return;
       }
 
@@ -319,7 +314,9 @@ export default function WhatsAppApp() {
         } catch (error) {
           engineReadyRef.current = false;
           setEngineState('error');
-          setEngineError(error instanceof Error ? error.message : String(error));
+          setEngineError(
+            error instanceof Error ? error.message : 'WhatsApp could not finish opening.',
+          );
         }
       };
 
@@ -335,7 +332,7 @@ export default function WhatsAppApp() {
     const timeout = window.setTimeout(() => {
       if (engineReadyRef.current) return;
       setEngineState('error');
-      setEngineError('The WhatsApp engine did not become ready within two minutes.');
+      setEngineError('WhatsApp did not finish opening within two minutes.');
     }, 120_000);
     return () => window.clearTimeout(timeout);
   }, [engineAttempt, engineState]);
@@ -497,25 +494,6 @@ export default function WhatsAppApp() {
 
         {/* Companion actions */}
         <div className="flex items-center gap-1 shrink-0">
-          <span
-            className={`mr-1 flex items-center gap-1 font-mono text-[8px] ${
-              engineState === 'ready'
-                ? 'text-[#25d366]'
-                : engineState === 'error'
-                  ? 'text-amber-400'
-                  : 'text-[#53bdeb]'
-            }`}
-            aria-live="polite"
-            title="One shared Gecko engine for all WhatsApp account tabs"
-          >
-            <span className="text-[7px]">●</span>
-            {engineState === 'ready'
-              ? 'ENGINE READY'
-              : engineState === 'error'
-                ? 'ENGINE ERROR'
-                : 'ENGINE STARTING'}
-          </span>
-
           <button
             onClick={() => setIsDirectChatOpen(true)}
             disabled={engineState !== 'ready'}
@@ -523,7 +501,7 @@ export default function WhatsAppApp() {
             title={
               engineState === 'ready'
                 ? 'Start Direct Chat without adding contact'
-                : 'Available when the shared engine is ready'
+                : 'Available when WhatsApp is ready'
             }
           >
             <Send size={10} />
@@ -578,17 +556,13 @@ export default function WhatsAppApp() {
               <>
                 <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-[#25d366]/30 bg-[#00a884]/15 text-[#25d366]">
                   <QrCode size={28} strokeWidth={1.6} />
-                  <Flame
-                    size={15}
-                    className="absolute -bottom-1 -right-1 animate-pulse rounded-full bg-[#202c33] p-0.5 text-[#ff7139]"
-                  />
                 </div>
                 <div>
                   <div className="text-[13px] font-semibold text-white">
                     Starting WhatsApp inside Nammu OS
                   </div>
                   <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
-                    Loading one shared Gecko engine. Your account session will appear automatically.
+                    Opening your WhatsApp session. Your account will appear automatically.
                   </div>
                 </div>
                 <div className="h-1 w-48 overflow-hidden rounded-full bg-white/[0.06]">
@@ -600,7 +574,7 @@ export default function WhatsAppApp() {
                 <AlertTriangle size={28} className="text-amber-400" />
                 <div>
                   <div className="text-[13px] font-semibold text-white">
-                    WhatsApp engine could not start
+                    WhatsApp could not open
                   </div>
                   <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
                     {engineError}
@@ -611,7 +585,7 @@ export default function WhatsAppApp() {
                   onClick={handleRetryEngine}
                   className="rounded border border-[#00a884]/50 bg-[#00a884]/15 px-3 py-1.5 text-[10px] font-medium text-[#25d366] hover:bg-[#00a884]/25"
                 >
-                  Retry engine
+                  Try again
                 </button>
               </>
             )}
@@ -622,7 +596,7 @@ export default function WhatsAppApp() {
           ref={iframeRef}
           src={getWhatsAppRuntimeUrl(engineAttempt)}
           className="h-full w-full border-0 bg-[#111b21]"
-          title="WhatsApp shared Gecko engine"
+          title="WhatsApp Web"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
           allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
         />
@@ -824,10 +798,10 @@ export default function WhatsAppApp() {
                 <div>
                   <div className="text-white font-medium">Account Switching</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Isolated Firefox container tabs share one Gecko engine
+                    Each account keeps its own isolated sign-in session
                   </div>
                 </div>
-                <span className="text-[#53bdeb] font-mono text-[10px]">SHARED</span>
+                <span className="text-[#53bdeb] font-mono text-[10px]">ISOLATED</span>
               </div>
 
               <div className="flex items-center justify-between">

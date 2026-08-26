@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 const bundleUrl = new URL('../public/firefox-wasm/assets/index-D39giZCc.js', import.meta.url);
 const upstreamDiscovery = 'https://sensible-ship-8305.puter.work/';
-const localDiscovery = '/api/firefox/wisp-endpoint';
+const legacyLocalDiscovery = '/api/firefox/wisp-endpoint';
+const localDiscovery = '/api/browser/wisp-endpoint';
 const initialTabNeedle = 'const n=[{title:"Nammu",url:"https://google.com/"';
 const initialTabReplacement =
   'const n=[{title:"Nammu",url:new URLSearchParams(location.search).get("url")||"https://google.com/"';
@@ -31,6 +32,9 @@ if (source.includes(upstreamDiscovery)) {
     throw new Error(`Expected one NammuOS Wisp discovery URL, found ${occurrences}.`);
   }
   source = source.replace(upstreamDiscovery, localDiscovery);
+  changed = true;
+} else if (source.includes(legacyLocalDiscovery)) {
+  source = source.replace(legacyLocalDiscovery, localDiscovery);
   changed = true;
 } else if (!source.includes(localDiscovery)) {
   throw new Error('Firefox-WASM bundle does not contain a recognized Wisp discovery URL.');

@@ -12,7 +12,6 @@ import {
   StickyNote,
   Workflow,
   MessageSquare,
-  Flame,
   Calculator,
   QrCode,
   type LucideIcon,
@@ -20,7 +19,6 @@ import {
 
 export type SystemAppId =
   | 'browser'
-  | 'firefox'
   | 'whatsapp'
   | 'files'
   | 'cloud'
@@ -74,13 +72,6 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     icon: QrCode,
     startMenu: true,
     keywords: ['qr', 'qr studio', 'qr code', 'barcode', 'svg qr', 'generate qr', 'scanner'],
-  },
-  {
-    id: 'firefox',
-    windowId: 'system:firefox',
-    title: 'Firefox',
-    icon: Flame,
-    keywords: ['firefox', 'browser', 'web', 'mozilla', 'internet'],
   },
   {
     id: 'whatsapp',

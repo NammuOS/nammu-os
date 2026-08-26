@@ -136,11 +136,15 @@ const TOOL_COMPONENTS: Record<string, React.FC<any>> = {
   ...COLOR_TOOLS,
 };
 
-const DEFAULT_PINS = ['firefox', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
+const DEFAULT_PINS = ['browser', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
 
 function uniqueIds(values: unknown[], limit?: number): string[] {
   const unique = [...new Set(values.filter((value): value is string => typeof value === 'string'))];
   return typeof limit === 'number' ? unique.slice(0, limit) : unique;
+}
+
+function normalizePinnedIds(values: unknown[]): string[] {
+  return uniqueIds(values.map((value) => (value === 'firefox' ? 'browser' : value)));
 }
 
 function getPinned(): string[] {
@@ -151,7 +155,13 @@ function getPinned(): string[] {
       return DEFAULT_PINS;
     }
     const parsed = JSON.parse(item);
-    return Array.isArray(parsed) ? uniqueIds(parsed) : DEFAULT_PINS;
+    if (!Array.isArray(parsed)) return DEFAULT_PINS;
+
+    const pinned = normalizePinnedIds(parsed);
+    if (JSON.stringify(pinned) !== JSON.stringify(parsed)) {
+      localStorage.setItem('nammu-pinned', JSON.stringify(pinned));
+    }
+    return pinned;
   } catch {
     return DEFAULT_PINS;
   }
@@ -341,7 +351,7 @@ export default function DesktopApp() {
           data?.pinned_tools &&
           Array.isArray(data.pinned_tools)
         ) {
-          const pinned = uniqueIds(data.pinned_tools);
+          const pinned = normalizePinnedIds(data.pinned_tools);
           setPinnedTools(pinned);
           localStorage.setItem('nammu-pinned', JSON.stringify(pinned));
         }

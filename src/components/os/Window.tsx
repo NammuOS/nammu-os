@@ -428,8 +428,8 @@ export default function Window({
                 target="_blank"
                 rel="noreferrer"
                 className="window-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
-                title="Open Firefox WASM in new tab"
-                aria-label="Open Firefox WASM in new tab"
+                title="Open Browser in new tab"
+                aria-label="Open Browser in new tab"
               >
                 <ExternalLink size={10} className="text-[#70869a]" />
               </a>
