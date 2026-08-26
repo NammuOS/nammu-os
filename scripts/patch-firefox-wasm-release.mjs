@@ -15,9 +15,10 @@ const initialNavigationNeedle =
   "A.evalChrome(\"openTrustedLinkIn('https://google.com/', 'current'); 'ok'\")";
 const initialNavigationReplacement =
   'A.evalChrome(`openTrustedLinkIn(${JSON.stringify(new URLSearchParams(location.search).get("url")||"https://google.com/")}, "current"); "ok"`)';
-const runtimeReadyNeedle = 'window.geckoEvalChrome=i=>A.evalChrome(i),await A.resize';
-const runtimeReadyReplacement =
+const runtimeReadyNeedle =
   'window.geckoEvalChrome=i=>A.evalChrome(i),window.parent!==window&&window.parent.postMessage({type:"NAMMU_GECKO_READY"},"*"),await A.resize';
+const runtimeReadyReplacement =
+  'window.geckoEvalChrome=i=>A.evalChrome(i),new URLSearchParams(location.search).get("app")==="1"&&await A.evalChrome(`(()=>{document.documentElement.setAttribute("chromehidden","menubar toolbar location directories status extrachrome");let e=document.getElementById("nammu-app-mode");e||((e=document.createElement("style")).id="nammu-app-mode",e.textContent="#titlebar,#navigator-toolbox,#TabsToolbar,#nav-bar,#PersonalToolbar,#toolbar-menubar,#sidebar-main,#sidebar-box,#sidebar-splitter,#statuspanel{display:none!important}#browser,#appcontent,#tabbrowser-tabbox,#tabbrowser-tabpanels{margin:0!important;padding:0!important;border:0!important}",document.documentElement.appendChild(e));return "app-mode"})()`),window.parent!==window&&window.parent.postMessage({type:"NAMMU_GECKO_READY"},"*"),await A.resize';
 
 let source = await readFile(bundleUrl, 'utf8');
 let changed = false;

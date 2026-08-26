@@ -7,7 +7,6 @@ import {
   Send,
   Volume2,
   VolumeX,
-  ShieldCheck,
   QrCode,
   Edit2,
   RotateCw,
@@ -47,6 +46,7 @@ function getSafeWhatsAppUrl(candidate?: string) {
 
 function getWhatsAppRuntimeUrl(candidate?: string) {
   const params = new URLSearchParams({
+    app: '1',
     autostart: '1',
     url: getSafeWhatsAppUrl(candidate),
   });
@@ -290,7 +290,7 @@ export default function WhatsAppApp() {
         </div>
       </div>
 
-      {/* 2. WhatsApp running inside Nammu's Firefox-WASM engine */}
+      {/* 2. WhatsApp in-app runtime */}
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
         {tabs
           .filter((tab) => mountedTabIds.includes(tab.id))
@@ -316,7 +316,7 @@ export default function WhatsAppApp() {
                         Starting WhatsApp inside Nammu OS
                       </div>
                       <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
-                        Loading the embedded Firefox engine. WhatsApp's QR code will appear here.
+                        Preparing your in-app session. WhatsApp's QR code will appear here.
                       </div>
                     </div>
                     <div className="h-1 w-48 overflow-hidden rounded-full bg-white/[0.06]">
@@ -338,29 +338,6 @@ export default function WhatsAppApp() {
             );
           })}
       </div>
-
-      {/* 3. WhatsApp Status & Quick Formatting Bar */}
-      <footer className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.06] bg-[#0c1317] px-3 font-mono text-[9px] text-[#8696a0]">
-        <div className="flex items-center gap-3">
-          <span className="text-[#25d366] flex items-center gap-1">
-            <ShieldCheck size={11} /> Embedded WhatsApp Session
-          </span>
-          <span>·</span>
-          <span>Account: {activeTab?.name}</span>
-          <span>·</span>
-          <span>Theme: {activeTheme?.name}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-[#53bdeb] flex items-center gap-1">
-            <Flame size={10} /> Firefox-WASM · Wisp network
-          </span>
-          <span>·</span>
-          <div className="flex items-center gap-1">
-            <span>Runs inside Nammu OS</span>
-          </div>
-        </div>
-      </footer>
 
       {/* MODAL 1: Direct Message / Click-to-Chat Dialog */}
       {isDirectChatOpen && (
@@ -546,9 +523,9 @@ export default function WhatsAppApp() {
             <div className="space-y-3 text-[11.5px]">
               <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
                 <div>
-                  <div className="text-white font-medium">Embedded Session</div>
+                  <div className="text-white font-medium">In-App Session</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    WhatsApp runs inside Nammu's Firefox-WASM engine
+                    WhatsApp stays inside its Nammu OS window
                   </div>
                 </div>
                 <span className="text-[#25d366] font-mono text-[10px]">IN APP</span>
