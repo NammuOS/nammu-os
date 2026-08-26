@@ -101,7 +101,7 @@ export default function Identity({
         <div className="relative mt-4 w-full max-w-130">
           <form
             ref={formRef}
-            className={`flex items-center gap-2 border bg-[#070b12]/80 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(200,220,255,0.04)] backdrop-blur-md transition-colors ${searchActive ? 'border-electric/35' : 'border-white/8'}`}
+            className={`desktop-search-field flex items-center gap-2 rounded-lg border px-3 py-2 backdrop-blur-xl transition-colors ${searchActive ? 'border-[#4aa3ff]/45' : 'border-white/[0.08] hover:border-white/[0.14]'}`}
             onSubmit={(event) => {
               event.preventDefault();
               if (!query.trim()) return;
@@ -120,7 +120,7 @@ export default function Identity({
               }
             }}
           >
-            <Command size={11} className="shrink-0 text-electric/80" />
+            <Command size={12} className="shrink-0 text-[#4aa3ff]" />
             <input
               ref={inputRef}
               value={query}
@@ -134,16 +134,16 @@ export default function Identity({
                 }
               }}
               placeholder="What do you want to work on?"
-              className="cmd-input min-w-0 flex-1 bg-transparent text-[12px] tracking-wide text-[#d5e0ea] outline-none"
+              className="cmd-input min-w-0 flex-1 bg-transparent text-[11px] tracking-wide text-[#dce7f2] outline-none"
               aria-label="Search tools"
               aria-expanded={searchActive}
             />
-            <kbd className="hidden font-mono text-[8px] tracking-widest text-[#4a5c6c] sm:block">
+            <kbd className="hidden rounded border border-white/[0.07] bg-black/25 px-1.5 py-0.5 font-mono text-[8px] tracking-widest text-[#556f84] sm:block">
               Win Space
             </kbd>
             <button
               type="submit"
-              className="flex h-5 w-5 items-center justify-center text-[#6a7e90] hover:text-[#cfe4ff]"
+              className="flex h-5 w-5 items-center justify-center rounded text-[#71889d] transition-colors hover:bg-[#4aa3ff]/10 hover:text-[#9ecaff]"
               aria-label="Open first matching tool"
             >
               <ArrowRight size={11} />

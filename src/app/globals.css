@@ -299,37 +299,54 @@ button {
 }
 
 .launcher-category-tab {
-  @apply px-3 py-1.5 text-xs font-medium rounded-sm transition-all cursor-pointer;
-  color: #64748b;
+  @apply cursor-pointer rounded px-3 py-1.5 text-[10px] font-medium transition-all;
+  color: #647c90;
   background: transparent;
   border: 1px solid transparent;
 }
 
 .launcher-category-tab:hover {
-  color: #94a3b8;
-  background: rgba(6, 182, 212, 0.06);
+  color: #bcd2e4;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .launcher-category-tab.active {
-  color: #06b6d4;
-  background: rgba(6, 182, 212, 0.1);
-  border-color: rgba(6, 182, 212, 0.2);
+  color: #9ecaff;
+  background: rgba(74, 163, 255, 0.15);
+  border-color: rgba(74, 163, 255, 0.28);
 }
 
 .tool-tile {
-  @apply p-2.5 rounded-sm transition-all cursor-pointer;
-  background: rgba(13, 27, 62, 0.4);
-  border: 1px solid rgba(30, 58, 138, 0.2);
+  @apply cursor-pointer rounded-lg p-2.5 transition-all;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .tool-tile:hover {
-  background: rgba(13, 27, 62, 0.6);
-  border-color: rgba(6, 182, 212, 0.3);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(74, 163, 255, 0.28);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
 }
 
 .tool-tile:active {
   transform: scale(0.98);
+}
+
+.search-launcher-panel {
+  color: #c5d2de;
+  background: linear-gradient(135deg, rgba(10, 18, 30, 0.96), rgba(5, 8, 13, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(24px) saturate(1.15);
+}
+
+.desktop-search-field {
+  background: rgba(7, 14, 24, 0.88);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
 /* Micro details */
@@ -826,6 +843,36 @@ html[data-appearance='light'] {
 [data-appearance='light'] .start-menu-panel [class*='text-[#8aa0b2]'],
 [data-appearance='light'] .start-menu-panel [class*='text-[#4a5c6c]'] {
   color: #6e6e73 !important;
+}
+
+[data-appearance='light'] .desktop-search-field {
+  background: rgba(250, 250, 252, 0.9);
+  border-color: rgba(60, 60, 67, 0.16) !important;
+  box-shadow: 0 12px 34px rgba(30, 30, 35, 0.16);
+}
+
+[data-appearance='light'] .desktop-search-field .cmd-input,
+[data-appearance='light'] .search-launcher-panel [class*='text-[#dce7f2]'] {
+  color: #1d1d1f !important;
+}
+
+[data-appearance='light'] .desktop-search-field .cmd-input::placeholder,
+[data-appearance='light'] .search-launcher-panel [class*='text-[#71889d]'],
+[data-appearance='light'] .search-launcher-panel [class*='text-[#647c90]'],
+[data-appearance='light'] .search-launcher-panel [class*='text-[#61788c]'],
+[data-appearance='light'] .search-launcher-panel [class*='text-[#556f84]'],
+[data-appearance='light'] .search-launcher-panel [class*='text-[#4a6173]'] {
+  color: #6e6e73 !important;
+}
+
+[data-appearance='light'] .search-launcher-panel .tool-tile {
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(60, 60, 67, 0.12);
+}
+
+[data-appearance='light'] .search-launcher-panel .tool-tile:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 122, 255, 0.28);
 }
 
 [data-appearance='light'] input,

@@ -299,22 +299,22 @@ export default function Launcher({
       onClick={onClose}
     >
       <div
-        className="search-launcher-panel glass-panel flex max-h-[58vh] w-170 max-w-[92%] flex-col overflow-hidden rounded-lg shadow-2xl"
+        className="search-launcher-panel flex max-h-[58vh] w-170 max-w-[92%] flex-col overflow-hidden rounded-xl"
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(event) =>
           contextMenu.openAtEvent(event, launcherMenu, { ariaLabel: 'Tool launcher menu' })
         }
       >
         {searchQuery && (
-          <div className="flex items-center gap-2 border-b border-os-border/30 px-3 py-2 font-mono text-[9px] text-os-text-muted">
-            <Search size={12} className="text-os-accent" />
-            Results for <span className="truncate text-os-text">{searchQuery}</span>
+          <div className="flex items-center gap-2 border-b border-white/[0.06] bg-black/15 px-3 py-2.5 font-mono text-[9px] text-[#61788c]">
+            <Search size={12} className="text-[#4aa3ff]" />
+            Results for <span className="truncate text-[#dce7f2]">{searchQuery}</span>
           </div>
         )}
 
         {/* Top Option Tabs: All, Tools, Pinned, Recent */}
         {!searchQuery && (
-          <div className="flex items-center gap-1 px-3 py-2 border-b border-os-border/20">
+          <div className="flex items-center gap-1 border-b border-white/[0.06] bg-black/15 px-3 py-2">
             <button
               onClick={() => {
                 setActiveTab('all');
@@ -353,13 +353,13 @@ export default function Launcher({
 
         {/* Category Pills (Visible when Tools tab is active) with All on the left of Converters */}
         {!searchQuery && activeTab === 'tools' && (
-          <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-os-border/20 bg-black/10">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] bg-black/25 px-3 py-2">
             <button
               onClick={() => setActiveCategory('all')}
               className={`px-2.5 py-1 text-[11px] rounded-sm border transition-all ${
                 activeCategory === 'all'
-                  ? 'border-os-accent bg-os-accent/15 text-os-accent font-medium shadow-sm'
-                  : 'border-os-border/30 hover:border-os-accent/40 hover:bg-os-accent/5 text-os-text-muted hover:text-os-text'
+                  ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/15 font-medium text-[#9ecaff]'
+                  : 'border-white/[0.06] bg-white/[0.01] text-[#647c90] hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-[#bcd2e4]'
               }`}
             >
               All
@@ -370,8 +370,8 @@ export default function Launcher({
                 onClick={() => setActiveCategory(cat)}
                 className={`px-2.5 py-1 text-[11px] rounded-sm border transition-all ${
                   activeCategory === cat
-                    ? 'border-os-accent bg-os-accent/15 text-os-accent font-medium shadow-sm'
-                    : 'border-os-border/30 hover:border-os-accent/40 hover:bg-os-accent/5 text-os-text-muted hover:text-os-text'
+                    ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/15 font-medium text-[#9ecaff]'
+                    : 'border-white/[0.06] bg-white/[0.01] text-[#647c90] hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-[#bcd2e4]'
                 }`}
               >
                 {cat}
@@ -386,9 +386,9 @@ export default function Launcher({
           activeTab === 'tools' &&
           activeCategory === 'all' &&
           !searchQuery && (
-            <div className="px-3 py-1.5 border-b border-os-border/20 flex items-center gap-2">
-              <Star size={10} className="text-os-amber" />
-              <span className="text-[10px] uppercase tracking-wider text-os-amber font-semibold">
+            <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-1.5">
+              <Star size={10} className="text-[#f6c85f]" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-[#d7b35f]">
                 Suggested for active workspace
               </span>
             </div>
@@ -400,7 +400,6 @@ export default function Launcher({
             {displayedItems.map((item) => {
               const Icon = item.icon;
               const isPinned = pinnedTools.includes(item.id);
-              const isApp = item.type === 'app';
               return (
                 <div
                   key={`${item.type}:${item.id}`}
@@ -430,15 +429,17 @@ export default function Launcher({
                   }
                 >
                   <div className="flex items-start gap-2.5">
-                    <div className="p-1.5 rounded-sm bg-os-surface/40 border border-os-border/20 group-hover:border-os-accent/30 transition-colors">
-                      <Icon size={18} className="text-os-accent" />
+                    <div className="rounded-md border border-white/[0.06] bg-black/30 p-1.5 transition-colors group-hover:border-[#4aa3ff]/30 group-hover:bg-[#4aa3ff]/8">
+                      <Icon size={18} className="text-[#4aa3ff]" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-os-text truncate">{item.name}</div>
-                      <div className="text-[10px] text-os-text-muted leading-tight mt-0.5 line-clamp-2">
+                      <div className="truncate text-[11px] font-medium text-[#dce7f2]">
+                        {item.name}
+                      </div>
+                      <div className="mt-0.5 line-clamp-2 text-[9.5px] leading-tight text-[#71889d]">
                         {item.description}
                       </div>
-                      <div className="text-[9px] text-os-text-dim mt-1 uppercase tracking-wider">
+                      <div className="mt-1 font-mono text-[8px] uppercase tracking-wider text-[#4a6173]">
                         {item.category}
                       </div>
                     </div>
@@ -454,7 +455,7 @@ export default function Launcher({
                     }`}
                     title={isPinned ? 'Unpin' : 'Pin'}
                   >
-                    <Pin size={10} className={isPinned ? 'text-os-accent' : 'text-os-text-muted'} />
+                    <Pin size={10} className={isPinned ? 'text-[#4aa3ff]' : 'text-[#61788c]'} />
                   </button>
                 </div>
               );
@@ -462,7 +463,7 @@ export default function Launcher({
           </div>
 
           {displayedItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-os-text-muted">
+            <div className="flex flex-col items-center justify-center py-12 text-[#71889d]">
               <Search size={24} className="mb-2 opacity-40" />
               <div className="text-xs">No matching apps or tools found</div>
               <div className="text-[10px] mt-1">Try a different search term</div>
@@ -471,7 +472,7 @@ export default function Launcher({
         </div>
 
         {/* Footer stats */}
-        <div className="px-3 py-2 border-t border-os-border/30 flex items-center justify-between text-[10px] text-os-text-muted">
+        <div className="flex items-center justify-between border-t border-white/[0.06] bg-black/15 px-3 py-2 font-mono text-[8.5px] text-[#556f84]">
           <span>
             {activeTab === 'all' && `${displayedItems.length} applications`}
             {activeTab === 'tools' &&
