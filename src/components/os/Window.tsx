@@ -424,7 +424,7 @@ export default function Window({
           >
             {(win.toolId === 'system:browser' || win.toolId === 'browser') && (
               <a
-                href="/firefox-wasm/index.html"
+                href="/browser"
                 target="_blank"
                 rel="noreferrer"
                 className="window-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"

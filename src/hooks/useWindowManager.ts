@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { getDefaultWindowBounds } from '../lib/windowGeometry';
 
 export type SnapEdge =
   'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -29,19 +30,11 @@ export function useWindowManager() {
 
   const openWindow = useCallback((toolId: string, title: string, data?: any, rightInset = 0) => {
     const id = `${toolId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const workspaceWidth = Math.max(360, window.innerWidth - 36 - rightInset);
-    const workspaceHeight = Math.max(260, window.innerHeight - 32);
-    const isBrowser =
-      toolId.includes('browser') || toolId.includes('whatsapp') || toolId.includes('maps');
-    const width = isBrowser
-      ? Math.min(1060, Math.max(480, workspaceWidth - 32))
-      : Math.min(900, Math.max(320, workspaceWidth - 48));
-    const preferredTop = isBrowser ? 24 : Math.min(190, Math.max(16, workspaceHeight - 240));
-    const height = isBrowser
-      ? Math.min(700, Math.max(400, workspaceHeight - 48))
-      : Math.min(560, Math.max(220, workspaceHeight - preferredTop - 16));
-    const x = 36 + Math.max(0, (workspaceWidth - width) / 2);
-    const y = preferredTop;
+    const { x, y, width, height } = getDefaultWindowBounds(
+      window.innerWidth,
+      window.innerHeight,
+      rightInset,
+    );
     zIndexCounter += 1;
 
     const newWindow: WindowState = {
