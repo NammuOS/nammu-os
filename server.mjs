@@ -10,7 +10,10 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error(`Invalid PORT: ${process.env.PORT}`);
 }
 
-logging.set_level(logging.WARN);
+// Media CDNs commonly reset superseded range-request streams after the browser
+// seeks or selects another representation. Wisp closes those streams normally;
+// keep genuine server errors visible without flooding the terminal with resets.
+logging.set_level(logging.ERROR);
 wisp.options.allow_private_ips = false;
 wisp.options.allow_loopback_ips = false;
 
@@ -49,5 +52,7 @@ httpServer.on('upgrade', (request, socket, head) => {
 });
 
 httpServer.listen(port, hostname, () => {
-  console.info(`> NammuOS ready at http://localhost:${port} (${dev ? 'development' : 'production'})`);
+  console.info(
+    `> NammuOS ready at http://localhost:${port} (${dev ? 'development' : 'production'})`,
+  );
 });

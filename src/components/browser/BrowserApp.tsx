@@ -55,6 +55,7 @@ import {
   SearchEngine,
   getStoredBrowserPreferences,
   saveStoredBrowserPreferences,
+  reconcileBrowserHistoryPosition,
   type BrowserPreferences,
 } from './services/browserEngine';
 import BrowserMenu from './BrowserMenu';
@@ -583,23 +584,29 @@ export default function BrowserApp() {
         if (cancelled || typeof raw !== 'string') return;
 
         const page = JSON.parse(raw) as GeckoPageState;
-        if (!page.url || page.url.startsWith('about:')) return;
+        if (!page.url) return;
+
+        const observedUrl = page.url === RUNTIME_HOME_URL ? 'about:home' : page.url;
 
         const previousObservedUrl = lastObservedUrls.current[activeTabId];
-        lastObservedUrls.current[activeTabId] = page.url;
-        const favicon = getDomainFavicon(page.url);
+        lastObservedUrls.current[activeTabId] = observedUrl;
+        const favicon = observedUrl.startsWith('about:') ? '' : getDomainFavicon(observedUrl);
 
         setTabs((current) => {
           let changed = false;
           const updated = current.map((tab) => {
             if (tab.id !== activeTabId) return tab;
-            const urlChanged = tab.url !== page.url;
-            const nextHistory = urlChanged
-              ? [...tab.history.slice(0, tab.historyIndex + 1), page.url]
-              : tab.history;
+            const urlChanged = tab.url !== observedUrl;
+            const historyPosition = urlChanged
+              ? reconcileBrowserHistoryPosition(tab.history, tab.historyIndex, observedUrl)
+              : { history: tab.history, historyIndex: tab.historyIndex };
+            const title =
+              observedUrl === 'about:home'
+                ? getBrowserTabTitle(observedUrl, tab.isPrivate)
+                : page.title || getBrowserTabTitle(observedUrl, tab.isPrivate);
             if (
               !urlChanged &&
-              tab.title === (page.title || page.url) &&
+              tab.title === title &&
               tab.favicon === favicon &&
               tab.isLoading === page.isLoading &&
               tab.canGoBack === page.canGoBack &&
@@ -610,29 +617,33 @@ export default function BrowserApp() {
             changed = true;
             return {
               ...tab,
-              url: page.url,
-              title: page.title || page.url,
+              url: observedUrl,
+              title,
               favicon,
               isLoading: page.isLoading,
               canGoBack: page.canGoBack,
               canGoForward: page.canGoForward,
-              history: nextHistory,
-              historyIndex: urlChanged ? nextHistory.length - 1 : tab.historyIndex,
+              history: historyPosition.history,
+              historyIndex: historyPosition.historyIndex,
             };
           });
           return changed ? updated : current;
         });
 
-        if (page.url !== previousObservedUrl && !activeTab.isPrivate) {
+        if (
+          observedUrl !== previousObservedUrl &&
+          !observedUrl.startsWith('about:') &&
+          !activeTab.isPrivate
+        ) {
           const entry: HistoryEntry = {
             id: `${Date.now()}-${activeTabId}`,
-            title: page.title || page.url,
-            url: page.url,
+            title: page.title || observedUrl,
+            url: observedUrl,
             timestamp: Date.now(),
             favicon,
           };
           setHistory((current) => {
-            const updated = [entry, ...current.filter((item) => item.url !== page.url)].slice(
+            const updated = [entry, ...current.filter((item) => item.url !== observedUrl)].slice(
               0,
               100,
             );
@@ -641,7 +652,7 @@ export default function BrowserApp() {
           });
           setNetworkLogs((current) => [
             {
-              url: page.url,
+              url: observedUrl,
               method: 'GET',
               status: 200,
               time: new Date().toLocaleTimeString(),
@@ -996,12 +1007,15 @@ export default function BrowserApp() {
   // History navigation (Back / Forward)
   const handleGoBack = () => {
     if (!activeTab || !activeTab.canGoBack) return;
-    void runOnGeckoTab(activeTabId, "gBrowser.goBack(); return 'ok';");
+    void runOnGeckoTab(activeTabId, "tab.linkedBrowser.goBack(); return 'history-back-requested';");
   };
 
   const handleGoForward = () => {
     if (!activeTab || !activeTab.canGoForward) return;
-    void runOnGeckoTab(activeTabId, "gBrowser.goForward(); return 'ok';");
+    void runOnGeckoTab(
+      activeTabId,
+      "tab.linkedBrowser.goForward(); return 'history-forward-requested';",
+    );
   };
 
   const handleReload = () => {

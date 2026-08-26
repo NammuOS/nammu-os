@@ -17,6 +17,33 @@ export interface BrowserTab {
   isPrivate?: boolean;
 }
 
+export interface BrowserHistoryPosition {
+  history: string[];
+  historyIndex: number;
+}
+
+export function reconcileBrowserHistoryPosition(
+  history: string[],
+  historyIndex: number,
+  observedUrl: string,
+): BrowserHistoryPosition {
+  const previousIndex = historyIndex - 1;
+  if (previousIndex >= 0 && history[previousIndex] === observedUrl) {
+    return { history, historyIndex: previousIndex };
+  }
+
+  const nextIndex = historyIndex + 1;
+  if (nextIndex < history.length && history[nextIndex] === observedUrl) {
+    return { history, historyIndex: nextIndex };
+  }
+
+  const currentHistory = history.slice(0, historyIndex + 1);
+  return {
+    history: [...currentHistory, observedUrl],
+    historyIndex: currentHistory.length,
+  };
+}
+
 export interface BrowserPreferences {
   searchEngine: SearchEngine;
   showBookmarksBar: boolean;

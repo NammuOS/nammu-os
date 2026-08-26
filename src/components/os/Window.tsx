@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import type { SnapEdge, WindowState } from '../../hooks/useWindowManager';
+import { getStandaloneWindowUrl } from '../../lib/standaloneWindow';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 
@@ -43,6 +44,7 @@ export default function Window({
   rightInset,
   children,
 }: WindowProps) {
+  const standaloneUrl = getStandaloneWindowUrl(win.toolId);
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -422,14 +424,14 @@ export default function Window({
             className="window-controls flex items-center gap-1.5 pl-2"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            {(win.toolId === 'system:browser' || win.toolId === 'browser') && (
+            {standaloneUrl && (
               <a
-                href="/browser"
+                href={standaloneUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="window-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
-                title="Open Browser in new tab"
-                aria-label="Open Browser in new tab"
+                title={`Open ${win.title} in new tab`}
+                aria-label={`Open ${win.title} in new tab`}
               >
                 <ExternalLink size={10} className="text-[#70869a]" />
               </a>

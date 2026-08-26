@@ -1,0 +1,107 @@
+import type React from 'react';
+import {
+  ImgToWebp,
+  ImgToAvif,
+  ImgToPng,
+  ImgToJpg,
+  SvgToPng,
+  SvgToWebp,
+  VideoConverter,
+  VideoToHls,
+  VideoToGif,
+  GifToVideo,
+  VideoToAudio,
+  AudioConverter,
+  PdfToImages,
+  ImagesToPdf,
+  JsonYaml,
+  JsonCsv,
+  UnixTimestamp,
+  OvenTemp,
+} from '../../tools/Converters';
+import {
+  ImgCompress,
+  ImgResize,
+  ImgCrop,
+  BulkImgConvert,
+  ImgMetadataClean,
+  ColorExtract,
+  PaletteGen,
+  SvgOptimize,
+} from '../../tools/Image';
+import {
+  VideoCompress,
+  VideoTrim,
+  FrameExtract,
+  VideoThumbnails,
+  VideoMetadata,
+} from '../../tools/Video';
+import { AudioCompress, AudioTrim, Id3Edit, WaveformGen } from '../../tools/Audio';
+import {
+  PdfMerge,
+  PdfSplit,
+  PdfCompress,
+  PdfExtractReorder,
+  PdfMetadata,
+  PdfPassword,
+  PdfWatermark,
+} from '../../tools/PDF';
+import { DEVELOPER_TOOLS } from '../../tools/Developer';
+import { UTILITY_TOOLS } from '../../tools/Utilities';
+import { CALCULATOR_TOOLS } from '../../tools/CalculatorSuite';
+import { GENERATOR_TOOLS } from '../../tools/Generators';
+import { TEXT_TOOLS } from '../../tools/TextTools';
+import { COLOR_TOOLS } from '../../tools/ColorTools';
+import SubdomainDiscovery from '../../tools/SubdomainDiscovery';
+
+export const TOOL_COMPONENTS: Record<string, React.FC<any>> = {
+  ImgToWebp,
+  ImgToAvif,
+  ImgToPng,
+  ImgToJpg,
+  SvgToPng,
+  SvgToWebp,
+  VideoConverter,
+  VideoToHls,
+  VideoToGif,
+  GifToVideo,
+  VideoToAudio,
+  AudioConverter,
+  PdfToImages,
+  ImagesToPdf,
+  JsonYaml,
+  JsonCsv,
+  UnixTimestamp,
+  OvenTemp,
+  SubdomainDiscovery,
+  ImgCompress,
+  ImgResize,
+  ImgCrop,
+  BulkImgConvert,
+  ImgMetadataClean,
+  ColorExtract,
+  PaletteGen,
+  SvgOptimize,
+  VideoCompress,
+  VideoTrim,
+  FrameExtract,
+  VideoThumbnails,
+  VideoMetadata,
+  AudioCompress,
+  AudioTrim,
+  Id3Edit,
+  WaveformGen,
+  PdfMerge,
+  PdfSplit,
+  PdfCompress,
+  PdfExtractReorder,
+  PdfMetadata,
+  PdfPassword,
+  PdfWatermark,
+  ...DEVELOPER_TOOLS,
+  ...UTILITY_TOOLS,
+  ...CALCULATOR_TOOLS,
+  ...GENERATOR_TOOLS,
+  ...TEXT_TOOLS,
+  ...COLOR_TOOLS,
+};

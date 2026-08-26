@@ -4,15 +4,19 @@ import type {
   CloudProvider,
   CloudFile,
   StorageStats,
-  UploadTask,
 } from '../types/cloudTypes';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
-const WS_BASE_URL =
-  (import.meta as any).env?.VITE_WS_BASE_URL ||
-  (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
-    window.location.host +
-    '/ws/uploads';
+const CONFIGURED_WS_BASE_URL = (import.meta as any).env?.VITE_WS_BASE_URL as string | undefined;
+
+function getWebSocketBaseUrl(): string {
+  if (CONFIGURED_WS_BASE_URL) return CONFIGURED_WS_BASE_URL;
+  if (typeof window === 'undefined') {
+    throw new Error('Upload WebSocket URLs can only be resolved in the browser.');
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+  return `${protocol}${window.location.host}/ws/uploads`;
+}
 
 // Utility formatting
 export function formatBytes(bytes: number | undefined | null): string {
@@ -274,7 +278,7 @@ class CloudApiClient {
     // Connect WebSocket
     let ws: WebSocket | null = null;
     try {
-      ws = new WebSocket(`${WS_BASE_URL}?uploadId=${encodeURIComponent(init.uploadId)}`);
+      ws = new WebSocket(`${getWebSocketBaseUrl()}?uploadId=${encodeURIComponent(init.uploadId)}`);
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
