@@ -11,6 +11,13 @@ const readyNeedle =
   'ue.then(()=>{console.log("[chrome-demo] chrome assets ready"),R("ready"),h.disabled=!he}).catch(pe);';
 const readyReplacement =
   'ue.then(()=>{console.log("[chrome-demo] chrome assets ready"),R("ready"),h.disabled=!he,new URLSearchParams(location.search).get("autostart")==="1"&&he&&FA()}).catch(pe);';
+const initialNavigationNeedle =
+  "A.evalChrome(\"openTrustedLinkIn('https://google.com/', 'current'); 'ok'\")";
+const initialNavigationReplacement =
+  'A.evalChrome(`openTrustedLinkIn(${JSON.stringify(new URLSearchParams(location.search).get("url")||"https://google.com/")}, "current"); "ok"`)';
+const runtimeReadyNeedle = 'window.geckoEvalChrome=i=>A.evalChrome(i),await A.resize';
+const runtimeReadyReplacement =
+  'window.geckoEvalChrome=i=>A.evalChrome(i),window.parent!==window&&window.parent.postMessage({type:"NAMMU_GECKO_READY"},"*"),await A.resize';
 
 let source = await readFile(bundleUrl, 'utf8');
 let changed = false;
@@ -38,6 +45,20 @@ if (source.includes(readyNeedle)) {
   changed = true;
 } else if (!source.includes(readyReplacement)) {
   throw new Error('Firefox-WASM bundle does not contain the expected ready handler.');
+}
+
+if (source.includes(initialNavigationNeedle)) {
+  source = source.replace(initialNavigationNeedle, initialNavigationReplacement);
+  changed = true;
+} else if (!source.includes(initialNavigationReplacement)) {
+  throw new Error('Firefox-WASM bundle does not contain the expected initial navigation.');
+}
+
+if (source.includes(runtimeReadyNeedle)) {
+  source = source.replace(runtimeReadyNeedle, runtimeReadyReplacement);
+  changed = true;
+} else if (!source.includes(runtimeReadyReplacement)) {
+  throw new Error('Firefox-WASM bundle does not contain the expected runtime-ready hook.');
 }
 
 if (!changed) {

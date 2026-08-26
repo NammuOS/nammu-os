@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  MessageSquare,
   Plus,
   X,
   Settings,
@@ -10,8 +9,9 @@ import {
   VolumeX,
   ShieldCheck,
   QrCode,
-  ExternalLink,
   Edit2,
+  RotateCw,
+  Flame,
 } from 'lucide-react';
 import {
   WhatsAppAccountTab,
@@ -23,6 +23,11 @@ import {
 } from './services/whatsappStore';
 
 const WHATSAPP_WEB_URL = 'https://web.whatsapp.com/';
+const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
+
+type GeckoRuntimeWindow = Window & {
+  geckoEvalChrome?: (script: string) => Promise<unknown>;
+};
 
 function getSafeWhatsAppUrl(candidate?: string) {
   try {
@@ -40,6 +45,14 @@ function getSafeWhatsAppUrl(candidate?: string) {
   return WHATSAPP_WEB_URL;
 }
 
+function getWhatsAppRuntimeUrl(candidate?: string) {
+  const params = new URLSearchParams({
+    autostart: '1',
+    url: getSafeWhatsAppUrl(candidate),
+  });
+  return `${FIREFOX_RUNTIME_URL}?${params.toString()}`;
+}
+
 export default function WhatsAppApp() {
   const [tabs, setTabs] = useState<WhatsAppAccountTab[]>(getStoredWhatsAppTabs);
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id || 'wa-account-1');
@@ -53,6 +66,9 @@ export default function WhatsAppApp() {
   const [isThemeManagerOpen, setIsThemeManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingTab, setEditingTab] = useState<WhatsAppAccountTab | null>(null);
+  const [mountedTabIds, setMountedTabIds] = useState<string[]>([activeTabId]);
+  const [readyTabIds, setReadyTabIds] = useState<string[]>([]);
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const activeTheme = themes.find((t) => t.id === activeThemeId) || themes[0];
@@ -65,6 +81,26 @@ export default function WhatsAppApp() {
   useEffect(() => {
     saveStoredWhatsAppThemes(themes);
   }, [themes]);
+
+  useEffect(() => {
+    const handleRuntimeReady = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== 'NAMMU_GECKO_READY') {
+        return;
+      }
+
+      const readyTab = tabs.find(
+        (tab) => iframeRefs.current[tab.id]?.contentWindow === event.source,
+      );
+      if (readyTab) {
+        setReadyTabIds((current) =>
+          current.includes(readyTab.id) ? current : [...current, readyTab.id],
+        );
+      }
+    };
+
+    window.addEventListener('message', handleRuntimeReady);
+    return () => window.removeEventListener('message', handleRuntimeReady);
+  }, [tabs]);
 
   // Tab management
   const handleAddAccount = () => {
@@ -81,6 +117,7 @@ export default function WhatsAppApp() {
     const updated = [...tabs, newTab];
     setTabs(updated);
     setActiveTabId(newId);
+    setMountedTabIds((current) => [...current, newId]);
   };
 
   const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
@@ -88,6 +125,9 @@ export default function WhatsAppApp() {
     if (tabs.length === 1) return;
     const updated = tabs.filter((t) => t.id !== tabId);
     setTabs(updated);
+    setMountedTabIds((current) => current.filter((id) => id !== tabId));
+    setReadyTabIds((current) => current.filter((id) => id !== tabId));
+    delete iframeRefs.current[tabId];
     if (activeTabId === tabId) {
       setActiveTabId(updated[0].id);
     }
@@ -97,12 +137,22 @@ export default function WhatsAppApp() {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
   };
 
-  const openOfficialWhatsApp = (candidate?: string) => {
-    const link = document.createElement('a');
-    link.href = getSafeWhatsAppUrl(candidate || activeTab?.url);
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.click();
+  const handleActivateTab = (tabId: string) => {
+    setMountedTabIds((current) => (current.includes(tabId) ? current : [...current, tabId]));
+    setActiveTabId(tabId);
+  };
+
+  const evaluateInActiveRuntime = async (script: string) => {
+    const runtimeWindow = iframeRefs.current[activeTabId]
+      ?.contentWindow as GeckoRuntimeWindow | null;
+    if (!runtimeWindow?.geckoEvalChrome) return false;
+
+    await runtimeWindow.geckoEvalChrome(script);
+    return true;
+  };
+
+  const handleReload = () => {
+    void evaluateInActiveRuntime("gBrowser.selectedBrowser.reload(); 'ok'");
   };
 
   // Direct Click-to-Chat handler (wa.me)
@@ -111,13 +161,14 @@ export default function WhatsAppApp() {
     const cleanPhone = directPhone.replace(/[^0-9]/g, '');
     if (!cleanPhone) return;
 
-    let waUrl = `https://wa.me/${cleanPhone}`;
+    let waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}`;
     if (directMessage.trim()) {
-      waUrl += `?text=${encodeURIComponent(directMessage.trim())}`;
+      waUrl += `&text=${encodeURIComponent(directMessage.trim())}`;
     }
 
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, url: waUrl } : t)));
-    openOfficialWhatsApp(waUrl);
+    void evaluateInActiveRuntime(
+      `openTrustedLinkIn(${JSON.stringify(getSafeWhatsAppUrl(waUrl))}, 'current'); 'ok'`,
+    );
     setIsDirectChatOpen(false);
     setDirectPhone('');
     setDirectMessage('');
@@ -136,7 +187,7 @@ export default function WhatsAppApp() {
             return (
               <div
                 key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
+                onClick={() => handleActivateTab(tab.id)}
                 className={`group flex h-7 items-center gap-2 rounded px-2.5 text-[11px] cursor-pointer transition-all ${
                   isActive
                     ? 'bg-[#202c33] text-white shadow-sm font-medium border border-white/[0.1]'
@@ -210,11 +261,11 @@ export default function WhatsAppApp() {
           </button>
 
           <button
-            onClick={() => openOfficialWhatsApp()}
+            onClick={handleReload}
             className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
-            title="Open the active shortcut in WhatsApp Web"
+            title="Reload WhatsApp"
           >
-            <ExternalLink size={12} />
+            <RotateCw size={12} />
           </button>
 
           <button
@@ -239,65 +290,60 @@ export default function WhatsAppApp() {
         </div>
       </div>
 
-      {/* 2. Official WhatsApp session launcher */}
+      {/* 2. WhatsApp running inside Nammu's Firefox-WASM engine */}
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
-        <div className="flex h-full w-full items-center justify-center overflow-auto bg-[#111b21] p-6 relative os-scrollbar">
-          <div className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#182229]/90 p-6 text-center shadow-2xl backdrop-blur-xl">
-            <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-[#25d366]/30 bg-[#00a884]/15 text-[#25d366] shadow-[0_12px_36px_rgba(0,168,132,0.18)]">
-              <MessageSquare size={27} strokeWidth={1.7} />
-            </div>
-            <h2 className="mt-4 text-[17px] font-semibold text-white">Continue in WhatsApp Web</h2>
-            <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-relaxed text-[#aebac1]">
-              WhatsApp protects its signed-in client from running through embedded web proxies. Open
-              the official site so QR login, messages, calls, cookies, and device permissions work
-              correctly.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => openOfficialWhatsApp()}
-              className="mx-auto mt-5 flex h-9 items-center justify-center gap-2 rounded-lg bg-[#00a884] px-5 text-[12px] font-semibold text-[#071a16] shadow-lg shadow-[#00a884]/10 transition-colors hover:bg-[#06cf9c]"
-            >
-              <ExternalLink size={14} />
-              Open {activeTab?.name || 'WhatsApp Web'}
-            </button>
-
-            <div className="mt-5 grid grid-cols-1 gap-2 text-left sm:grid-cols-3">
-              <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
-                <QrCode size={15} className="text-[#53bdeb]" />
-                <div className="mt-2 text-[10.5px] font-medium text-white">QR login</div>
-                <div className="mt-1 text-[9.5px] leading-relaxed text-[#8696a0]">
-                  Pair with your phone on the official page.
-                </div>
-              </div>
-              <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
-                <ShieldCheck size={15} className="text-[#25d366]" />
-                <div className="mt-2 text-[10.5px] font-medium text-white">No proxy</div>
-                <div className="mt-1 text-[9.5px] leading-relaxed text-[#8696a0]">
-                  Your session stays on web.whatsapp.com.
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDirectChatOpen(true)}
-                className="rounded-lg border border-white/[0.07] bg-black/10 p-3 text-left transition-colors hover:border-[#00a884]/40 hover:bg-[#00a884]/10"
+        {tabs
+          .filter((tab) => mountedTabIds.includes(tab.id))
+          .map((tab) => {
+            const isActive = tab.id === activeTabId;
+            const isReady = readyTabIds.includes(tab.id);
+            return (
+              <div
+                key={tab.id}
+                className={`${isActive ? 'flex' : 'hidden'} absolute inset-0 bg-[#111b21]`}
               >
-                <Send size={15} className="text-[#25d366]" />
-                <div className="mt-2 text-[10.5px] font-medium text-white">Direct chat</div>
-                <div className="mt-1 text-[9.5px] leading-relaxed text-[#8696a0]">
-                  Open a phone number without saving it.
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
+                {!isReady && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#111b21] text-center">
+                    <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-[#25d366]/30 bg-[#00a884]/15 text-[#25d366]">
+                      <QrCode size={28} strokeWidth={1.6} />
+                      <Flame
+                        size={15}
+                        className="absolute -bottom-1 -right-1 animate-pulse rounded-full bg-[#202c33] p-0.5 text-[#ff7139]"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[13px] font-semibold text-white">
+                        Starting WhatsApp inside Nammu OS
+                      </div>
+                      <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
+                        Loading the embedded Firefox engine. WhatsApp's QR code will appear here.
+                      </div>
+                    </div>
+                    <div className="h-1 w-48 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="h-full w-1/2 animate-pulse rounded-full bg-[#00a884]" />
+                    </div>
+                  </div>
+                )}
+                <iframe
+                  ref={(element) => {
+                    iframeRefs.current[tab.id] = element;
+                  }}
+                  src={getWhatsAppRuntimeUrl(WHATSAPP_WEB_URL)}
+                  className="h-full w-full border-0 bg-[#111b21]"
+                  title={`WhatsApp — ${tab.name}`}
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
+                  allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
+                />
+              </div>
+            );
+          })}
       </div>
 
       {/* 3. WhatsApp Status & Quick Formatting Bar */}
       <footer className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.06] bg-[#0c1317] px-3 font-mono text-[9px] text-[#8696a0]">
         <div className="flex items-center gap-3">
           <span className="text-[#25d366] flex items-center gap-1">
-            <ShieldCheck size={11} /> Official WhatsApp Session
+            <ShieldCheck size={11} /> Embedded WhatsApp Session
           </span>
           <span>·</span>
           <span>Account: {activeTab?.name}</span>
@@ -307,11 +353,11 @@ export default function WhatsAppApp() {
 
         <div className="flex items-center gap-2">
           <span className="text-[#53bdeb] flex items-center gap-1">
-            <ExternalLink size={10} /> Official web session — no proxy
+            <Flame size={10} /> Firefox-WASM · Wisp network
           </span>
           <span>·</span>
           <div className="flex items-center gap-1">
-            <span>web.whatsapp.com</span>
+            <span>Runs inside Nammu OS</span>
           </div>
         </div>
       </footer>
@@ -500,32 +546,32 @@ export default function WhatsAppApp() {
             <div className="space-y-3 text-[11.5px]">
               <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
                 <div>
-                  <div className="text-white font-medium">Official Session</div>
+                  <div className="text-white font-medium">Embedded Session</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Opens directly on web.whatsapp.com
+                    WhatsApp runs inside Nammu's Firefox-WASM engine
                   </div>
                 </div>
-                <span className="text-[#25d366] font-mono text-[10px]">NO PROXY</span>
+                <span className="text-[#25d366] font-mono text-[10px]">IN APP</span>
               </div>
 
               <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
                 <div>
                   <div className="text-white font-medium">Account Switching</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Managed by WhatsApp inside the official session
+                    Each open shortcut keeps its own active runtime
                   </div>
                 </div>
-                <span className="text-[#53bdeb] font-mono text-[10px]">WHATSAPP</span>
+                <span className="text-[#53bdeb] font-mono text-[10px]">RUNTIME</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-white font-medium">Device Permissions</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Camera and microphone are granted on the official tab
+                    Camera and microphone stay in the Nammu window
                   </div>
                 </div>
-                <span className="text-[#8696a0] font-mono text-[10px]">BROWSER</span>
+                <span className="text-[#8696a0] font-mono text-[10px]">NAMMU</span>
               </div>
             </div>
 
