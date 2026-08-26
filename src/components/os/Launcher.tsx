@@ -65,8 +65,6 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   calendar: 'Calendar, events and scheduled tasks',
   settings: 'System configuration, appearance and performance',
   projects: 'Project directories and repository manager',
-  spaces: 'Virtual workspaces and multi-monitor layouts',
-  sessions: 'Session snapshots, state restoration and history',
   ai: 'Nammu OS AI copilot and assistant',
 };
 

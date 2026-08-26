@@ -12,11 +12,8 @@ import {
   Globe,
   Share2,
   Terminal,
-  Layers,
   History as HistoryIcon,
-  Bookmark as BookmarkIcon,
   ExternalLink,
-  ShieldCheck,
   Cpu,
   Smartphone,
   Tablet,
@@ -26,8 +23,6 @@ import {
   ZoomIn,
   ZoomOut,
   Sparkles,
-  RefreshCw,
-  CheckCircle2,
   Copy,
   Scissors,
   Clipboard,
@@ -37,7 +32,6 @@ import {
   FileCode,
   CornerDownLeft,
   Trash2,
-  Printer,
 } from 'lucide-react';
 import {
   BrowserTab,
@@ -49,12 +43,28 @@ import {
   getStoredHistory,
   saveStoredHistory,
   normalizeBrowserUrl,
-  getProxiedUrl,
   getDomainFavicon,
   SearchEngine,
-  BrowserEngineMode,
 } from './services/browserEngine';
-import { GeckoEngine } from '../../lib/firefox-wasm';
+
+const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
+
+type GeckoRuntimeWindow = Window & {
+  geckoEvalChrome?: (script: string) => Promise<unknown>;
+};
+
+interface GeckoPageState {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  isLoading: boolean;
+}
+
+function getBrowserRuntimeUrl(url: string) {
+  const params = new URLSearchParams({ app: '1', autostart: '1', url });
+  return `${FIREFOX_RUNTIME_URL}?${params.toString()}`;
+}
 
 interface ContextMenuState {
   isOpen: boolean;
@@ -78,7 +88,7 @@ export default function BrowserApp() {
       canGoForward: false,
       history: ['about:home'],
       historyIndex: 0,
-      engineMode: 'gateway',
+      engineMode: 'wasm',
       isPinned: false,
       isMuted: false,
     },
@@ -93,14 +103,14 @@ export default function BrowserApp() {
     activeTab?.url === 'about:home' ? '' : activeTab?.url || '',
   );
   const [isFocused, setIsFocused] = useState<boolean>(false);
-  const [searchEngine, setSearchEngine] = useState<SearchEngine>('google');
+  const [searchEngine] = useState<SearchEngine>('google');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
   // Bookmarks & History State
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(getStoredBookmarks);
   const [history, setHistory] = useState<HistoryEntry[]>(getStoredHistory);
-  const [showBookmarksBar, setShowBookmarksBar] = useState<boolean>(true);
+  const [showBookmarksBar] = useState<boolean>(true);
   const [sidePanel, setSidePanel] = useState<'none' | 'history' | 'bookmarks' | 'devtools'>('none');
 
   // DevTools & Viewport State
@@ -124,17 +134,32 @@ export default function BrowserApp() {
   });
 
   const browserRootRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const runtimeInitialUrls = useRef<Record<string, string>>({});
+  const lastObservedUrls = useRef<Record<string, string>>({});
   const omniboxRef = useRef<HTMLInputElement>(null);
-  const geckoEngineRef = useRef<GeckoEngine | null>(null);
+  const [mountedTabIds, setMountedTabIds] = useState<string[]>([]);
+  const [readyTabIds, setReadyTabIds] = useState<string[]>([]);
 
   // Sync address bar input when active tab changes
   useEffect(() => {
     if (activeTab) {
       setOmniboxInput(activeTab.url === 'about:home' ? '' : activeTab.url);
     }
-  }, [activeTab?.id, activeTab?.url]);
+  }, [activeTab]);
+
+  const evaluateInRuntime = useCallback(async (tabId: string, script: string) => {
+    const runtimeWindow = iframeRefs.current[tabId]?.contentWindow as GeckoRuntimeWindow | null;
+    if (!runtimeWindow?.geckoEvalChrome) return null;
+    return runtimeWindow.geckoEvalChrome(script);
+  }, []);
+
+  const mountRuntime = useCallback((tabId: string, url: string) => {
+    if (!runtimeInitialUrls.current[tabId]) {
+      runtimeInitialUrls.current[tabId] = url;
+    }
+    setMountedTabIds((current) => (current.includes(tabId) ? current : [...current, tabId]));
+  }, []);
 
   // Close context menu on outside click or escape
   useEffect(() => {
@@ -179,32 +204,155 @@ export default function BrowserApp() {
     };
     window.addEventListener('keydown', handleBrowserShortcuts);
     return () => window.removeEventListener('keydown', handleBrowserShortcuts);
+    // Handlers are declared below and intentionally rebound with the current browser state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, activeTab]);
 
-  // Initialize Gecko Engine when tab uses wasm mode
+  // Connect the Nammu browser shell to the real embedded Gecko runtime.
   useEffect(() => {
-    if (activeTab?.engineMode === 'wasm' && canvasRef.current) {
-      const gecko = new GeckoEngine({
-        canvas: canvasRef.current,
-        wispUrl: `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/uploads`,
-        print: (s) =>
-          setDevLogs((prev) => [
-            { type: 'log', msg: s, time: new Date().toLocaleTimeString() },
-            ...prev.slice(0, 50),
-          ]),
-        printErr: (s) =>
-          setDevLogs((prev) => [
-            { type: 'error', msg: s, time: new Date().toLocaleTimeString() },
-            ...prev.slice(0, 50),
-          ]),
-      });
-      gecko.init();
-      geckoEngineRef.current = gecko;
-      return () => {
-        gecko.destroy();
-      };
+    const handleRuntimeReady = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== 'NAMMU_GECKO_READY') {
+        return;
+      }
+
+      const readyEntry = Object.entries(iframeRefs.current).find(
+        ([, iframe]) => iframe?.contentWindow === event.source,
+      );
+      if (!readyEntry) return;
+
+      const tabId = readyEntry[0];
+      setReadyTabIds((current) => (current.includes(tabId) ? current : [...current, tabId]));
+      setTabs((current) =>
+        current.map((tab) => (tab.id === tabId ? { ...tab, isLoading: false } : tab)),
+      );
+      setDevLogs((current) => [
+        {
+          type: 'log',
+          msg: `Gecko runtime ready for ${tabId}`,
+          time: new Date().toLocaleTimeString(),
+        },
+        ...current.slice(0, 50),
+      ]);
+    };
+
+    window.addEventListener('message', handleRuntimeReady);
+    return () => window.removeEventListener('message', handleRuntimeReady);
+  }, []);
+
+  // Mirror real page state back into Nammu's tabs and omnibox.
+  useEffect(() => {
+    if (!activeTab || activeTab.url === 'about:home' || !readyTabIds.includes(activeTabId)) {
+      return;
     }
-  }, [activeTab?.engineMode, activeTab?.id]);
+
+    let cancelled = false;
+    const syncPageState = async () => {
+      try {
+        const raw = await evaluateInRuntime(
+          activeTabId,
+          `JSON.stringify({
+            url: gBrowser.currentURI?.spec || '',
+            title: gBrowser.selectedBrowser?.contentTitle || gBrowser.currentURI?.spec || '',
+            canGoBack: Boolean(gBrowser.canGoBack),
+            canGoForward: Boolean(gBrowser.canGoForward),
+            isLoading: Boolean(gBrowser.selectedBrowser?.webProgress?.isLoadingDocument)
+          })`,
+        );
+        if (cancelled || typeof raw !== 'string') return;
+
+        const page = JSON.parse(raw) as GeckoPageState;
+        if (!page.url || page.url.startsWith('about:')) return;
+
+        const previousObservedUrl = lastObservedUrls.current[activeTabId];
+        lastObservedUrls.current[activeTabId] = page.url;
+        const favicon = getDomainFavicon(page.url);
+
+        setTabs((current) => {
+          let changed = false;
+          const updated = current.map((tab) => {
+            if (tab.id !== activeTabId) return tab;
+            const urlChanged = tab.url !== page.url;
+            const nextHistory = urlChanged
+              ? [...tab.history.slice(0, tab.historyIndex + 1), page.url]
+              : tab.history;
+            if (
+              !urlChanged &&
+              tab.title === (page.title || page.url) &&
+              tab.favicon === favicon &&
+              tab.isLoading === page.isLoading &&
+              tab.canGoBack === page.canGoBack &&
+              tab.canGoForward === page.canGoForward
+            ) {
+              return tab;
+            }
+            changed = true;
+            return {
+              ...tab,
+              url: page.url,
+              title: page.title || page.url,
+              favicon,
+              isLoading: page.isLoading,
+              canGoBack: page.canGoBack,
+              canGoForward: page.canGoForward,
+              history: nextHistory,
+              historyIndex: urlChanged ? nextHistory.length - 1 : tab.historyIndex,
+            };
+          });
+          return changed ? updated : current;
+        });
+
+        if (page.url !== previousObservedUrl) {
+          const entry: HistoryEntry = {
+            id: `${Date.now()}-${activeTabId}`,
+            title: page.title || page.url,
+            url: page.url,
+            timestamp: Date.now(),
+            favicon,
+          };
+          setHistory((current) => {
+            const updated = [entry, ...current.filter((item) => item.url !== page.url)].slice(
+              0,
+              100,
+            );
+            saveStoredHistory(updated);
+            return updated;
+          });
+          setNetworkLogs((current) => [
+            {
+              url: page.url,
+              method: 'GET',
+              status: 200,
+              time: new Date().toLocaleTimeString(),
+            },
+            ...current.slice(0, 50),
+          ]);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDevLogs((current) => [
+            {
+              type: 'error',
+              msg: error instanceof Error ? error.message : String(error),
+              time: new Date().toLocaleTimeString(),
+            },
+            ...current.slice(0, 50),
+          ]);
+        }
+      }
+    };
+
+    void syncPageState();
+    const timer = window.setInterval(syncPageState, 750);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeTab, activeTabId, evaluateInRuntime, readyTabIds]);
+
+  useEffect(() => {
+    if (!readyTabIds.includes(activeTabId) || activeTab?.url === 'about:home') return;
+    void evaluateInRuntime(activeTabId, `ZoomManager.zoom = ${zoomLevel / 100}; 'ok'`);
+  }, [activeTab?.url, activeTabId, evaluateInRuntime, readyTabIds, zoomLevel]);
 
   // Fetch search suggestions
   useEffect(() => {
@@ -240,71 +388,6 @@ export default function BrowserApp() {
     return () => clearTimeout(timer);
   }, [omniboxInput, isFocused]);
 
-  // Listen for messages from iframe
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'NAMMU_BROWSER_STATE') {
-        const { url, title } = event.data;
-        if (url) {
-          setTabs((prev) =>
-            prev.map((t) => {
-              if (t.id === activeTabId) {
-                const fav = getDomainFavicon(url);
-                return {
-                  ...t,
-                  url,
-                  title: title || t.title,
-                  favicon: fav || t.favicon,
-                  isLoading: false,
-                };
-              }
-              return t;
-            }),
-          );
-          setOmniboxInput(url);
-
-          // Add to history
-          if (url && !url.startsWith('about:')) {
-            const entry: HistoryEntry = {
-              id: Date.now().toString(),
-              title: title || url,
-              url,
-              timestamp: Date.now(),
-              favicon: getDomainFavicon(url),
-            };
-            setHistory((h) => {
-              const updated = [entry, ...h.filter((x) => x.url !== url)].slice(0, 100);
-              saveStoredHistory(updated);
-              return updated;
-            });
-          }
-
-          // Network log
-          setNetworkLogs((prev) => [
-            {
-              url,
-              method: 'GET',
-              status: 200,
-              time: new Date().toLocaleTimeString(),
-            },
-            ...prev.slice(0, 50),
-          ]);
-        }
-      } else if (event.data?.type === 'NAMMU_BROWSER_NEW_TAB') {
-        if (event.data.url) {
-          handleNewTab(event.data.url);
-        }
-      } else if (event.data?.type === 'NAMMU_BROWSER_NAVIGATE') {
-        if (event.data.url) {
-          handleNavigate(event.data.url);
-        }
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [activeTabId]);
-
   // Navigate to target URL
   const handleNavigate = useCallback(
     (targetUrl: string) => {
@@ -319,9 +402,9 @@ export default function BrowserApp() {
             return {
               ...tab,
               url: normalized,
-              title: normalized.startsWith('about:') ? 'Nammu OS · Web Home' : normalized,
+              title: normalized === 'about:home' ? 'Nammu OS · Web Home' : normalized,
               favicon,
-              isLoading: !normalized.startsWith('about:'),
+              isLoading: normalized !== 'about:home',
               canGoBack: newIndex > 0,
               canGoForward: false,
               history: newHistory,
@@ -335,8 +418,16 @@ export default function BrowserApp() {
       setOmniboxInput(normalized === 'about:home' ? '' : normalized);
       setShowSuggestions(false);
 
-      if (geckoEngineRef.current && activeTab?.engineMode === 'wasm') {
-        geckoEngineRef.current.load(normalized);
+      if (normalized !== 'about:home') {
+        if (readyTabIds.includes(activeTabId)) {
+          void evaluateInRuntime(
+            activeTabId,
+            `openTrustedLinkIn(${JSON.stringify(normalized)}, 'current'); 'ok'`,
+          );
+        } else {
+          runtimeInitialUrls.current[activeTabId] = normalized;
+          mountRuntime(activeTabId, normalized);
+        }
       }
 
       setDevLogs((prev) => [
@@ -348,7 +439,7 @@ export default function BrowserApp() {
         ...prev.slice(0, 50),
       ]);
     },
-    [activeTabId, searchEngine, activeTab?.engineMode],
+    [activeTabId, evaluateInRuntime, mountRuntime, readyTabIds, searchEngine],
   );
 
   // Tab management
@@ -364,12 +455,16 @@ export default function BrowserApp() {
       canGoForward: false,
       history: [url],
       historyIndex: 0,
-      engineMode: 'gateway',
+      engineMode: 'wasm',
       isPinned: false,
       isMuted: false,
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
+    if (url !== 'about:home') {
+      runtimeInitialUrls.current[newId] = url;
+      mountRuntime(newId, url);
+    }
   };
 
   const handleDuplicateTab = (tabId: string) => {
@@ -385,6 +480,10 @@ export default function BrowserApp() {
     const updated = [...tabs.slice(0, targetIdx + 1), cloned, ...tabs.slice(targetIdx + 1)];
     setTabs(updated);
     setActiveTabId(newId);
+    if (cloned.url !== 'about:home') {
+      runtimeInitialUrls.current[newId] = cloned.url;
+      mountRuntime(newId, cloned.url);
+    }
   };
 
   const handleTogglePinTab = (tabId: string) => {
@@ -393,6 +492,7 @@ export default function BrowserApp() {
 
   const handleToggleMuteTab = (tabId: string) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
+    void evaluateInRuntime(tabId, "gBrowser.selectedTab.toggleMuteAudio('nammu'); 'ok'");
   };
 
   const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
@@ -409,90 +509,63 @@ export default function BrowserApp() {
           canGoForward: false,
           history: ['about:home'],
           historyIndex: 0,
-          engineMode: 'gateway',
+          engineMode: 'wasm',
           isPinned: false,
           isMuted: false,
         },
       ]);
+      setMountedTabIds((current) => current.filter((id) => id !== tabId));
+      setReadyTabIds((current) => current.filter((id) => id !== tabId));
+      delete iframeRefs.current[tabId];
+      delete runtimeInitialUrls.current[tabId];
+      delete lastObservedUrls.current[tabId];
       return;
     }
 
     const nextTabs = tabs.filter((t) => t.id !== tabId);
     setTabs(nextTabs);
+    setMountedTabIds((current) => current.filter((id) => id !== tabId));
+    setReadyTabIds((current) => current.filter((id) => id !== tabId));
+    delete iframeRefs.current[tabId];
+    delete runtimeInitialUrls.current[tabId];
+    delete lastObservedUrls.current[tabId];
     if (activeTabId === tabId) {
       setActiveTabId(nextTabs[nextTabs.length - 1].id);
     }
   };
 
   const handleCloseOtherTabs = (tabId: string) => {
-    setTabs((prev) => prev.filter((t) => t.id === tabId || t.isPinned));
+    const keptIds = tabs.filter((tab) => tab.id === tabId || tab.isPinned).map((tab) => tab.id);
+    setTabs((prev) => prev.filter((t) => keptIds.includes(t.id)));
+    setMountedTabIds((current) => current.filter((id) => keptIds.includes(id)));
+    setReadyTabIds((current) => current.filter((id) => keptIds.includes(id)));
     setActiveTabId(tabId);
   };
 
   const handleCloseTabsToRight = (tabId: string) => {
     const idx = tabs.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
-    setTabs((prev) => prev.filter((t, i) => i <= idx || t.isPinned));
-  };
-
-  // Switch Engine Mode
-  const handleToggleEngine = () => {
-    const nextMode: BrowserEngineMode = activeTab.engineMode === 'gateway' ? 'wasm' : 'gateway';
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, engineMode: nextMode } : t)));
+    const keptIds = tabs.filter((tab, index) => index <= idx || tab.isPinned).map((tab) => tab.id);
+    setTabs((prev) => prev.filter((t) => keptIds.includes(t.id)));
+    setMountedTabIds((current) => current.filter((id) => keptIds.includes(id)));
+    setReadyTabIds((current) => current.filter((id) => keptIds.includes(id)));
   };
 
   // History navigation (Back / Forward)
   const handleGoBack = () => {
-    if (!activeTab || !activeTab.canGoBack || activeTab.historyIndex <= 0) return;
-    const nextIndex = activeTab.historyIndex - 1;
-    const prevUrl = activeTab.history[nextIndex];
-
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTabId
-          ? {
-              ...t,
-              url: prevUrl,
-              historyIndex: nextIndex,
-              canGoBack: nextIndex > 0,
-              canGoForward: true,
-              isLoading: !prevUrl.startsWith('about:'),
-            }
-          : t,
-      ),
-    );
+    if (!activeTab || !activeTab.canGoBack) return;
+    void evaluateInRuntime(activeTabId, "gBrowser.goBack(); 'ok'");
   };
 
   const handleGoForward = () => {
-    if (
-      !activeTab ||
-      !activeTab.canGoForward ||
-      activeTab.historyIndex >= activeTab.history.length - 1
-    )
-      return;
-    const nextIndex = activeTab.historyIndex + 1;
-    const nextUrl = activeTab.history[nextIndex];
-
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTabId
-          ? {
-              ...t,
-              url: nextUrl,
-              historyIndex: nextIndex,
-              canGoBack: true,
-              canGoForward: nextIndex < t.history.length - 1,
-              isLoading: !nextUrl.startsWith('about:'),
-            }
-          : t,
-      ),
-    );
+    if (!activeTab || !activeTab.canGoForward) return;
+    void evaluateInRuntime(activeTabId, "gBrowser.goForward(); 'ok'");
   };
 
   const handleReload = () => {
-    if (iframeRef.current && activeTab && !activeTab.url.startsWith('about:')) {
+    if (activeTab && activeTab.url !== 'about:home') {
       setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, isLoading: true } : t)));
-      iframeRef.current.src = getProxiedUrl(activeTab.url);
+      void evaluateInRuntime(activeTabId, "gBrowser.reload(); 'ok'");
     }
   };
 
@@ -727,23 +800,6 @@ export default function BrowserApp() {
           )}
         </div>
 
-        {/* Engine Switcher Toggle Button */}
-        <button
-          onClick={handleToggleEngine}
-          className={`flex items-center gap-1 border px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider transition-colors ${
-            activeTab?.engineMode === 'wasm'
-              ? 'border-[#a855f7]/60 bg-[#a855f7]/15 text-[#d8b4fe]'
-              : 'border-white/6 bg-white/1.5 text-[#8ea7bc] hover:bg-white/[0.04]'
-          }`}
-          title="Toggle between Fullstack Virtual Gateway and Firefox-WASM Core"
-        >
-          <Cpu
-            size={10}
-            className={activeTab?.engineMode === 'wasm' ? 'text-[#a855f7]' : 'text-[#4aa3ff]'}
-          />
-          <span>{activeTab?.engineMode === 'wasm' ? 'Gecko WASM' : 'Gateway'}</span>
-        </button>
-
         {/* Action Toggles */}
         <button
           onClick={() => setSidePanel((prev) => (prev === 'devtools' ? 'none' : 'devtools'))}
@@ -801,8 +857,8 @@ export default function BrowserApp() {
       {/* 4. Main Browser Stage & Side Inspector */}
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
         {/* Web Viewport */}
-        <div className="flex min-w-0 flex-1 flex-col bg-[#05080d] overflow-hidden">
-          {activeTab?.url === 'about:home' ? (
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[#05080d]">
+          {activeTab?.url === 'about:home' && (
             /* Home / Speed Dial Launchpad */
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-6 overflow-y-auto os-scrollbar bg-[#05080d]">
               <div className="w-full max-w-2xl space-y-6 text-center">
@@ -813,7 +869,7 @@ export default function BrowserApp() {
                   </div>
                   <h1 className="text-xl font-bold text-white tracking-tight">Nammu Browser</h1>
                   <p className="font-mono text-[9.5px] text-[#69849b]">
-                    Firefox WebAssembly & Fullstack Virtual Gateway
+                    Full Gecko WebAssembly Engine
                   </p>
                 </div>
 
@@ -864,56 +920,63 @@ export default function BrowserApp() {
                 </div>
               </div>
             </div>
-          ) : activeTab?.engineMode === 'wasm' ? (
-            /* Firefox-WASM Canvas Viewport */
-            <div className="flex h-full w-full flex-col items-center justify-center bg-[#05080d] p-4 relative">
-              <div className="mb-2 flex items-center gap-2 font-mono text-[9px] text-[#a855f7]">
-                <Cpu size={12} />
-                <span>Gecko WebAssembly Core · Canvas 2D/WebGL Compositor Active</span>
-              </div>
-              <canvas
-                ref={canvasRef}
-                width={1280}
-                height={720}
-                className="max-h-[85%] max-w-[95%] border border-[#a855f7]/30 bg-black shadow-2xl object-contain"
-                tabIndex={0}
-              />
-            </div>
-          ) : (
-            /* Live Proxied Web Viewport */
-            <div className="flex h-full w-full items-center justify-center overflow-hidden bg-black relative">
-              <iframe
-                ref={iframeRef}
-                src={getProxiedUrl(activeTab.url)}
-                className="h-full w-full border-0 bg-white"
-                style={{
-                  width:
-                    viewportMode === 'mobile'
-                      ? '390px'
-                      : viewportMode === 'tablet'
-                        ? '768px'
-                        : viewportMode === 'desktop'
-                          ? '1280px'
-                          : '100%',
-                  height:
-                    viewportMode === 'mobile'
-                      ? '844px'
-                      : viewportMode === 'tablet'
-                        ? '1024px'
-                        : '100%',
-                  transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : 'none',
-                  transformOrigin: 'top left',
-                }}
-                title={activeTab.title}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-                onLoad={() => {
-                  setTabs((prev) =>
-                    prev.map((t) => (t.id === activeTabId ? { ...t, isLoading: false } : t)),
-                  );
-                }}
-              />
-            </div>
           )}
+
+          {tabs
+            .filter((tab) => mountedTabIds.includes(tab.id))
+            .map((tab) => {
+              const isActive = tab.id === activeTabId && activeTab?.url !== 'about:home';
+              const isReady = readyTabIds.includes(tab.id);
+              return (
+                <div
+                  key={tab.id}
+                  className={`${isActive ? 'flex' : 'hidden'} absolute inset-0 items-start justify-center overflow-hidden bg-black`}
+                >
+                  {!isReady && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#05080d]">
+                      <div className="flex items-center gap-2 text-[#a855f7]">
+                        <Cpu size={24} className="animate-pulse" />
+                        <RotateCw size={14} className="animate-spin text-[#4aa3ff]" />
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[12px] font-medium text-white">
+                          Starting Nammu Browser
+                        </div>
+                        <div className="mt-1 font-mono text-[9px] text-[#69849b]">
+                          Preparing the full Gecko web engine
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <iframe
+                    ref={(element) => {
+                      iframeRefs.current[tab.id] = element;
+                    }}
+                    src={getBrowserRuntimeUrl(runtimeInitialUrls.current[tab.id] || tab.url)}
+                    className="border-0 bg-white"
+                    style={{
+                      width:
+                        viewportMode === 'mobile'
+                          ? '390px'
+                          : viewportMode === 'tablet'
+                            ? '768px'
+                            : viewportMode === 'desktop'
+                              ? '1280px'
+                              : '100%',
+                      height:
+                        viewportMode === 'mobile'
+                          ? '844px'
+                          : viewportMode === 'tablet'
+                            ? '1024px'
+                            : '100%',
+                    }}
+                    title={tab.title}
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
+                    allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
+                  />
+                </div>
+              );
+            })}
         </div>
 
         {/* 5. Side Panels (DevTools, History, Bookmarks) */}
@@ -1083,9 +1146,7 @@ export default function BrowserApp() {
         <div className="flex items-center gap-3">
           <span className="text-[#2ee6a6]">● Engine Online</span>
           <span>·</span>
-          <span>
-            Core: {activeTab?.engineMode === 'wasm' ? 'Gecko WASM Canvas' : 'Virtual Web Engine'}
-          </span>
+          <span>Core: Gecko WebAssembly</span>
           <span>·</span>
           <span>
             {tabs.length} Active {tabs.length === 1 ? 'Tab' : 'Tabs'}
@@ -1415,21 +1476,6 @@ export default function BrowserApp() {
                 <div className="flex items-center gap-2">
                   <Copy size={11} className="text-[#4aa3ff]" />
                   <span>Copy Page URL</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => {
-                  handleToggleEngine();
-                  setContextMenu((prev) => ({ ...prev, isOpen: false }));
-                }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Cpu size={11} className="text-[#a855f7]" />
-                  <span>
-                    {activeTab?.engineMode === 'wasm' ? 'Use Gateway Mode' : 'Use Gecko-WASM'}
-                  </span>
                 </div>
               </button>
 

@@ -6,12 +6,10 @@ import {
   Layers3,
   Mail,
   MapPinned,
-  PanelsTopLeft,
   Settings,
   Sparkles,
   SquareTerminal,
   StickyNote,
-  TimerReset,
   Workflow,
   MessageSquare,
   Flame,
@@ -34,8 +32,6 @@ export type SystemAppId =
   | 'calendar'
   | 'settings'
   | 'projects'
-  | 'spaces'
-  | 'sessions'
   | 'ai'
   | 'calculator'
   | 'qr-gen';
@@ -171,22 +167,6 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     icon: Layers3,
     startMenu: true,
     keywords: ['projects', 'environments', 'workspaces', 'tasks', 'todo', 'kanban'],
-  },
-  {
-    id: 'spaces',
-    windowId: 'system:spaces',
-    title: 'Spaces',
-    icon: PanelsTopLeft,
-    startMenu: true,
-    keywords: ['spaces', 'desktops', 'modes', 'focus'],
-  },
-  {
-    id: 'sessions',
-    windowId: 'system:sessions',
-    title: 'Sessions',
-    icon: TimerReset,
-    startMenu: true,
-    keywords: ['sessions', 'state', 'snapshots', 'history'],
   },
   {
     id: 'ai',

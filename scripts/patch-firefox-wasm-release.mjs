@@ -15,10 +15,12 @@ const initialNavigationNeedle =
   "A.evalChrome(\"openTrustedLinkIn('https://google.com/', 'current'); 'ok'\")";
 const initialNavigationReplacement =
   'A.evalChrome(`openTrustedLinkIn(${JSON.stringify(new URLSearchParams(location.search).get("url")||"https://google.com/")}, "current"); "ok"`)';
-const runtimeReadyNeedle =
+const legacyRuntimeReadyNeedle =
   'window.geckoEvalChrome=i=>A.evalChrome(i),window.parent!==window&&window.parent.postMessage({type:"NAMMU_GECKO_READY"},"*"),await A.resize';
-const runtimeReadyReplacement =
+const runtimeReadyNeedle =
   'window.geckoEvalChrome=i=>A.evalChrome(i),new URLSearchParams(location.search).get("app")==="1"&&await A.evalChrome(`(()=>{document.documentElement.setAttribute("chromehidden","menubar toolbar location directories status extrachrome");let e=document.getElementById("nammu-app-mode");e||((e=document.createElement("style")).id="nammu-app-mode",e.textContent="#titlebar,#navigator-toolbox,#TabsToolbar,#nav-bar,#PersonalToolbar,#toolbar-menubar,#sidebar-main,#sidebar-box,#sidebar-splitter,#statuspanel{display:none!important}#browser,#appcontent,#tabbrowser-tabbox,#tabbrowser-tabpanels{margin:0!important;padding:0!important;border:0!important}",document.documentElement.appendChild(e));return "app-mode"})()`),window.parent!==window&&window.parent.postMessage({type:"NAMMU_GECKO_READY"},"*"),await A.resize';
+const runtimeReadyReplacement =
+  'window.geckoEvalChrome=i=>A.evalChrome(i),new URLSearchParams(location.search).get("app")==="1"&&await A.evalChrome(`(()=>{document.documentElement.setAttribute("chromehidden","menubar toolbar location directories status extrachrome");Services.prefs.setIntPref("browser.link.open_newwindow",1);Services.prefs.setIntPref("browser.link.open_newwindow.restriction",0);let e=document.getElementById("nammu-app-mode");e||((e=document.createElement("style")).id="nammu-app-mode",e.textContent="#titlebar,#navigator-toolbox,#TabsToolbar,#nav-bar,#PersonalToolbar,#toolbar-menubar,#sidebar-main,#sidebar-box,#sidebar-splitter,#statuspanel{display:none!important}#browser,#appcontent,#tabbrowser-tabbox,#tabbrowser-tabpanels{margin:0!important;padding:0!important;border:0!important}",document.documentElement.appendChild(e));return "app-mode"})()`),window.parent!==window&&window.parent.postMessage({type:"NAMMU_GECKO_READY"},"*"),await A.resize';
 
 let source = await readFile(bundleUrl, 'utf8');
 let changed = false;
@@ -57,6 +59,9 @@ if (source.includes(initialNavigationNeedle)) {
 
 if (source.includes(runtimeReadyNeedle)) {
   source = source.replace(runtimeReadyNeedle, runtimeReadyReplacement);
+  changed = true;
+} else if (source.includes(legacyRuntimeReadyNeedle)) {
+  source = source.replace(legacyRuntimeReadyNeedle, runtimeReadyReplacement);
   changed = true;
 } else if (!source.includes(runtimeReadyReplacement)) {
   throw new Error('Firefox-WASM bundle does not contain the expected runtime-ready hook.');

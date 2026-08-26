@@ -7,13 +7,11 @@ import {
   Home,
   Layers3,
   Minimize2,
-  PanelsTopLeft,
   RotateCcw,
   Search,
   Settings2,
   Sparkles,
   SquareTerminal,
-  TimerReset,
   X,
   MessageSquare,
   Flame,
@@ -42,8 +40,6 @@ const ITEMS = [
   { id: 'browser', label: 'Browser', icon: Globe, app: 'browser' as SystemAppId },
   { id: 'projects', label: 'Projects', icon: Layers3, app: 'projects' as SystemAppId },
   { id: 'tools', label: 'Tools', icon: Search },
-  { id: 'spaces', label: 'Spaces', icon: PanelsTopLeft, app: 'spaces' as SystemAppId },
-  { id: 'sessions', label: 'Sessions', icon: TimerReset, app: 'sessions' as SystemAppId },
   { id: 'files', label: 'Files', icon: Files, app: 'files' as SystemAppId },
   { id: 'cloud', label: 'Cloud', icon: Cloud, app: 'cloud' as SystemAppId },
   { id: 'ai', label: 'Nammu AI', icon: Sparkles, app: 'ai' as SystemAppId },
@@ -204,9 +200,6 @@ export default function Rail({
               <span className="absolute -left-1 h-3.5 w-0.5 bg-[#4aa3ff] shadow-[0_0_6px_rgba(74,163,255,.8)]" />
             )}
             <Icon size={14} strokeWidth={1.35} />
-            {item.id === 'sessions' && (
-              <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-[#2ee6a6] shadow-[0_0_4px_rgba(46,230,166,.8)]" />
-            )}
             <span className="pointer-events-none absolute left-[calc(100%+8px)] z-50 whitespace-nowrap border border-white/[0.07] bg-[#080d15]/95 px-2 py-1 font-mono text-[8px] tracking-[0.08em] text-[#9db2c4] opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
               {item.label}
             </span>

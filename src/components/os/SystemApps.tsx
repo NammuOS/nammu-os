@@ -17,7 +17,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { SystemAppId } from './systemAppRegistry';
-import { AIApp, SessionsApp, SpacesApp } from './RailApps';
+import { AIApp } from './RailApps';
 import { ProjectsApp } from './ProjectsApp';
 import { NotesApp } from './NotesApp';
 import { CalendarApp } from './CalendarApp';
@@ -636,10 +636,6 @@ export function SystemAppContent({ appId }: { appId: SystemAppId }) {
       return <SettingsApp />;
     case 'projects':
       return <ProjectsApp />;
-    case 'spaces':
-      return <SpacesApp />;
-    case 'sessions':
-      return <SessionsApp />;
     case 'ai':
       return <AIApp />;
   }
