@@ -10,6 +10,7 @@ import {
   PanelTop,
   X,
   Square,
+  ExternalLink,
 } from 'lucide-react';
 import type { SnapEdge, WindowState } from '../../hooks/useWindowManager';
 import { useContextMenu } from '../context-menu/useContextMenu';
@@ -421,6 +422,18 @@ export default function Window({
             className="window-controls flex items-center gap-1.5 pl-2"
             onMouseDown={(event) => event.stopPropagation()}
           >
+            {(win.toolId === 'system:browser' || win.toolId === 'browser') && (
+              <a
+                href="/firefox-wasm/index.html"
+                target="_blank"
+                rel="noreferrer"
+                className="window-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
+                title="Open Firefox WASM in new tab"
+                aria-label="Open Firefox WASM in new tab"
+              >
+                <ExternalLink size={10} className="text-[#70869a]" />
+              </a>
+            )}
             <button
               onClick={() => onSnap(win.id)}
               className={`window-control window-snap-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors ${win.snap ? 'bg-[#4aa3ff]/12' : 'hover:bg-white/[0.06]'}`}

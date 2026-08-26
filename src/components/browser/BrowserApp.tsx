@@ -90,6 +90,7 @@ interface GeckoTabDescriptor {
   id: string;
   url: string;
   isPrivate: boolean;
+  isPinned: boolean;
 }
 
 function getBrowserRuntimeUrl(attempt: number) {
@@ -107,6 +108,7 @@ function getGeckoTabDescriptors(tabs: BrowserTab[]): GeckoTabDescriptor[] {
     id: tab.id,
     url: tab.url === 'about:home' ? RUNTIME_HOME_URL : tab.url,
     isPrivate: tab.isPrivate === true,
+    isPinned: tab.isPinned === true,
   }));
 }
 
@@ -128,6 +130,7 @@ function buildInitializeGeckoSessionScript(tabs: BrowserTab[], activeTabId: stri
       gBrowser.selectedTab = tab;
       if (descriptor.isPrivate) tab.linkedBrowser.docShell.usePrivateBrowsing = true;
       openTrustedLinkIn(descriptor.url, 'current');
+      if (descriptor.isPinned) gBrowser.pinTab(tab);
     });
     const activeTab = registry[${JSON.stringify(activeTabId)}] || registry[descriptors[0]?.id];
     if (activeTab) gBrowser.selectedTab = activeTab;
@@ -150,7 +153,17 @@ function buildCreateGeckoTabScript(tab: BrowserTab) {
     gBrowser.selectedTab = tab;
     if (descriptor.isPrivate) tab.linkedBrowser.docShell.usePrivateBrowsing = true;
     openTrustedLinkIn(descriptor.url, 'current');
+    if (descriptor.isPinned) gBrowser.pinTab(tab);
     return 'tab-created';
+  })()`;
+}
+
+function buildToggleGeckoPinnedTabScript(tabId: string, isPinned: boolean) {
+  return `(()=>{
+    const tab = globalThis.__nammuBrowserTabs?.[${JSON.stringify(tabId)}];
+    if (!tab || tab.closing) return 'tab-unavailable';
+    ${isPinned ? 'gBrowser.pinTab(tab);' : 'gBrowser.unpinTab(tab);'}
+    return ${JSON.stringify(isPinned ? 'tab-pinned' : 'tab-unpinned')};
   })()`;
 }
 
@@ -870,7 +883,21 @@ export default function BrowserApp() {
   };
 
   const handleTogglePinTab = (tabId: string) => {
-    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isPinned: !t.isPinned } : t)));
+    const target = tabs.find((tab) => tab.id === tabId);
+    if (!target) return;
+
+    const isPinned = !target.isPinned;
+    const updatedTarget = { ...target, isPinned };
+    const remainingTabs = tabs.filter((tab) => tab.id !== tabId);
+    const pinnedTabs = remainingTabs.filter((tab) => tab.isPinned);
+    const regularTabs = remainingTabs.filter((tab) => !tab.isPinned);
+    const reorderedTabs = [...pinnedTabs, updatedTarget, ...regularTabs];
+
+    tabsRef.current = reorderedTabs;
+    setTabs(reorderedTabs);
+    if (engineReadyRef.current) {
+      void evaluateInRuntime(buildToggleGeckoPinnedTabScript(tabId, isPinned));
+    }
   };
 
   const handleToggleMuteTab = (tabId: string) => {
@@ -1089,24 +1116,36 @@ export default function BrowserApp() {
       {/* 1. Multi-Tab Header Bar */}
       <div
         onContextMenu={(e) => handleOpenContextMenu(e, 'page')}
-        className="flex h-8 shrink-0 items-center bg-[#070c14] px-1.5 pt-1 border-b border-white/[0.06] gap-1 overflow-x-auto os-scrollbar"
+        className="flex h-8 shrink-0 items-center bg-[#070c14] px-1.5 pt-1 border-b border-white/[0.06] gap-1 overflow-x-auto os-scrollbar overflow-hidden"
       >
-        {tabs.map((tab) => {
+        {tabs.map((tab, tabIndex) => {
           const isActive = tab.id === activeTabId;
+          const isLastPinned = tab.isPinned && !tabs[tabIndex + 1]?.isPinned;
           return (
             <div
               key={tab.id}
               onClick={() => handleActivateTab(tab.id)}
               onContextMenu={(e) => handleOpenContextMenu(e, 'tab', tab.id)}
-              className={`group flex h-7 max-w-[200px] min-w-[120px] flex-1 items-center justify-between border-t border-x px-2 text-[10.5px] cursor-pointer transition-colors ${
+              title={tab.isPinned ? `${tab.title || 'New Tab'} — Pinned tab` : undefined}
+              aria-label={tab.isPinned ? `${tab.title || 'New Tab'}, pinned tab` : undefined}
+              className={`group relative flex h-7 items-center border-t border-x text-[10.5px] cursor-pointer transition-[width,background-color,border-color,color] ${
+                tab.isPinned
+                  ? `w-8 min-w-8 max-w-8 flex-none justify-center px-0 ${isLastPinned ? 'mr-1' : ''}`
+                  : 'max-w-[200px] min-w-[120px] flex-1 justify-between px-2'
+              } ${
                 isActive
                   ? 'border-white/[0.12] bg-[#0b121c] text-[#e0ecf7] font-medium'
                   : 'border-transparent bg-white/[0.015] text-[#71889d] hover:bg-white/[0.04] hover:text-[#bcd0df]'
               }`}
             >
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                {tab.isPinned && <Pin size={10} className="text-[#4aa3ff] shrink-0 rotate-45" />}
-                {tab.isPrivate && <ShieldCheck size={10} className="shrink-0 text-[#b589ff]" />}
+              <div
+                className={`flex min-w-0 items-center ${
+                  tab.isPinned ? 'justify-center' : 'flex-1 gap-1.5'
+                }`}
+              >
+                {tab.isPrivate && !tab.isPinned && (
+                  <ShieldCheck size={10} className="shrink-0 text-[#b589ff]" />
+                )}
                 {tab.isLoading ? (
                   <RotateCw size={11} className="animate-spin text-[#4aa3ff] shrink-0" />
                 ) : tab.favicon ? (
@@ -1121,9 +1160,18 @@ export default function BrowserApp() {
                 ) : (
                   <Globe size={11} className={isActive ? 'text-[#4aa3ff]' : 'text-[#61788c]'} />
                 )}
-                <span className="truncate">{tab.title || 'New Tab'}</span>
-                {tab.isMuted && <VolumeX size={10} className="text-[#f43f5e] shrink-0 ml-1" />}
+                {!tab.isPinned && <span className="truncate">{tab.title || 'New Tab'}</span>}
+                {tab.isMuted && !tab.isPinned && (
+                  <VolumeX size={10} className="text-[#f43f5e] shrink-0 ml-1" />
+                )}
               </div>
+
+              {tab.isMuted && tab.isPinned && (
+                <VolumeX
+                  size={7}
+                  className="pointer-events-none absolute bottom-0.5 right-0.5 text-[#f43f5e]"
+                />
+              )}
 
               {!tab.isPinned && (
                 <button
