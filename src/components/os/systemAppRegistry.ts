@@ -11,7 +11,7 @@ import {
   SquareTerminal,
   StickyNote,
   Workflow,
-  MessageSquare,
+  MessageCircle,
   Calculator,
   QrCode,
   type LucideIcon,
@@ -77,7 +77,7 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     id: 'whatsapp',
     windowId: 'system:whatsapp',
     title: 'WhatsApp',
-    icon: MessageSquare,
+    icon: MessageCircle,
     keywords: ['whatsapp', 'chat', 'message', 'messaging', 'social', 'calls'],
   },
   {

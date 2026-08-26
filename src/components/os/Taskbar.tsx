@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Battery,
   Bell,
+  Clock3,
   Eye,
   LayoutDashboard,
   Maximize2,
@@ -9,6 +9,7 @@ import {
   Music,
   Pin,
   PinOff,
+  Power,
   Settings,
   Sliders,
   Volume2,
@@ -38,6 +39,7 @@ interface TaskbarProps {
   onOpenSystemApp: (appId: SystemAppId) => void;
   musicOpen: boolean;
   onToggleMusic: () => void;
+  onPowerOff: () => void;
 }
 
 function resolvePinnedItem(pinnedId: string) {
@@ -81,6 +83,7 @@ export default function Taskbar({
   onOpenSystemApp,
   musicOpen,
   onToggleMusic,
+  onPowerOff,
 }: TaskbarProps) {
   const [time, setTime] = useState(new Date());
   const [volume, setVolume] = useState<number>(() => {
@@ -97,6 +100,7 @@ export default function Taskbar({
   const tooltipTimeoutRef = useRef<number | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showClock, setShowClock] = useState(false);
+  const [showPower, setShowPower] = useState(false);
   const [notifications] = useState([
     { id: 1, text: 'NammuOS initialized', time: 'Just now', read: true },
     { id: 2, text: 'All systems nominal', time: 'Just now', read: true },
@@ -107,6 +111,32 @@ export default function Taskbar({
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const closeFlyouts = useCallback(() => {
+    setShowVolume(false);
+    setShowNotifications(false);
+    setShowClock(false);
+    setShowPower(false);
+  }, []);
+
+  useEffect(() => {
+    if (!showVolume && !showNotifications && !showClock && !showPower) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if ((event.target as Element | null)?.closest('.taskbar-flyout-root')) return;
+      closeFlyouts();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeFlyouts();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeFlyouts, showClock, showNotifications, showPower, showVolume]);
 
   const updateVolume = useCallback((val: number) => {
     const clamped = Math.max(0, Math.min(100, Math.round(val)));
@@ -522,13 +552,17 @@ export default function Taskbar({
           </span>
 
           {/* Volume control with mouse wheel support */}
-          <div className="relative flex items-center" onWheel={handleVolumeWheel}>
+          <div
+            className="taskbar-flyout-root relative flex items-center"
+            onWheel={handleVolumeWheel}
+          >
             <button
               title={`Volume: ${volume}% (Scroll mouse wheel to adjust)`}
               onClick={() => {
                 setShowVolume(!showVolume);
                 setShowNotifications(false);
                 setShowClock(false);
+                setShowPower(false);
               }}
               className="cursor-pointer text-os-text-muted hover:text-os-accent flex items-center bg-transparent border-0 p-0 transition-colors"
             >
@@ -552,30 +586,28 @@ export default function Taskbar({
             {/* Volume Popover - Styled to match OS Start Menu and Theme */}
             {showVolume && (
               <div
-                className="absolute bottom-10 right-0 w-64 border border-white/[0.09] bg-[#070b12]/96 p-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.7)] backdrop-blur-2xl rounded-lg z-50 flex flex-col gap-3"
+                className="taskbar-popover absolute bottom-10 right-0 z-50 flex w-64 flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <div className="flex items-center gap-1.5 text-[#8aa0b2]">
-                    <Sliders size={12} className="text-[#4aa3ff]" />
-                    <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#8aa0b2] font-medium">
+                <div className="taskbar-popover-header flex h-9 items-center justify-between px-3">
+                  <div className="flex items-center gap-1.5">
+                    <Sliders size={11} className="text-os-accent" />
+                    <span className="font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
                       Master Volume
                     </span>
                   </div>
-                  <span className="font-mono text-[9px] text-[#4a5c6c] tracking-wider">
+                  <span className="font-mono text-[8px] tracking-wider text-os-text-dim">
                     {volume === 0 ? 'MUTED' : `${volume}%`}
                   </span>
                 </div>
 
-                {/* Slider Row */}
-                <div className="flex items-center gap-2.5 bg-black/25 p-2 rounded border border-white/[0.05]">
+                <div className="taskbar-popover-control flex items-center gap-2.5 p-3">
                   <button
                     onClick={toggleMute}
-                    className={`cursor-pointer p-1.5 rounded transition-all flex items-center justify-center shrink-0 ${
+                    className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center border transition-colors ${
                       volume === 0
-                        ? 'bg-rose-500/20 text-[#f43f5e] border border-rose-500/30'
-                        : 'text-[#8aa0b2] hover:text-[#4aa3ff] hover:bg-white/[0.05]'
+                        ? 'border-os-red/30 bg-os-red/10 text-os-red'
+                        : 'border-os-border/25 bg-os-surface/20 text-os-text-muted hover:border-os-border/50 hover:bg-os-surface/35 hover:text-os-accent'
                     }`}
                     title={volume === 0 ? 'Unmute' : 'Mute'}
                   >
@@ -589,29 +621,28 @@ export default function Taskbar({
                       max="100"
                       value={volume}
                       onChange={(e) => updateVolume(Number(e.target.value))}
-                      className="w-full h-2 bg-[#141b27] border border-white/20 rounded-full cursor-pointer appearance-none accent-[#4aa3ff] focus:outline-none"
+                      className="h-1 w-full cursor-pointer appearance-none bg-os-surface accent-os-accent focus:outline-none"
                       style={{
-                        background: `linear-gradient(90deg, #4aa3ff 0%, #4aa3ff ${volume}%, rgba(255,255,255,0.12) ${volume}%, rgba(255,255,255,0.12) 100%)`,
+                        background: `linear-gradient(90deg, var(--color-os-accent) 0%, var(--color-os-accent) ${volume}%, color-mix(in srgb, var(--color-os-text) 10%, transparent) ${volume}%, color-mix(in srgb, var(--color-os-text) 10%, transparent) 100%)`,
                       }}
                       aria-label="Volume slider"
                     />
                   </div>
 
-                  <span className="font-mono text-[11px] font-medium text-[#d5e0ea] w-9 text-right shrink-0">
+                  <span className="w-9 shrink-0 text-right font-mono text-[10px] font-medium text-os-text">
                     {volume}%
                   </span>
                 </div>
 
-                {/* Quick Presets */}
-                <div className="grid grid-cols-5 gap-1 pt-0.5">
+                <div className="taskbar-popover-presets grid grid-cols-5">
                   {[0, 25, 50, 75, 100].map((level) => (
                     <button
                       key={level}
                       onClick={() => updateVolume(level)}
-                      className={`py-1 rounded text-[9px] font-mono transition-all border ${
+                      className={`border-r py-1.5 font-mono text-[8px] transition-colors last:border-r-0 ${
                         volume === level
-                          ? 'border-[#4aa3ff]/60 bg-[#4aa3ff]/15 text-[#4aa3ff] font-semibold'
-                          : 'border-white/[0.06] bg-white/[0.02] text-[#6b8296] hover:text-[#c5d2de] hover:border-white/20 hover:bg-white/[0.06]'
+                          ? 'bg-os-accent/10 font-semibold text-os-accent'
+                          : 'text-os-text-dim hover:bg-os-surface/30 hover:text-os-text-muted'
                       }`}
                     >
                       {level === 0 ? 'Mute' : `${level}%`}
@@ -619,21 +650,22 @@ export default function Taskbar({
                   ))}
                 </div>
 
-                <div className="text-[9px] text-[#4a5c6c] font-mono text-center pt-1 border-t border-white/[0.04]">
-                  Tip: Scroll on taskbar volume icon
+                <div className="taskbar-popover-footer px-3 py-2 font-mono text-[7.5px] uppercase tracking-[0.12em] text-os-text-dim">
+                  Scroll over the tray icon to adjust
                 </div>
               </div>
             )}
           </div>
 
           {/* Notifications bell */}
-          <div className="relative flex items-center">
+          <div className="taskbar-flyout-root relative flex items-center">
             <button
               title="Notifications"
               onClick={() => {
                 setShowNotifications(!showNotifications);
                 setShowVolume(false);
                 setShowClock(false);
+                setShowPower(false);
               }}
               className="cursor-pointer text-os-text-muted hover:text-os-accent flex items-center bg-transparent border-0 p-0 transition-colors relative"
             >
@@ -641,24 +673,29 @@ export default function Taskbar({
               <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-os-accent" />
             </button>
             {showNotifications && (
-              <div className="absolute bottom-9 right-0 w-64 bg-[#0a0e1a]/95 border border-os-border/40 rounded shadow-2xl p-3 z-50 backdrop-blur-md">
-                <div className="flex items-center justify-between pb-2 border-b border-os-border/20 text-[11px] font-semibold text-os-text">
-                  <span>Notifications</span>
+              <div className="taskbar-popover absolute bottom-9 right-0 z-50 w-72">
+                <div className="taskbar-popover-header flex h-9 items-center justify-between px-3">
+                  <span className="flex items-center gap-1.5 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
+                    <Bell size={11} className="text-os-accent" /> Notifications
+                  </span>
                   <button
                     onClick={() => setShowNotifications(false)}
-                    className="text-os-text-muted hover:text-os-text"
+                    className="taskbar-tray-button"
+                    aria-label="Close notifications"
                   >
                     <X size={12} />
                   </button>
                 </div>
-                <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto os-scrollbar">
+                <div className="max-h-48 overflow-y-auto os-scrollbar">
                   {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className="p-1.5 rounded bg-os-surface/40 border border-os-border/20 text-[10px]"
-                    >
-                      <div className="text-os-text font-medium">{n.text}</div>
-                      <div className="text-os-text-dim text-[9px] mt-0.5">{n.time}</div>
+                    <div key={n.id} className="taskbar-popover-item flex gap-2.5 px-3 py-2.5">
+                      <span className="mt-1 h-1 w-1 shrink-0 bg-os-accent" aria-hidden="true" />
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-medium text-os-text">{n.text}</div>
+                        <div className="mt-0.5 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                          {n.time}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -666,38 +703,76 @@ export default function Taskbar({
             )}
           </div>
 
-          <span title="Battery: 100%" className="text-os-text-muted flex items-center">
-            <Battery size={13} />
-          </span>
+          <div className="taskbar-flyout-root relative flex items-center">
+            <button
+              title="Power"
+              aria-label="Power options"
+              aria-expanded={showPower}
+              onClick={() => {
+                setShowPower((current) => !current);
+                setShowVolume(false);
+                setShowNotifications(false);
+                setShowClock(false);
+              }}
+              className={`taskbar-tray-button ${showPower ? 'text-os-accent' : ''}`}
+            >
+              <Power size={13} />
+            </button>
+            {showPower && (
+              <div className="taskbar-popover absolute bottom-9 right-0 z-50 w-64">
+                <div className="taskbar-popover-header flex h-9 items-center gap-1.5 px-3 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
+                  <Power size={11} className="text-os-accent" /> Power controls
+                </div>
+                <div className="p-3">
+                  <p className="mb-3 text-[10px] leading-relaxed text-os-text-muted">
+                    End this desktop session and return to the secure lock screen.
+                  </p>
+                  <button
+                    onClick={() => {
+                      closeFlyouts();
+                      onPowerOff();
+                    }}
+                    className="taskbar-power-action flex h-8 w-full items-center justify-center gap-2 font-mono text-[8px] font-medium uppercase tracking-[0.12em]"
+                  >
+                    <Power size={11} /> Power off &amp; lock
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="w-px h-4 bg-os-border/30" />
 
         {/* Date & Time display */}
-        <div className="relative flex items-center">
+        <div className="taskbar-flyout-root relative flex items-center">
           <button
             onClick={() => {
               setShowClock(!showClock);
               setShowVolume(false);
               setShowNotifications(false);
+              setShowPower(false);
             }}
             className="flex flex-col items-end px-2 py-0.5 text-right hover:bg-white/[0.04] rounded transition-colors"
             title={formatFullDate(time)}
           >
-            <span className="text-[11px] font-mono text-[#d5e0ea] leading-tight font-medium">
+            <span className="text-[11px] font-mono text-os-text leading-tight font-medium">
               {formatTime(time)}
             </span>
-            <span className="text-[9px] font-mono text-[#6d8294] leading-tight">
+            <span className="text-[9px] font-mono text-os-text-muted leading-tight">
               {formatDate(time)}
             </span>
           </button>
           {showClock && (
-            <div className="absolute bottom-9 right-0 w-64 bg-[#0a0e1a]/95 border border-os-border/40 rounded shadow-2xl p-3 z-50 backdrop-blur-md">
-              <div className="text-center pb-1">
-                <div className="text-xl font-mono text-os-accent font-semibold tracking-wider">
+            <div className="taskbar-popover absolute bottom-9 right-0 z-50 w-64">
+              <div className="taskbar-popover-header flex h-9 items-center gap-1.5 px-3 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
+                <Clock3 size={11} className="text-os-accent" /> System clock
+              </div>
+              <div className="px-3 py-4 text-left">
+                <div className="font-mono text-[24px] font-medium leading-none tracking-[0.08em] text-os-text">
                   {formatFullTime(time)}
                 </div>
-                <div className="text-xs font-mono text-os-text-muted mt-1">
+                <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.08em] text-os-text-muted">
                   {formatFullDate(time)}
                 </div>
               </div>

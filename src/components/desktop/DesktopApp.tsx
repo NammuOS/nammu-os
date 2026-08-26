@@ -13,9 +13,11 @@ import ContextMenu from '../context-menu/ContextMenu';
 import { ContextMenuProvider } from '../context-menu/contextMenuStore';
 import { SystemAppContent } from '../os/SystemApps';
 import { findSystemApp, findSystemAppByWindowId, type SystemAppId } from '../os/systemAppRegistry';
-import { TOOLS, findToolById, findToolsByFileType } from '../../lib/toolRegistry';
+import { findToolById, findToolsByFileType } from '../../lib/toolRegistry';
 import { Music } from '../os/Music';
 import { TOOL_COMPONENTS } from './toolComponents';
+import LockScreen from '../os/LockScreen';
+import { getStoredLockState, saveLockState } from '../../lib/osLock';
 
 const DEFAULT_PINS = ['browser', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
 
@@ -47,10 +49,6 @@ function getPinned(): string[] {
     return DEFAULT_PINS;
   }
 }
-function setPinned(pinned: string[]) {
-  localStorage.setItem('nammu-pinned', JSON.stringify(pinned));
-}
-
 function getRecent(): string[] {
   try {
     const parsed = JSON.parse(localStorage.getItem('nammu-recent') || '[]');
@@ -59,10 +57,6 @@ function getRecent(): string[] {
     return [];
   }
 }
-function setRecent(recent: string[]) {
-  localStorage.setItem('nammu-recent', JSON.stringify(recent.slice(0, 10)));
-}
-
 export default function DesktopApp() {
   const {
     windows,
@@ -84,6 +78,7 @@ export default function DesktopApp() {
   const [recentTools, setRecentTools] = useState<string[]>(getRecent());
   const [suggestedTools, setSuggestedTools] = useState<string[]>([]);
   const [musicOpen, setMusicOpen] = useState(true);
+  const [isLocked, setIsLocked] = useState(getStoredLockState);
   const contextMenuSafeArea = useMemo(
     () => ({ left: 36, right: musicOpen ? 292 : 0, bottom: 32, top: 0, margin: 6 }),
     [musicOpen],
@@ -286,6 +281,20 @@ export default function DesktopApp() {
     return () => window.removeEventListener('nammu-theme-change', handleThemeChange);
   }, []);
 
+  const powerOff = useCallback(() => {
+    setLauncherOpen(false);
+    setStartMenuOpen(false);
+    saveLockState(true);
+    setIsLocked(true);
+  }, []);
+
+  const powerOn = useCallback(() => {
+    saveLockState(false);
+    setIsLocked(false);
+  }, []);
+
+  if (isLocked) return <LockScreen onUnlock={powerOn} />;
+
   return (
     <ContextMenuProvider safeArea={contextMenuSafeArea}>
       <div
@@ -416,6 +425,7 @@ export default function DesktopApp() {
           onOpenSystemApp={openSystemApp}
           musicOpen={musicOpen}
           onToggleMusic={() => setMusicOpen((current) => !current)}
+          onPowerOff={powerOff}
         />
       </div>
       <ContextMenu />
