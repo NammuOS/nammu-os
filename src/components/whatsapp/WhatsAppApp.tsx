@@ -11,6 +11,7 @@ import {
   Edit2,
   RotateCw,
   Flame,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   WhatsAppAccountTab,
@@ -23,6 +24,9 @@ import {
 
 const WHATSAPP_WEB_URL = 'https://web.whatsapp.com/';
 const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
+const RUNTIME_BOOT_URL = 'about:blank';
+
+type GeckoEngineState = 'starting' | 'ready' | 'error';
 
 type GeckoRuntimeWindow = Window & {
   geckoEvalChrome?: (script: string) => Promise<unknown>;
@@ -44,13 +48,157 @@ function getSafeWhatsAppUrl(candidate?: string) {
   return WHATSAPP_WEB_URL;
 }
 
-function getWhatsAppRuntimeUrl(candidate?: string) {
+function getWhatsAppRuntimeUrl(attempt: number) {
   const params = new URLSearchParams({
     app: '1',
     autostart: '1',
-    url: getSafeWhatsAppUrl(candidate),
+    url: RUNTIME_BOOT_URL,
+    session: `whatsapp-${attempt}`,
   });
   return `${FIREFOX_RUNTIME_URL}?${params.toString()}`;
+}
+
+interface WhatsAppRuntimeTab {
+  id: string;
+  name: string;
+  url: string;
+  containerColor: string;
+}
+
+const CONTAINER_COLORS = ['blue', 'turquoise', 'green', 'purple', 'orange', 'pink', 'red'];
+
+const WHATSAPP_CONTAINER_HELPER = `
+  const getWhatsAppContainerId = (descriptor) => {
+    try {
+      const { ContextualIdentityService } = ChromeUtils.importESModule(
+        'resource://gre/modules/ContextualIdentityService.sys.mjs'
+      );
+      const identityName = 'Nammu WhatsApp · ' + descriptor.id;
+      const existingIdentity = ContextualIdentityService.getPublicIdentities()
+        .find((identity) => identity.name === identityName);
+      const identity = existingIdentity || ContextualIdentityService.create(
+        identityName,
+        descriptor.containerColor,
+        'circle'
+      );
+      return identity.userContextId;
+    } catch (error) {
+      console.warn('Nammu WhatsApp container isolation unavailable', error);
+      return 0;
+    }
+  };
+`;
+
+function getRuntimeTabs(tabs: WhatsAppAccountTab[]): WhatsAppRuntimeTab[] {
+  return tabs.map((tab, index) => ({
+    id: tab.id,
+    name: tab.name,
+    url: getSafeWhatsAppUrl(tab.url),
+    containerColor: CONTAINER_COLORS[index % CONTAINER_COLORS.length],
+  }));
+}
+
+function buildInitializeWhatsAppSessionScript(tabs: WhatsAppAccountTab[], activeTabId: string) {
+  const descriptors = getRuntimeTabs(tabs);
+  return `(()=>{
+    const descriptors = ${JSON.stringify(descriptors)};
+    const principal = Services.scriptSecurityManager.getSystemPrincipal();
+    ${WHATSAPP_CONTAINER_HELPER}
+    const previousTabs = Array.from(gBrowser.tabs);
+    const registry = Object.create(null);
+    const loaded = Object.create(null);
+    globalThis.__nammuWhatsAppTabs = registry;
+    globalThis.__nammuWhatsAppLoaded = loaded;
+    for (const descriptor of descriptors) {
+      const userContextId = getWhatsAppContainerId(descriptor);
+      const tab = gBrowser.addTab(${JSON.stringify(RUNTIME_BOOT_URL)}, {
+        triggeringPrincipal: principal,
+        userContextId
+      });
+      registry[descriptor.id] = tab;
+    }
+    for (const previousTab of previousTabs) gBrowser.removeTab(previousTab, { animate: false });
+    const activeDescriptor = descriptors.find((descriptor) => descriptor.id === ${JSON.stringify(activeTabId)}) || descriptors[0];
+    const activeTab = activeDescriptor && registry[activeDescriptor.id];
+    if (activeTab) {
+      gBrowser.selectedTab = activeTab;
+      openTrustedLinkIn(activeDescriptor.url, 'current');
+      loaded[activeDescriptor.id] = true;
+    }
+    return descriptors.length;
+  })()`;
+}
+
+function buildCreateWhatsAppTabScript(tab: WhatsAppAccountTab, index: number) {
+  const descriptor = getRuntimeTabs([tab]).map((item) => ({
+    ...item,
+    containerColor: CONTAINER_COLORS[index % CONTAINER_COLORS.length],
+  }))[0];
+  return `(()=>{
+    const descriptor = ${JSON.stringify(descriptor)};
+    const registry = globalThis.__nammuWhatsAppTabs || (globalThis.__nammuWhatsAppTabs = Object.create(null));
+    const loaded = globalThis.__nammuWhatsAppLoaded || (globalThis.__nammuWhatsAppLoaded = Object.create(null));
+    ${WHATSAPP_CONTAINER_HELPER}
+    if (registry[descriptor.id] && !registry[descriptor.id].closing) {
+      gBrowser.selectedTab = registry[descriptor.id];
+      return 'existing-tab-selected';
+    }
+    const principal = Services.scriptSecurityManager.getSystemPrincipal();
+    const tab = gBrowser.addTab(${JSON.stringify(RUNTIME_BOOT_URL)}, {
+      triggeringPrincipal: principal,
+      userContextId: getWhatsAppContainerId(descriptor)
+    });
+    registry[descriptor.id] = tab;
+    gBrowser.selectedTab = tab;
+    openTrustedLinkIn(descriptor.url, 'current');
+    loaded[descriptor.id] = true;
+    return 'tab-created';
+  })()`;
+}
+
+function buildSelectWhatsAppTabScript(tab: WhatsAppAccountTab) {
+  return `(()=>{
+    const descriptor = ${JSON.stringify({ id: tab.id, url: getSafeWhatsAppUrl(tab.url) })};
+    const registry = globalThis.__nammuWhatsAppTabs || Object.create(null);
+    const loaded = globalThis.__nammuWhatsAppLoaded || (globalThis.__nammuWhatsAppLoaded = Object.create(null));
+    const tab = registry[descriptor.id];
+    if (!tab || tab.closing) return 'tab-unavailable';
+    gBrowser.selectedTab = tab;
+    if (!loaded[descriptor.id]) {
+      openTrustedLinkIn(descriptor.url, 'current');
+      loaded[descriptor.id] = true;
+    }
+    return 'tab-selected';
+  })()`;
+}
+
+function buildRemoveWhatsAppTabScript(tabId: string, nextActiveTabId: string) {
+  return `(()=>{
+    const registry = globalThis.__nammuWhatsAppTabs || Object.create(null);
+    const loaded = globalThis.__nammuWhatsAppLoaded || Object.create(null);
+    const tab = registry[${JSON.stringify(tabId)}];
+    if (tab && !tab.closing) gBrowser.removeTab(tab, { animate: false });
+    delete registry[${JSON.stringify(tabId)}];
+    delete loaded[${JSON.stringify(tabId)}];
+    const nextTab = registry[${JSON.stringify(nextActiveTabId)}];
+    if (nextTab && !nextTab.closing) gBrowser.selectedTab = nextTab;
+    return 'tab-removed';
+  })()`;
+}
+
+function buildRunOnWhatsAppTabScript(tabId: string, command: string) {
+  return `(()=>{
+    const tab = globalThis.__nammuWhatsAppTabs?.[${JSON.stringify(tabId)}];
+    if (!tab || tab.closing) return 'tab-unavailable';
+    gBrowser.selectedTab = tab;
+    ${command}
+  })()`;
+}
+
+function createWhatsAppTabId() {
+  const id =
+    globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `wa-account-${id}`;
 }
 
 export default function WhatsAppApp() {
@@ -66,45 +214,135 @@ export default function WhatsAppApp() {
   const [isThemeManagerOpen, setIsThemeManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingTab, setEditingTab] = useState<WhatsAppAccountTab | null>(null);
-  const [mountedTabIds, setMountedTabIds] = useState<string[]>([activeTabId]);
-  const [readyTabIds, setReadyTabIds] = useState<string[]>([]);
-  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const tabsRef = useRef(tabs);
+  const activeTabIdRef = useRef(activeTabId);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const engineReadyRef = useRef(false);
+  const runtimeCommandQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [engineState, setEngineState] = useState<GeckoEngineState>('starting');
+  const [engineError, setEngineError] = useState('');
+  const [engineAttempt, setEngineAttempt] = useState(1);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const activeTheme = themes.find((t) => t.id === activeThemeId) || themes[0];
 
   // Save changes
   useEffect(() => {
+    tabsRef.current = tabs;
     saveStoredWhatsAppTabs(tabs);
   }, [tabs]);
+
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
   useEffect(() => {
     saveStoredWhatsAppThemes(themes);
   }, [themes]);
 
-  useEffect(() => {
-    const handleRuntimeReady = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.data?.type !== 'NAMMU_GECKO_READY') {
-        return;
-      }
+  const evaluateInRuntime = (script: string): Promise<unknown> => {
+    const execute = async () => {
+      const runtimeWindow = iframeRef.current?.contentWindow as GeckoRuntimeWindow | null;
+      if (!runtimeWindow?.geckoEvalChrome) return null;
 
-      const readyTab = tabs.find(
-        (tab) => iframeRefs.current[tab.id]?.contentWindow === event.source,
-      );
-      if (readyTab) {
-        setReadyTabIds((current) =>
-          current.includes(readyTab.id) ? current : [...current, readyTab.id],
-        );
+      let timeoutId = 0;
+      try {
+        return await Promise.race([
+          runtimeWindow.geckoEvalChrome(script),
+          new Promise<never>((_, reject) => {
+            timeoutId = window.setTimeout(
+              () => reject(new Error('Gecko did not answer the WhatsApp command in time.')),
+              15_000,
+            );
+          }),
+        ]);
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     };
 
-    window.addEventListener('message', handleRuntimeReady);
-    return () => window.removeEventListener('message', handleRuntimeReady);
-  }, [tabs]);
+    const result = runtimeCommandQueueRef.current.then(execute, execute);
+    runtimeCommandQueueRef.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
+  const runOnWhatsAppTab = (tabId: string, command: string) => {
+    if (!engineReadyRef.current) return Promise.resolve(null);
+    return evaluateInRuntime(buildRunOnWhatsAppTabScript(tabId, command));
+  };
+
+  useEffect(() => {
+    const handleRuntimeMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin ||
+        iframeRef.current?.contentWindow !== event.source
+      ) {
+        return;
+      }
+
+      if (event.data?.type === 'NAMMU_GECKO_ERROR') {
+        engineReadyRef.current = false;
+        setEngineState('error');
+        setEngineError(
+          typeof event.data.message === 'string'
+            ? event.data.message
+            : 'The WhatsApp engine could not finish starting.',
+        );
+        return;
+      }
+
+      if (event.data?.type !== 'NAMMU_GECKO_READY') return;
+
+      const initializeSession = async () => {
+        try {
+          let signature = '';
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const currentTabs = tabsRef.current;
+            const currentActiveTabId = activeTabIdRef.current;
+            const nextSignature = JSON.stringify({
+              tabs: getRuntimeTabs(currentTabs),
+              activeTabId: currentActiveTabId,
+            });
+            if (signature === nextSignature) break;
+            signature = nextSignature;
+            await evaluateInRuntime(
+              buildInitializeWhatsAppSessionScript(currentTabs, currentActiveTabId),
+            );
+          }
+
+          engineReadyRef.current = true;
+          setEngineState('ready');
+          setEngineError('');
+        } catch (error) {
+          engineReadyRef.current = false;
+          setEngineState('error');
+          setEngineError(error instanceof Error ? error.message : String(error));
+        }
+      };
+
+      void initializeSession();
+    };
+
+    window.addEventListener('message', handleRuntimeMessage);
+    return () => window.removeEventListener('message', handleRuntimeMessage);
+  }, []);
+
+  useEffect(() => {
+    if (engineState !== 'starting') return;
+    const timeout = window.setTimeout(() => {
+      if (engineReadyRef.current) return;
+      setEngineState('error');
+      setEngineError('The WhatsApp engine did not become ready within two minutes.');
+    }, 120_000);
+    return () => window.clearTimeout(timeout);
+  }, [engineAttempt, engineState]);
 
   // Tab management
   const handleAddAccount = () => {
-    const newId = `wa-account-${Date.now()}`;
+    const newId = createWhatsAppTabId();
     const newTab: WhatsAppAccountTab = {
       id: newId,
       name: `Account ${tabs.length + 1}`,
@@ -115,49 +353,56 @@ export default function WhatsAppApp() {
       url: 'https://web.whatsapp.com/',
     };
     const updated = [...tabs, newTab];
+    tabsRef.current = updated;
     setTabs(updated);
+    activeTabIdRef.current = newId;
     setActiveTabId(newId);
-    setMountedTabIds((current) => [...current, newId]);
+    if (engineReadyRef.current) {
+      void evaluateInRuntime(buildCreateWhatsAppTabScript(newTab, updated.length - 1));
+    }
   };
 
   const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (tabs.length === 1) return;
+    const closingIndex = tabs.findIndex((tab) => tab.id === tabId);
     const updated = tabs.filter((t) => t.id !== tabId);
+    const nextActiveTabId =
+      activeTabId === tabId ? updated[Math.min(closingIndex, updated.length - 1)].id : activeTabId;
+    tabsRef.current = updated;
     setTabs(updated);
-    setMountedTabIds((current) => current.filter((id) => id !== tabId));
-    setReadyTabIds((current) => current.filter((id) => id !== tabId));
-    delete iframeRefs.current[tabId];
     if (activeTabId === tabId) {
-      setActiveTabId(updated[0].id);
+      activeTabIdRef.current = nextActiveTabId;
+      setActiveTabId(nextActiveTabId);
+    }
+    if (engineReadyRef.current) {
+      void evaluateInRuntime(buildRemoveWhatsAppTabScript(tabId, nextActiveTabId));
     }
   };
 
   const handleToggleMute = (tabId: string) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
+    void runOnWhatsAppTab(tabId, "tab.toggleMuteAudio('nammu-whatsapp'); return 'ok';");
   };
 
   const handleActivateTab = (tabId: string) => {
-    setMountedTabIds((current) => (current.includes(tabId) ? current : [...current, tabId]));
+    const targetTab = tabs.find((tab) => tab.id === tabId);
+    if (!targetTab) return;
+    activeTabIdRef.current = tabId;
     setActiveTabId(tabId);
-  };
-
-  const evaluateInActiveRuntime = async (script: string) => {
-    const runtimeWindow = iframeRefs.current[activeTabId]
-      ?.contentWindow as GeckoRuntimeWindow | null;
-    if (!runtimeWindow?.geckoEvalChrome) return false;
-
-    await runtimeWindow.geckoEvalChrome(script);
-    return true;
+    if (engineReadyRef.current) {
+      void evaluateInRuntime(buildSelectWhatsAppTabScript(targetTab));
+    }
   };
 
   const handleReload = () => {
-    void evaluateInActiveRuntime("gBrowser.selectedBrowser.reload(); 'ok'");
+    void runOnWhatsAppTab(activeTabId, "tab.linkedBrowser.reload(); return 'ok';");
   };
 
   // Direct Click-to-Chat handler (wa.me)
   const handleLaunchDirectChat = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!engineReadyRef.current) return;
     const cleanPhone = directPhone.replace(/[^0-9]/g, '');
     if (!cleanPhone) return;
 
@@ -166,12 +411,21 @@ export default function WhatsAppApp() {
       waUrl += `&text=${encodeURIComponent(directMessage.trim())}`;
     }
 
-    void evaluateInActiveRuntime(
-      `openTrustedLinkIn(${JSON.stringify(getSafeWhatsAppUrl(waUrl))}, 'current'); 'ok'`,
+    void runOnWhatsAppTab(
+      activeTabId,
+      `openTrustedLinkIn(${JSON.stringify(getSafeWhatsAppUrl(waUrl))}, 'current'); return 'ok';`,
     );
     setIsDirectChatOpen(false);
     setDirectPhone('');
     setDirectMessage('');
+  };
+
+  const handleRetryEngine = () => {
+    engineReadyRef.current = false;
+    runtimeCommandQueueRef.current = Promise.resolve();
+    setEngineError('');
+    setEngineState('starting');
+    setEngineAttempt((attempt) => attempt + 1);
   };
 
   return (
@@ -243,10 +497,34 @@ export default function WhatsAppApp() {
 
         {/* Companion actions */}
         <div className="flex items-center gap-1 shrink-0">
+          <span
+            className={`mr-1 flex items-center gap-1 font-mono text-[8px] ${
+              engineState === 'ready'
+                ? 'text-[#25d366]'
+                : engineState === 'error'
+                  ? 'text-amber-400'
+                  : 'text-[#53bdeb]'
+            }`}
+            aria-live="polite"
+            title="One shared Gecko engine for all WhatsApp account tabs"
+          >
+            <span className="text-[7px]">●</span>
+            {engineState === 'ready'
+              ? 'ENGINE READY'
+              : engineState === 'error'
+                ? 'ENGINE ERROR'
+                : 'ENGINE STARTING'}
+          </span>
+
           <button
             onClick={() => setIsDirectChatOpen(true)}
-            className="flex items-center gap-1 rounded bg-[#00a884]/20 border border-[#00a884]/40 px-2 py-0.5 text-[10px] text-[#25d366] hover:bg-[#00a884]/30 transition-colors"
-            title="Start Direct Chat without adding contact"
+            disabled={engineState !== 'ready'}
+            className="flex items-center gap-1 rounded bg-[#00a884]/20 border border-[#00a884]/40 px-2 py-0.5 text-[10px] text-[#25d366] hover:bg-[#00a884]/30 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            title={
+              engineState === 'ready'
+                ? 'Start Direct Chat without adding contact'
+                : 'Available when the shared engine is ready'
+            }
           >
             <Send size={10} />
             <span>Direct Message</span>
@@ -262,7 +540,8 @@ export default function WhatsAppApp() {
 
           <button
             onClick={handleReload}
-            className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
+            disabled={engineState !== 'ready'}
+            className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
             title="Reload WhatsApp"
           >
             <RotateCw size={12} />
@@ -270,7 +549,8 @@ export default function WhatsAppApp() {
 
           <button
             onClick={() => handleToggleMute(activeTabId)}
-            className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
+            disabled={engineState !== 'ready'}
+            className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
             title={activeTab?.isMuted ? 'Unmute Notifications' : 'Mute Notifications'}
           >
             {activeTab?.isMuted ? (
@@ -292,51 +572,60 @@ export default function WhatsAppApp() {
 
       {/* 2. WhatsApp in-app runtime */}
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
-        {tabs
-          .filter((tab) => mountedTabIds.includes(tab.id))
-          .map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const isReady = readyTabIds.includes(tab.id);
-            return (
-              <div
-                key={tab.id}
-                className={`${isActive ? 'flex' : 'hidden'} absolute inset-0 bg-[#111b21]`}
-              >
-                {!isReady && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#111b21] text-center">
-                    <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-[#25d366]/30 bg-[#00a884]/15 text-[#25d366]">
-                      <QrCode size={28} strokeWidth={1.6} />
-                      <Flame
-                        size={15}
-                        className="absolute -bottom-1 -right-1 animate-pulse rounded-full bg-[#202c33] p-0.5 text-[#ff7139]"
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[13px] font-semibold text-white">
-                        Starting WhatsApp inside Nammu OS
-                      </div>
-                      <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
-                        Preparing your in-app session. WhatsApp's QR code will appear here.
-                      </div>
-                    </div>
-                    <div className="h-1 w-48 overflow-hidden rounded-full bg-white/[0.06]">
-                      <div className="h-full w-1/2 animate-pulse rounded-full bg-[#00a884]" />
-                    </div>
+        {engineState !== 'ready' && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#111b21] text-center">
+            {engineState === 'starting' ? (
+              <>
+                <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-[#25d366]/30 bg-[#00a884]/15 text-[#25d366]">
+                  <QrCode size={28} strokeWidth={1.6} />
+                  <Flame
+                    size={15}
+                    className="absolute -bottom-1 -right-1 animate-pulse rounded-full bg-[#202c33] p-0.5 text-[#ff7139]"
+                  />
+                </div>
+                <div>
+                  <div className="text-[13px] font-semibold text-white">
+                    Starting WhatsApp inside Nammu OS
                   </div>
-                )}
-                <iframe
-                  ref={(element) => {
-                    iframeRefs.current[tab.id] = element;
-                  }}
-                  src={getWhatsAppRuntimeUrl(WHATSAPP_WEB_URL)}
-                  className="h-full w-full border-0 bg-[#111b21]"
-                  title={`WhatsApp — ${tab.name}`}
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
-                  allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
-                />
-              </div>
-            );
-          })}
+                  <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
+                    Loading one shared Gecko engine. Your account session will appear automatically.
+                  </div>
+                </div>
+                <div className="h-1 w-48 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div className="h-full w-1/2 animate-pulse rounded-full bg-[#00a884]" />
+                </div>
+              </>
+            ) : (
+              <>
+                <AlertTriangle size={28} className="text-amber-400" />
+                <div>
+                  <div className="text-[13px] font-semibold text-white">
+                    WhatsApp engine could not start
+                  </div>
+                  <div className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-[#8696a0]">
+                    {engineError}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRetryEngine}
+                  className="rounded border border-[#00a884]/50 bg-[#00a884]/15 px-3 py-1.5 text-[10px] font-medium text-[#25d366] hover:bg-[#00a884]/25"
+                >
+                  Retry engine
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        <iframe
+          key={engineAttempt}
+          ref={iframeRef}
+          src={getWhatsAppRuntimeUrl(engineAttempt)}
+          className="h-full w-full border-0 bg-[#111b21]"
+          title="WhatsApp shared Gecko engine"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
+          allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
+        />
       </div>
 
       {/* MODAL 1: Direct Message / Click-to-Chat Dialog */}
@@ -535,10 +824,10 @@ export default function WhatsAppApp() {
                 <div>
                   <div className="text-white font-medium">Account Switching</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Each open shortcut keeps its own active runtime
+                    Isolated Firefox container tabs share one Gecko engine
                   </div>
                 </div>
-                <span className="text-[#53bdeb] font-mono text-[10px]">RUNTIME</span>
+                <span className="text-[#53bdeb] font-mono text-[10px]">SHARED</span>
               </div>
 
               <div className="flex items-center justify-between">
