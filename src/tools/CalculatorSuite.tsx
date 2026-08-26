@@ -70,7 +70,7 @@ function Out({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 // ==========================================
-// CALCULATOR SUITE MODES DEFINITION
+// CALCULATOR MODES DEFINITION
 // ==========================================
 
 export type CalculatorMode =

@@ -49,7 +49,7 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
   {
     id: 'calculator',
     windowId: 'system:calculator',
-    title: 'Calculator Suite',
+    title: 'Calculator',
     icon: Calculator,
     startMenu: true,
     keywords: [

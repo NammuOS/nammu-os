@@ -50,7 +50,7 @@ export type LauncherItem =
 
 const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   calculator:
-    'Complete multi-mode calculator suite with standard, scientific, programmer, converter, date, and finance tools',
+    'Complete calculator with standard, scientific, programmer, converter, date, and finance tools',
   'qr-gen': 'Vector SVG and high-resolution QR code generator Studio',
   firefox: 'WebAssembly-powered Firefox web browser',
   whatsapp: 'End-to-end encrypted messaging and calls',

@@ -1,4 +1,4 @@
-// Safe Mathematical Calculation Engine for Nammu OS Calculator Suite
+// Safe Mathematical Calculation Engine for Nammu OS Calculator
 // Zero-eval, AST/Shunting-Yard based expression evaluator with scientific support
 
 export type AngleMode = 'DEG' | 'RAD' | 'GRAD';

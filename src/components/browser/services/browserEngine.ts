@@ -14,7 +14,24 @@ export interface BrowserTab {
   engineMode: BrowserEngineMode;
   isPinned?: boolean;
   isMuted?: boolean;
+  isPrivate?: boolean;
 }
+
+export interface BrowserPreferences {
+  searchEngine: SearchEngine;
+  showBookmarksBar: boolean;
+  trackingProtection: boolean;
+  blockAutoplay: boolean;
+  defaultZoom: number;
+}
+
+export const DEFAULT_BROWSER_PREFERENCES: BrowserPreferences = {
+  searchEngine: 'google',
+  showBookmarksBar: true,
+  trackingProtection: true,
+  blockAutoplay: false,
+  defaultZoom: 100,
+};
 
 export interface Bookmark {
   id: string;
@@ -142,6 +159,38 @@ export const DEFAULT_BOOKMARKS: Bookmark[] = [
 
 const BOOKMARKS_STORAGE_KEY = 'nammu_browser_bookmarks';
 const HISTORY_STORAGE_KEY = 'nammu_browser_history';
+const PREFERENCES_STORAGE_KEY = 'nammu_browser_preferences';
+
+export function getStoredBrowserPreferences(): BrowserPreferences {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}',
+    ) as Partial<BrowserPreferences>;
+    const searchEngine = ['google', 'duckduckgo', 'bing', 'ecosia'].includes(
+      saved.searchEngine || '',
+    )
+      ? saved.searchEngine!
+      : DEFAULT_BROWSER_PREFERENCES.searchEngine;
+
+    return {
+      ...DEFAULT_BROWSER_PREFERENCES,
+      ...saved,
+      searchEngine,
+      defaultZoom: Math.min(200, Math.max(50, Number(saved.defaultZoom) || 100)),
+      showBookmarksBar: saved.showBookmarksBar !== false,
+      trackingProtection: saved.trackingProtection !== false,
+      blockAutoplay: saved.blockAutoplay === true,
+    };
+  } catch {
+    return { ...DEFAULT_BROWSER_PREFERENCES };
+  }
+}
+
+export function saveStoredBrowserPreferences(preferences: BrowserPreferences): void {
+  try {
+    localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+  } catch {}
+}
 
 export function getStoredBookmarks(): Bookmark[] {
   try {
@@ -182,12 +231,7 @@ export function normalizeBrowserUrl(input: string, searchEngine: SearchEngine = 
   const trimmed = input.trim();
   if (!trimmed) return 'about:home';
 
-  if (
-    trimmed === 'about:home' ||
-    trimmed === 'about:blank' ||
-    trimmed === 'about:firefox' ||
-    trimmed === 'about:wasm'
-  ) {
+  if (/^about:[a-z0-9-]+(?:[?#].*)?$/i.test(trimmed) || /^view-source:/i.test(trimmed)) {
     return trimmed;
   }
 
