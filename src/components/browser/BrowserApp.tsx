@@ -1920,46 +1920,7 @@ export default function BrowserApp() {
         )}
       </div>
 
-      {/* 6. Browser Status Footer Bar */}
-      <footer className="flex h-5 shrink-0 items-center justify-between border-t border-white/[0.05] bg-[#05080d] px-2.5 font-mono text-[8px] text-[#4d687f]">
-        <div className="flex items-center gap-3">
-          <span
-            className={
-              engineState === 'ready'
-                ? 'text-[#2ee6a6]'
-                : engineState === 'error'
-                  ? 'text-amber-400'
-                  : 'text-[#4aa3ff]'
-            }
-          >
-            {engineState === 'ready'
-              ? '● Engine ready'
-              : engineState === 'error'
-                ? '● Engine unavailable'
-                : '● Engine starting'}
-          </span>
-          <span>·</span>
-          <span>Shared Gecko WebAssembly session</span>
-          {activeTab?.isPrivate && (
-            <>
-              <span>·</span>
-              <span className="text-[#b589ff]">Private Browsing</span>
-            </>
-          )}
-          <span>·</span>
-          <span>
-            {tabs.length} Active {tabs.length === 1 ? 'Tab' : 'Tabs'}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span>{isSecure ? 'SSL 256-bit Encrypted' : 'Non-SSL / Local'}</span>
-          <span>·</span>
-          <span>Zoom: {zoomLevel}%</span>
-        </div>
-      </footer>
-
-      {/* 7. Optimized In-Browser Context Menu */}
+      {/* 6. Optimized In-Browser Context Menu */}
       {contextMenu.isOpen && (
         <div
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
