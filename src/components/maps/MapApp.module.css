@@ -512,44 +512,70 @@
     monospace;
 }
 
-:global([data-theme='mosaic']) .app {
-  --map-panel: rgb(255 255 255 / 94%);
+:global([data-appearance='light']) .app {
+  --map-panel: rgb(255 255 255 / 86%);
   --map-panel-solid: #fff;
-  --map-surface: #f8fafc;
-  --map-surface-hover: #f1f5f9;
-  --map-line: #e2e8f0;
-  --map-line-strong: #cbd5e1;
-  --map-text: #0f172a;
-  --map-muted: #64748b;
-  --map-faint: #94a3b8;
-  --map-accent: #0f172a;
-  --map-glow: rgb(15 23 42 / 9%);
+  --map-surface: #f2f2f7;
+  --map-surface-hover: #e9e9ee;
+  --map-line: rgb(60 60 67 / 14%);
+  --map-line-strong: rgb(60 60 67 / 24%);
+  --map-text: #1d1d1f;
+  --map-muted: #6e6e73;
+  --map-faint: #8e8e93;
+  --map-accent: var(--os-accent, #007aff);
+  --map-glow: rgb(0 122 255 / 10%);
+  background: #e9e9ee;
 }
 
-:global([data-theme='mosaic']) .panel::before {
-  background: #fde047;
+:global([data-theme='macos']) .app {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+}
+
+:global([data-theme='macos']) .panel {
+  border-color: var(--mac-separator);
+  border-radius: 16px;
+  background: var(--mac-thick);
+  box-shadow: 0 18px 54px rgb(0 0 0 / 28%);
+  backdrop-filter: blur(30px) saturate(1.55);
+}
+
+:global([data-theme='macos']) .panel::before {
+  height: 1px;
+  background: rgb(255 255 255 / 45%);
   opacity: 1;
 }
 
-:global([data-theme='mosaic']) .heading,
-:global([data-theme='mosaic']) .footer {
-  background: #f8fafc;
+:global([data-theme='macos']) .heading,
+:global([data-theme='macos']) .footer {
+  background: transparent;
 }
 
-:global([data-theme='mosaic']) .headingIcon,
-:global([data-theme='mosaic']) .locateButton,
-:global([data-theme='mosaic']) .search button:last-child {
-  border-color: #d6bd18;
-  background: #fde047;
-  color: #0f172a;
+:global([data-theme='macos']) .headingIcon,
+:global([data-theme='macos']) .locateButton,
+:global([data-theme='macos']) .search button:last-child {
+  border-color: rgb(0 0 0 / 8%);
+  border-radius: 8px;
+  background: var(--os-accent, #0088ff);
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 16%);
 }
 
-:global([data-theme='mosaic']) .search,
-:global([data-theme='mosaic']) .styleSelect select {
-  background: #fff;
-  color: #0f172a;
+:global([data-theme='macos']) .search,
+:global([data-theme='macos']) .styleSelect select {
+  border-color: var(--mac-separator);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 32%);
+  color: var(--mac-label);
 }
 
+:global([data-theme='macos'][data-appearance='dark']) .search,
+:global([data-theme='macos'][data-appearance='dark']) .styleSelect select {
+  background: rgb(0 0 0 / 22%);
+}
+
+:global([data-theme='macos']) .coordinates {
+  font-family: 'SFMono-Regular', 'SF Mono', ui-monospace, monospace;
+}
 @media (max-width: 560px), (max-height: 455px) {
   .panel {
     top: 8px;

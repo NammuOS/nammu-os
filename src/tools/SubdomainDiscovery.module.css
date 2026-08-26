@@ -777,62 +777,85 @@
   font-weight: 500;
 }
 
-:global([data-theme='mosaic']) .tool {
-  --recon-bg: #f8fafc;
-  --recon-panel: rgb(255 255 255 / 96%);
-  --recon-surface: #f8fafc;
-  --recon-hover: #f1f5f9;
-  --recon-line: #e2e8f0;
-  --recon-line-strong: #cbd5e1;
-  --recon-text: #0f172a;
-  --recon-muted: #64748b;
-  --recon-faint: #94a3b8;
-  --recon-accent: #0f172a;
-  --recon-success: #16a34a;
-  background: #f8fafc;
-  scrollbar-color: #94a3b8 #f1f5f9;
+:global([data-appearance='light']) .tool {
+  --recon-bg: #f2f2f7;
+  --recon-panel: rgb(255 255 255 / 88%);
+  --recon-surface: rgb(255 255 255 / 58%);
+  --recon-hover: rgb(60 60 67 / 8%);
+  --recon-line: rgb(60 60 67 / 14%);
+  --recon-line-strong: rgb(60 60 67 / 24%);
+  --recon-text: #1d1d1f;
+  --recon-muted: #6e6e73;
+  --recon-faint: #8e8e93;
+  --recon-accent: var(--os-accent, #007aff);
+  --recon-success: #248a3d;
+  background: #f2f2f7;
 }
 
-:global([data-theme='mosaic']) .resultList {
-  scrollbar-color: #94a3b8 #f1f5f9;
+:global([data-theme='macos']) .tool {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  background: transparent;
+  scrollbar-color: rgb(128 128 128 / 52%) transparent;
 }
 
-:global([data-theme='mosaic']) .tool::-webkit-scrollbar-track,
-:global([data-theme='mosaic']) .resultList::-webkit-scrollbar-track {
-  background: #f1f5f9;
+:global([data-theme='macos']) .header,
+:global([data-theme='macos']) .queryPanel,
+:global([data-theme='macos']) .resultHeader {
+  background: var(--mac-thick);
+  backdrop-filter: blur(30px) saturate(1.5);
 }
 
-:global([data-theme='mosaic']) .tool::-webkit-scrollbar-thumb,
-:global([data-theme='mosaic']) .resultList::-webkit-scrollbar-thumb {
-  border-color: #f1f5f9;
-  background: #94a3b8;
+:global([data-theme='macos']) .header {
+  border-radius: 14px 14px 0 0;
 }
 
-:global([data-theme='mosaic']) .header,
-:global([data-theme='mosaic']) .queryPanel,
-:global([data-theme='mosaic']) .resultHeader {
-  background: #fff;
+:global([data-theme='macos']) .iconBox,
+:global([data-theme='macos']) .scanButton {
+  border-color: rgb(0 0 0 / 8%);
+  border-radius: 8px;
+  background: var(--os-accent, #0088ff);
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 16%);
 }
 
-:global([data-theme='mosaic']) .iconBox,
-:global([data-theme='mosaic']) .scanButton {
-  border-color: #1e293b;
-  background: #fde047;
-  color: #0f172a;
-  box-shadow: 2px 2px 0 rgb(0 0 0 / 80%);
+:global([data-theme='macos']) .domainInput,
+:global([data-theme='macos']) .filterInput,
+:global([data-theme='macos']) .scopeTabs,
+:global([data-theme='macos']) .sortSelect {
+  border-color: var(--mac-separator);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 32%);
+  color: var(--mac-label);
 }
 
-:global([data-theme='mosaic']) .domainInput,
-:global([data-theme='mosaic']) .filterInput,
-:global([data-theme='mosaic']) .scopeTabs,
-:global([data-theme='mosaic']) .sortSelect {
-  background: #fff;
+:global([data-theme='macos'][data-appearance='dark']) .domainInput,
+:global([data-theme='macos'][data-appearance='dark']) .filterInput,
+:global([data-theme='macos'][data-appearance='dark']) .scopeTabs,
+:global([data-theme='macos'][data-appearance='dark']) .sortSelect {
+  background: rgb(0 0 0 / 24%);
 }
 
-:global([data-theme='mosaic']) .sortSelect option {
-  background: #fff;
+:global([data-theme='macos']) .sortSelect option {
+  background: var(--color-os-panel);
+  color: var(--color-os-text);
 }
 
+:global([data-theme='macos']) .resultList {
+  scrollbar-color: rgb(128 128 128 / 52%) transparent;
+}
+
+:global([data-theme='macos']) .tool::-webkit-scrollbar-track,
+:global([data-theme='macos']) .resultList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:global([data-theme='macos']) .tool::-webkit-scrollbar-thumb,
+:global([data-theme='macos']) .resultList::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgb(128 128 128 / 52%);
+  background-clip: padding-box;
+}
 @media (max-width: 680px) {
   .header,
   .queryPanel,

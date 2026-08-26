@@ -100,7 +100,7 @@ export default function Rail({
 
   return (
     <nav
-      className="fixed bottom-[32px] left-0 top-0 z-[9996] flex w-[36px] flex-col items-center border-r border-white/[0.06] bg-[linear-gradient(90deg,rgba(5,8,13,.98),rgba(7,11,18,.94))] py-2 backdrop-blur-xl"
+      className="os-rail fixed bottom-[32px] left-0 top-0 z-[9996] flex w-[36px] flex-col items-center border-r border-white/[0.06] bg-[linear-gradient(90deg,rgba(5,8,13,.98),rgba(7,11,18,.94))] py-2 backdrop-blur-xl"
       aria-label="Nammu sidebar"
       onContextMenu={(event) =>
         contextMenu.openAtEvent(event, railMenu, {

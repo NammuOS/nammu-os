@@ -78,7 +78,7 @@ export default function StartMenu({
   return (
     <div className="fixed inset-x-0 bottom-[32px] top-0 z-[9997]" onClick={close}>
       <div
-        className="absolute bottom-0 left-[36px] flex max-h-[70vh] w-[360px] flex-col border border-white/[0.08] bg-[#070b12]/94 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
+        className="start-menu-panel absolute bottom-0 left-[36px] flex max-h-[70vh] w-[360px] flex-col border border-white/[0.08] bg-[#070b12]/94 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         onClick={(event) => event.stopPropagation()}
         onContextMenu={(event) =>
           contextMenu.openAtEvent(event, startMenuContext, {

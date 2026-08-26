@@ -104,7 +104,7 @@ export default function Launcher({
   const [activeCategory, setActiveCategory] = useState<ToolCategory | 'all'>('all');
   const contextMenu = useContextMenu();
 
-  const displayedItems = useMemo<LauncherItem[]>(() => {
+  const rawDisplayedItems = useMemo<LauncherItem[]>(() => {
     // 1. Search Query
     if (searchQuery.trim()) {
       const matchedApps = searchSystemApps(searchQuery).map((app): LauncherItem => ({
@@ -208,6 +208,14 @@ export default function Launcher({
     // 5. Main All Tab (Shows All System Applications)
     return SYSTEM_APP_ITEMS;
   }, [searchQuery, activeTab, activeCategory, pinnedTools, recentTools, suggestedTools]);
+
+  const displayedItems = useMemo(
+    () =>
+      Array.from(
+        new Map(rawDisplayedItems.map((item) => [`${item.type}:${item.id}`, item])).values(),
+      ),
+    [rawDisplayedItems],
+  );
 
   const handleLaunchItem = useCallback(
     (item: LauncherItem) => {

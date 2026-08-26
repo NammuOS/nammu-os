@@ -245,11 +245,7 @@ export default function Taskbar({
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 h-[32px] z-9998 flex items-center px-2 gap-1"
-      style={{
-        background: 'linear-gradient(180deg, rgba(10,14,26,0.95) 0%, rgba(5,5,5,0.98) 100%)',
-        borderTop: '1px solid rgba(30,58,138,0.35)',
-      }}
+      className="os-taskbar fixed bottom-0 left-0 right-0 h-[32px] z-9998 flex items-center px-2 gap-1"
       onContextMenu={(event) =>
         contextMenu.openAtEvent(event, taskbarMenu, {
           safeArea: { left: 0, right: 0, bottom: 32 },

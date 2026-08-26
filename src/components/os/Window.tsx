@@ -404,44 +404,40 @@ export default function Window({
       >
         {/* Window title bar */}
         <div
-          className={`flex h-[26px] shrink-0 items-center justify-between px-2 select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-          style={{
-            background: 'linear-gradient(180deg, rgba(12,20,36,0.98) 0%, rgba(8,13,22,0.98) 100%)',
-            borderBottom: '1px solid rgba(74,163,255,0.16)',
-          }}
+          className={`window-titlebar flex h-[26px] shrink-0 items-center justify-between px-2 select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseDown={handleMouseDown}
           onDoubleClick={() => onMaximize(win.id)}
         >
-          <div className="flex items-center gap-2">
+          <div className="window-title-group flex items-center gap-2">
             <div
-              className={`w-1.5 h-1.5 rounded-full ${win.isFocused ? 'bg-os-accent' : 'bg-os-text-dim'}`}
+              className={`window-focus-dot w-1.5 h-1.5 rounded-full ${win.isFocused ? 'bg-os-accent' : 'bg-os-text-dim'}`}
               style={{ boxShadow: win.isFocused ? '0 0 6px rgba(6,182,212,0.5)' : 'none' }}
             />
-            <span className="max-w-60 truncate text-[11.5px] font-normal tracking-[0.02em] text-[#c9d7e3]">
+            <span className="window-title max-w-60 truncate text-[11.5px] font-normal tracking-[0.02em] text-[#c9d7e3]">
               {win.title}
             </span>
           </div>
           <div
-            className="flex items-center gap-1.5 pl-2"
+            className="window-controls flex items-center gap-1.5 pl-2"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <button
               onClick={() => onSnap(win.id)}
-              className={`grid h-4 w-4 place-items-center rounded-[2px] transition-colors ${win.snap ? 'bg-[#4aa3ff]/12' : 'hover:bg-white/[0.06]'}`}
+              className={`window-control window-snap-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors ${win.snap ? 'bg-[#4aa3ff]/12' : 'hover:bg-white/[0.06]'}`}
               title={win.snap ? 'Exit split view' : 'Split with another window'}
             >
               <Columns2 size={11} className={win.snap ? 'text-[#4aa3ff]' : 'text-[#70869a]'} />
             </button>
             <button
               onClick={() => onMinimize(win.id)}
-              className="grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
+              className="window-control window-minimize-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
               title="Minimize"
             >
               <Minus size={11} className="text-[#70869a]" />
             </button>
             <button
               onClick={() => onMaximize(win.id)}
-              className="grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
+              className="window-control window-maximize-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
               title="Maximize"
             >
               {win.isMaximized ? (
@@ -452,7 +448,7 @@ export default function Window({
             </button>
             <button
               onClick={() => onClose(win.id)}
-              className="grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-[#8b2d33]"
+              className="window-control window-close-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-[#8b2d33]"
               title="Close"
             >
               <X size={11} className="text-[#70869a] hover:text-white" />
@@ -468,8 +464,7 @@ export default function Window({
 
         {/* Window content */}
         <div
-          className={`relative flex-1 ${win.toolId === 'subdomain-discovery' ? 'overflow-hidden' : 'overflow-auto os-scrollbar'}`}
-          style={{ background: 'rgba(5,5,5,0.92)' }}
+          className={`window-content relative flex-1 ${win.toolId === 'subdomain-discovery' ? 'overflow-hidden' : 'overflow-auto os-scrollbar'}`}
         >
           {children}
         </div>

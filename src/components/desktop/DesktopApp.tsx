@@ -138,6 +138,11 @@ const TOOL_COMPONENTS: Record<string, React.FC<any>> = {
 
 const DEFAULT_PINS = ['firefox', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
 
+function uniqueIds(values: unknown[], limit?: number): string[] {
+  const unique = [...new Set(values.filter((value): value is string => typeof value === 'string'))];
+  return typeof limit === 'number' ? unique.slice(0, limit) : unique;
+}
+
 function getPinned(): string[] {
   try {
     const item = localStorage.getItem('nammu-pinned');
@@ -145,7 +150,8 @@ function getPinned(): string[] {
       localStorage.setItem('nammu-pinned', JSON.stringify(DEFAULT_PINS));
       return DEFAULT_PINS;
     }
-    return JSON.parse(item);
+    const parsed = JSON.parse(item);
+    return Array.isArray(parsed) ? uniqueIds(parsed) : DEFAULT_PINS;
   } catch {
     return DEFAULT_PINS;
   }
@@ -156,7 +162,8 @@ function setPinned(pinned: string[]) {
 
 function getRecent(): string[] {
   try {
-    return JSON.parse(localStorage.getItem('nammu-recent') || '[]');
+    const parsed = JSON.parse(localStorage.getItem('nammu-recent') || '[]');
+    return Array.isArray(parsed) ? uniqueIds(parsed, 10) : [];
   } catch {
     return [];
   }
@@ -334,8 +341,9 @@ export default function DesktopApp() {
           data?.pinned_tools &&
           Array.isArray(data.pinned_tools)
         ) {
-          setPinnedTools(data.pinned_tools);
-          localStorage.setItem('nammu-pinned', JSON.stringify(data.pinned_tools));
+          const pinned = uniqueIds(data.pinned_tools);
+          setPinnedTools(pinned);
+          localStorage.setItem('nammu-pinned', JSON.stringify(pinned));
         }
       })
       .catch(() => {});
@@ -343,7 +351,10 @@ export default function DesktopApp() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          const recent = data.map((h: any) => h.tool_id).slice(0, 10);
+          const recent = uniqueIds(
+            data.map((h: any) => h.tool_id),
+            10,
+          );
           setRecentTools(recent);
           localStorage.setItem('nammu-recent', JSON.stringify(recent));
         }
@@ -353,19 +364,31 @@ export default function DesktopApp() {
       const saved = localStorage.getItem('nammu-settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.themeStyle) {
-          document.documentElement.setAttribute('data-theme', parsed.themeStyle);
+        const theme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
+          ? parsed.themeStyle
+          : 'cyber';
+        document.documentElement.setAttribute('data-theme', theme);
+        if (parsed.themeStyle !== theme) {
+          localStorage.setItem('nammu-settings', JSON.stringify({ ...parsed, themeStyle: theme }));
         }
+        const appearance = parsed.appearance === 'light' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-appearance', appearance);
+        document.documentElement.style.colorScheme = appearance;
         if (parsed.accentColor) {
           document.documentElement.style.setProperty('--os-accent', parsed.accentColor);
+          document.documentElement.style.setProperty('--color-os-accent', parsed.accentColor);
         }
       }
     } catch {}
 
     const handleThemeChange = (e: Event) => {
-      const customEvent = e as CustomEvent<{ theme: string }>;
+      const customEvent = e as CustomEvent<{ theme: string; appearance?: 'light' | 'dark' }>;
       if (customEvent.detail?.theme) {
         document.documentElement.setAttribute('data-theme', customEvent.detail.theme);
+      }
+      if (customEvent.detail?.appearance) {
+        document.documentElement.setAttribute('data-appearance', customEvent.detail.appearance);
+        document.documentElement.style.colorScheme = customEvent.detail.appearance;
       }
     };
     window.addEventListener('nammu-theme-change', handleThemeChange);
@@ -375,8 +398,7 @@ export default function DesktopApp() {
   return (
     <ContextMenuProvider safeArea={contextMenuSafeArea}>
       <div
-        className={`h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'}`}
-        style={{ background: '#050505' }}
+        className={`nammu-os-shell h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'}`}
       >
         {/* Subtle scanline */}
         <div className="os-scanline" />

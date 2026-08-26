@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   MessageSquare,
   Plus,
@@ -6,39 +6,44 @@ import {
   Settings,
   Palette,
   Send,
-  Phone,
-  RotateCw,
-  ZoomIn,
-  ZoomOut,
   Volume2,
   VolumeX,
   ShieldCheck,
   QrCode,
-  Sparkles,
   ExternalLink,
   Edit2,
-  Check,
-  Smile,
-  Hash,
-  Copy,
-  Info,
-  Flame,
 } from 'lucide-react';
 import {
   WhatsAppAccountTab,
   WhatsAppTheme,
-  DEFAULT_WHATSAPP_THEMES,
   getStoredWhatsAppTabs,
   saveStoredWhatsAppTabs,
   getStoredWhatsAppThemes,
   saveStoredWhatsAppThemes,
 } from './services/whatsappStore';
-import { getProxiedUrl } from '../browser/services/browserEngine';
+
+const WHATSAPP_WEB_URL = 'https://web.whatsapp.com/';
+
+function getSafeWhatsAppUrl(candidate?: string) {
+  try {
+    const url = new URL(candidate || WHATSAPP_WEB_URL);
+    if (
+      url.protocol === 'https:' &&
+      (url.hostname === 'web.whatsapp.com' || url.hostname === 'wa.me')
+    ) {
+      return url.toString();
+    }
+  } catch {
+    // Invalid stored links fall back to the official WhatsApp Web URL.
+  }
+
+  return WHATSAPP_WEB_URL;
+}
 
 export default function WhatsAppApp() {
   const [tabs, setTabs] = useState<WhatsAppAccountTab[]>(getStoredWhatsAppTabs);
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id || 'wa-account-1');
-  const [themes, setThemes] = useState<WhatsAppTheme[]>(getStoredWhatsAppThemes);
+  const [themes] = useState<WhatsAppTheme[]>(getStoredWhatsAppThemes);
   const [activeThemeId, setActiveThemeId] = useState<string>('default-dark');
 
   // Modals
@@ -48,11 +53,6 @@ export default function WhatsAppApp() {
   const [isThemeManagerOpen, setIsThemeManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingTab, setEditingTab] = useState<WhatsAppAccountTab | null>(null);
-
-  // Zoom & Viewport
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [isLoading, setIsLoading] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const activeTheme = themes.find((t) => t.id === activeThemeId) || themes[0];
@@ -97,11 +97,12 @@ export default function WhatsAppApp() {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
   };
 
-  const handleReload = () => {
-    if (iframeRef.current) {
-      setIsLoading(true);
-      iframeRef.current.src = getProxiedUrl(activeTab?.url || 'https://web.whatsapp.com/');
-    }
+  const openOfficialWhatsApp = (candidate?: string) => {
+    const link = document.createElement('a');
+    link.href = getSafeWhatsAppUrl(candidate || activeTab?.url);
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.click();
   };
 
   // Direct Click-to-Chat handler (wa.me)
@@ -110,15 +111,13 @@ export default function WhatsAppApp() {
     const cleanPhone = directPhone.replace(/[^0-9]/g, '');
     if (!cleanPhone) return;
 
-    let waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}`;
+    let waUrl = `https://wa.me/${cleanPhone}`;
     if (directMessage.trim()) {
-      waUrl += `&text=${encodeURIComponent(directMessage.trim())}`;
+      waUrl += `?text=${encodeURIComponent(directMessage.trim())}`;
     }
 
     setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, url: waUrl } : t)));
-    if (iframeRef.current) {
-      iframeRef.current.src = getProxiedUrl(waUrl);
-    }
+    openOfficialWhatsApp(waUrl);
     setIsDirectChatOpen(false);
     setDirectPhone('');
     setDirectMessage('');
@@ -129,7 +128,7 @@ export default function WhatsAppApp() {
       className="flex h-full w-full min-h-0 flex-col bg-[#111b21] text-[#e9edef] select-none font-sans overflow-hidden"
       style={{ backgroundColor: activeTheme?.backgroundColor || '#111b21' }}
     >
-      {/* 1. WhatsApp Altus Multi-Account Tab Bar */}
+      {/* 1. WhatsApp account shortcut bar */}
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#0c1317] px-2 gap-1.5 overflow-x-auto os-scrollbar">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {tabs.map((tab) => {
@@ -185,13 +184,13 @@ export default function WhatsAppApp() {
           <button
             onClick={handleAddAccount}
             className="grid h-6 w-6 shrink-0 place-items-center rounded bg-white/[0.04] text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
-            title="Add Another WhatsApp Account"
+            title="Add another WhatsApp shortcut"
           >
             <Plus size={12} />
           </button>
         </div>
 
-        {/* Global Altus Actions */}
+        {/* Companion actions */}
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => setIsDirectChatOpen(true)}
@@ -205,17 +204,17 @@ export default function WhatsAppApp() {
           <button
             onClick={() => setIsThemeManagerOpen(true)}
             className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
-            title="Theme & Custom CSS Manager"
+            title="Companion shell theme"
           >
             <Palette size={12} />
           </button>
 
           <button
-            onClick={handleReload}
+            onClick={() => openOfficialWhatsApp()}
             className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
-            title="Reload WhatsApp Session"
+            title="Open the active shortcut in WhatsApp Web"
           >
-            <RotateCw size={12} className={isLoading ? 'animate-spin text-[#25d366]' : ''} />
+            <ExternalLink size={12} />
           </button>
 
           <button
@@ -230,16 +229,6 @@ export default function WhatsAppApp() {
             )}
           </button>
 
-          <a
-            href="https://web.whatsapp.com/"
-            target="_blank"
-            rel="noreferrer"
-            className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
-            title="Open in Tab"
-          >
-            <ExternalLink size={12} />
-          </a>
-
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="grid h-6 w-6 place-items-center rounded text-[#8696a0] hover:bg-white/[0.08] hover:text-white transition-colors"
@@ -250,22 +239,57 @@ export default function WhatsAppApp() {
         </div>
       </div>
 
-      {/* 2. Main WhatsApp Live Web Stage */}
+      {/* 2. Official WhatsApp session launcher */}
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
-        <div className="flex h-full w-full items-center justify-center overflow-hidden bg-[#111b21] relative">
-          <iframe
-            ref={iframeRef}
-            src={getProxiedUrl(activeTab?.url || 'https://web.whatsapp.com/')}
-            className="h-full w-full border-0 bg-[#111b21]"
-            style={{
-              transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : 'none',
-              transformOrigin: 'top left',
-            }}
-            title="WhatsApp Web"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-            allow="camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture"
-            onLoad={() => setIsLoading(false)}
-          />
+        <div className="flex h-full w-full items-center justify-center overflow-auto bg-[#111b21] p-6 relative os-scrollbar">
+          <div className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#182229]/90 p-6 text-center shadow-2xl backdrop-blur-xl">
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-[#25d366]/30 bg-[#00a884]/15 text-[#25d366] shadow-[0_12px_36px_rgba(0,168,132,0.18)]">
+              <MessageSquare size={27} strokeWidth={1.7} />
+            </div>
+            <h2 className="mt-4 text-[17px] font-semibold text-white">Continue in WhatsApp Web</h2>
+            <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-relaxed text-[#aebac1]">
+              WhatsApp protects its signed-in client from running through embedded web proxies. Open
+              the official site so QR login, messages, calls, cookies, and device permissions work
+              correctly.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => openOfficialWhatsApp()}
+              className="mx-auto mt-5 flex h-9 items-center justify-center gap-2 rounded-lg bg-[#00a884] px-5 text-[12px] font-semibold text-[#071a16] shadow-lg shadow-[#00a884]/10 transition-colors hover:bg-[#06cf9c]"
+            >
+              <ExternalLink size={14} />
+              Open {activeTab?.name || 'WhatsApp Web'}
+            </button>
+
+            <div className="mt-5 grid grid-cols-1 gap-2 text-left sm:grid-cols-3">
+              <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
+                <QrCode size={15} className="text-[#53bdeb]" />
+                <div className="mt-2 text-[10.5px] font-medium text-white">QR login</div>
+                <div className="mt-1 text-[9.5px] leading-relaxed text-[#8696a0]">
+                  Pair with your phone on the official page.
+                </div>
+              </div>
+              <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
+                <ShieldCheck size={15} className="text-[#25d366]" />
+                <div className="mt-2 text-[10.5px] font-medium text-white">No proxy</div>
+                <div className="mt-1 text-[9.5px] leading-relaxed text-[#8696a0]">
+                  Your session stays on web.whatsapp.com.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDirectChatOpen(true)}
+                className="rounded-lg border border-white/[0.07] bg-black/10 p-3 text-left transition-colors hover:border-[#00a884]/40 hover:bg-[#00a884]/10"
+              >
+                <Send size={15} className="text-[#25d366]" />
+                <div className="mt-2 text-[10.5px] font-medium text-white">Direct chat</div>
+                <div className="mt-1 text-[9.5px] leading-relaxed text-[#8696a0]">
+                  Open a phone number without saving it.
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -273,7 +297,7 @@ export default function WhatsAppApp() {
       <footer className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.06] bg-[#0c1317] px-3 font-mono text-[9px] text-[#8696a0]">
         <div className="flex items-center gap-3">
           <span className="text-[#25d366] flex items-center gap-1">
-            <ShieldCheck size={11} /> End-to-End Encrypted
+            <ShieldCheck size={11} /> Official WhatsApp Session
           </span>
           <span>·</span>
           <span>Account: {activeTab?.name}</span>
@@ -282,22 +306,12 @@ export default function WhatsAppApp() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[#53bdeb]">Shortcuts: *bold* _italic_ ~strike~ ```code```</span>
+          <span className="text-[#53bdeb] flex items-center gap-1">
+            <ExternalLink size={10} /> Official web session — no proxy
+          </span>
           <span>·</span>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setZoomLevel((z) => Math.max(70, z - 10))}
-              className="px-1 hover:text-white"
-            >
-              -
-            </button>
-            <span>{zoomLevel}%</span>
-            <button
-              onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
-              className="px-1 hover:text-white"
-            >
-              +
-            </button>
+            <span>web.whatsapp.com</span>
           </div>
         </div>
       </footer>
@@ -374,14 +388,14 @@ export default function WhatsAppApp() {
         </div>
       )}
 
-      {/* MODAL 2: Theme & Custom CSS Manager */}
+      {/* MODAL 2: Companion shell theme */}
       {isThemeManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-lg rounded-lg border border-white/[0.12] bg-[#202c33] p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2 text-[#00a884]">
                 <Palette size={16} />
-                <h3 className="font-semibold text-[13px] text-white">WhatsApp Themes & Styles</h3>
+                <h3 className="font-semibold text-[13px] text-white">WhatsApp Companion Theme</h3>
               </div>
               <button
                 onClick={() => setIsThemeManagerOpen(false)}
@@ -393,7 +407,7 @@ export default function WhatsAppApp() {
 
             <div className="space-y-2">
               <label className="block text-[10px] uppercase font-mono text-[#8696a0]">
-                Choose Theme Palette
+                Choose Shell Palette
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {themes.map((th) => (
@@ -473,7 +487,7 @@ export default function WhatsAppApp() {
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2 text-white">
                 <Settings size={16} />
-                <h3 className="font-semibold text-[13px]">WhatsApp Desktop Settings</h3>
+                <h3 className="font-semibold text-[13px]">WhatsApp Companion Settings</h3>
               </div>
               <button
                 onClick={() => setIsSettingsOpen(false)}
@@ -486,32 +500,32 @@ export default function WhatsAppApp() {
             <div className="space-y-3 text-[11.5px]">
               <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
                 <div>
-                  <div className="text-white font-medium">Multi-Account Isolation</div>
+                  <div className="text-white font-medium">Official Session</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Run separate WhatsApp sessions in tabs
+                    Opens directly on web.whatsapp.com
                   </div>
                 </div>
-                <span className="text-[#25d366] font-mono text-[10px]">ENABLED</span>
+                <span className="text-[#25d366] font-mono text-[10px]">NO PROXY</span>
               </div>
 
               <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
                 <div>
-                  <div className="text-white font-medium">Desktop Notifications</div>
+                  <div className="text-white font-medium">Account Switching</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Receive notifications inside Nammu OS
+                    Managed by WhatsApp inside the official session
                   </div>
                 </div>
-                <span className="text-[#25d366] font-mono text-[10px]">ACTIVE</span>
+                <span className="text-[#53bdeb] font-mono text-[10px]">WHATSAPP</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-white font-medium">End-to-End Security</div>
+                  <div className="text-white font-medium">Device Permissions</div>
                   <div className="text-[9.5px] text-[#8696a0]">
-                    Direct peer-to-peer Signal protocol encryption
+                    Camera and microphone are granted on the official tab
                   </div>
                 </div>
-                <span className="text-[#25d366] font-mono text-[10px]">VERIFIED</span>
+                <span className="text-[#8696a0] font-mono text-[10px]">BROWSER</span>
               </div>
             </div>
 

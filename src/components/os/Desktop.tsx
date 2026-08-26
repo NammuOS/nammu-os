@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Clipboard,
   Cloud,
@@ -14,6 +14,8 @@ import {
   X,
   RefreshCw,
   Maximize,
+  Wifi,
+  BatteryFull,
 } from 'lucide-react';
 import { TOOLS } from '../../lib/toolRegistry';
 import Identity from './Identity';
@@ -48,8 +50,15 @@ export default function Desktop({
   onSearchActiveChange,
 }: DesktopProps) {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [menuBarTime, setMenuBarTime] = useState<Date | null>(null);
   const dragCounter = useRef(0);
   const contextMenu = useContextMenu();
+
+  useEffect(() => {
+    setMenuBarTime(new Date());
+    const timer = window.setInterval(() => setMenuBarTime(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -157,8 +166,7 @@ export default function Desktop({
 
   return (
     <div
-      className="fixed inset-0 overflow-hidden"
-      style={{ background: 'radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #050505 100%)' }}
+      className="os-desktop fixed inset-0 overflow-hidden"
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -180,9 +188,44 @@ export default function Desktop({
       {/* Wallpaper layer */}
       <WallpaperLayer />
 
+      <div className="macos-menu-bar" aria-label="MacOS menu bar">
+        <div className="macos-menu-leading">
+          <span className="macos-menu-mark" aria-hidden="true">
+            ●
+          </span>
+          <strong>Nammu OS</strong>
+          <span>File</span>
+          <span>Edit</span>
+          <span>View</span>
+          <span>Window</span>
+          <span>Help</span>
+        </div>
+        <div className="macos-menu-trailing">
+          <Wifi size={14} strokeWidth={2.2} />
+          <BatteryFull size={16} strokeWidth={2.1} />
+          {menuBarTime && (
+            <>
+              <span>
+                {menuBarTime.toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
+              <strong>
+                {menuBarTime.toLocaleTimeString(undefined, {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </strong>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Subtle grid overlay */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
+        className="desktop-grid absolute inset-0 opacity-[0.03]"
         style={{
           backgroundImage: `linear-gradient(rgba(6,182,212,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.3) 1px, transparent 1px)`,
           backgroundSize: '40px 40px',
@@ -247,7 +290,7 @@ export default function Desktop({
       )}
 
       {/* System status indicator (top right micro) */}
-      <div className="absolute top-2 right-3 flex items-center gap-3">
+      <div className="desktop-system-status absolute top-2 right-3 flex items-center gap-3">
         <div className="flex items-center gap-1.5">
           <div className="status-dot" />
           <span className="text-[9px] text-os-emerald tracking-wider uppercase">Online</span>
@@ -255,7 +298,7 @@ export default function Desktop({
       </div>
 
       {/* Bottom left micro info */}
-      <div className="absolute bottom-11 left-12 text-[9px] text-os-text-dim">
+      <div className="desktop-version absolute bottom-11 left-12 text-[9px] text-os-text-dim">
         <div className="flex items-center gap-1.5">
           <Terminal size={10} />
           <span>v2.4.1 — core stable</span>

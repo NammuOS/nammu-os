@@ -374,9 +374,9 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
         }}
       />
 
-      <div className="pointer-events-none absolute inset-0 opacity-40">
+      <div className="music-atmosphere pointer-events-none absolute inset-0 opacity-40">
         <img src={track.cover} alt="" className="h-full w-full scale-125 object-cover blur-3xl" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#05070b]/40 via-[#05070b]/75 to-[#05070b]" />
+        <div className="music-atmosphere-mask absolute inset-0 bg-gradient-to-b from-[#05070b]/40 via-[#05070b]/75 to-[#05070b]" />
       </div>
 
       <div className="relative flex items-center justify-between px-3 pb-1.5 pt-2.5">

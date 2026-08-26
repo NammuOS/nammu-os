@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { WALLPAPER_CHANGE_EVENT, WALLPAPER_MASK_CHANGE_EVENT, getSavedWallpaper, getSavedWallpaperMask } from '../../lib/wallpapers';
+import {
+  WALLPAPER_CHANGE_EVENT,
+  WALLPAPER_MASK_CHANGE_EVENT,
+  getSavedWallpaper,
+  getSavedWallpaperMask,
+} from '../../lib/wallpapers';
 
 export default function WallpaperLayer() {
   const [src, setSrc] = useState<string | null>(null);
@@ -43,7 +48,7 @@ export default function WallpaperLayer() {
   return (
     <div
       aria-hidden
-      className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ${
+      className={`wallpaper-layer absolute inset-0 pointer-events-none transition-opacity duration-700 ${
         ready ? 'opacity-100' : 'opacity-0'
       }`}
     >
@@ -53,7 +58,7 @@ export default function WallpaperLayer() {
       />
       {maskEnabled && (
         <div
-          className="absolute inset-0"
+          className="wallpaper-mask absolute inset-0"
           style={{
             background: [
               'linear-gradient(180deg, rgba(5,8,13,0.35) 0%, rgba(5,8,13,0.15) 40%, rgba(5,8,13,0.6) 100%)',

@@ -34,7 +34,8 @@ import {
 
 export interface SystemSettings {
   accentColor: string;
-  themeStyle: 'cyber' | 'obsidian' | 'midnight' | 'mosaic';
+  themeStyle: 'cyber' | 'obsidian' | 'midnight' | 'macos';
+  appearance: 'light' | 'dark';
   enableScanlines: boolean;
   blurIntensity: number; // 0 to 20 px
   clockFormat: '24h' | '12h';
@@ -47,6 +48,7 @@ export interface SystemSettings {
 const DEFAULT_SETTINGS: SystemSettings = {
   accentColor: '#4aa3ff',
   themeStyle: 'cyber',
+  appearance: 'dark',
   enableScanlines: false,
   blurIntensity: 12,
   clockFormat: '24h',
@@ -66,13 +68,12 @@ const THEME_OPTIONS = [
     border: '#1e3a8a',
   },
   {
-    id: 'mosaic',
-    name: 'Mosaic (Blueprint)',
-    desc: 'Architectural Swiss design system with Inter, Space Grotesk, and bold accents',
-    bg: '#f8f9fa',
-    accent: '#fde047',
-    border: '#e2e8f0',
-    badge: 'NEW',
+    id: 'macos',
+    name: 'MacOS',
+    desc: 'Liquid glass materials, SF system typography, traffic-light windows, and a floating dock',
+    bg: '#e9e9eb',
+    accent: '#0088ff',
+    border: '#b8b8bd',
   },
   {
     id: 'obsidian',
@@ -94,7 +95,7 @@ const THEME_OPTIONS = [
 
 const ACCENT_COLORS = [
   { name: 'Electric Blue', hex: '#4aa3ff' },
-  { name: 'Mosaic Yellow', hex: '#fde047' },
+  { name: 'System Yellow', hex: '#ffd60a' },
   { name: 'Emerald Green', hex: '#2ee6a6' },
   { name: 'Cyan Glow', hex: '#6ec8d4' },
   { name: 'Amber Gold', hex: '#f59e0b' },
@@ -106,7 +107,17 @@ export function SettingsApp() {
   const [settings, setSettings] = useState<SystemSettings>(() => {
     try {
       const saved = localStorage.getItem('nammu-settings');
-      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      if (!saved) return DEFAULT_SETTINGS;
+      const parsed = JSON.parse(saved);
+      const savedTheme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
+        ? parsed.themeStyle
+        : DEFAULT_SETTINGS.themeStyle;
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        themeStyle: savedTheme,
+        appearance: parsed.appearance === 'light' ? 'light' : 'dark',
+      };
     } catch {
       return DEFAULT_SETTINGS;
     }
@@ -154,13 +165,16 @@ export function SettingsApp() {
 
     // Apply accent CSS variables
     document.documentElement.style.setProperty('--os-accent', settings.accentColor);
+    document.documentElement.style.setProperty('--color-os-accent', settings.accentColor);
     document.documentElement.style.setProperty('--os-accent-rgb', hexToRgb(settings.accentColor));
 
     // Apply theme attribute across the operating system
     document.documentElement.setAttribute('data-theme', settings.themeStyle);
+    document.documentElement.setAttribute('data-appearance', settings.appearance);
+    document.documentElement.style.colorScheme = settings.appearance;
     window.dispatchEvent(
       new CustomEvent('nammu-theme-change', {
-        detail: { theme: settings.themeStyle },
+        detail: { theme: settings.themeStyle, appearance: settings.appearance },
       }),
     );
   }, [settings]);
@@ -291,7 +305,7 @@ export function SettingsApp() {
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-[#05080d] text-[11px] select-none">
+    <div className="settings-app flex h-full min-h-0 bg-[#05080d] text-[11px] select-none">
       {/* Left Settings Navigation */}
       <aside className="w-44 shrink-0 border-r border-white/[0.06] bg-white/[0.012] p-2 flex flex-col justify-between select-none">
         <div className="space-y-1">
@@ -342,12 +356,45 @@ export function SettingsApp() {
               </p>
             </div>
 
+            <div className="settings-card bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <label className="text-[10px] font-medium text-[#c5d4e2] block">
+                    Appearance Mode
+                  </label>
+                  <p className="text-[9.5px] text-[#71889d]">
+                    Light and dark mode apply across every Nammu OS theme.
+                  </p>
+                </div>
+                <div className="appearance-segment flex shrink-0 rounded-lg border border-white/[0.08] bg-black/25 p-0.5">
+                  {(['light', 'dark'] as const).map((mode) => {
+                    const Icon = mode === 'light' ? Sun : Moon;
+                    const active = settings.appearance === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => updateSetting('appearance', mode)}
+                        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-medium capitalize transition-all ${
+                          active
+                            ? 'bg-white/[0.12] text-white shadow-sm'
+                            : 'text-[#71889d] hover:text-[#c5d4e2]'
+                        }`}
+                      >
+                        <Icon size={12} />
+                        {mode}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {/* System UI Theme Architecture Selector */}
-            <div className="bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-2">
+            <div className="settings-card bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] font-medium text-[#c5d4e2] block">
-                  System Theme
-                </label>
+                <label className="text-[10px] font-medium text-[#c5d4e2] block">System Theme</label>
                 <span className="font-mono text-[9px] uppercase tracking-wider text-[#64748b]">
                   Active: {settings.themeStyle}
                 </span>
@@ -360,8 +407,8 @@ export function SettingsApp() {
                       key={thm.id}
                       onClick={() => {
                         updateSetting('themeStyle', thm.id as any);
-                        if (thm.id === 'mosaic') {
-                          updateSetting('accentColor', '#fde047');
+                        if (thm.id === 'macos') {
+                          updateSetting('accentColor', '#0088ff');
                         }
                       }}
                       className={`flex flex-col items-start p-2.5 rounded border transition-all text-left relative ${
@@ -380,14 +427,7 @@ export function SettingsApp() {
                             {thm.name}
                           </span>
                         </div>
-                        {thm.badge && (
-                          <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-[#fde047] text-black border border-black/80">
-                            {thm.badge}
-                          </span>
-                        )}
-                        {isSelected && !thm.badge && (
-                          <Check size={12} className="text-[#2ee6a6]" />
-                        )}
+                        {isSelected && <Check size={12} className="text-[#2ee6a6]" />}
                       </div>
                       <p className="text-[9.5px] text-[#71889d] line-clamp-2 leading-relaxed">
                         {thm.desc}
@@ -453,8 +493,7 @@ export function SettingsApp() {
                   <span
                     className="block h-14 w-full"
                     style={{
-                      background:
-                        'radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #050505 100%)',
+                      background: 'radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #050505 100%)',
                     }}
                   />
                   <span className="flex items-center justify-between gap-1 px-2 py-1.5 bg-white/[0.02]">

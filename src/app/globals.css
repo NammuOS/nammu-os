@@ -151,6 +151,20 @@ button {
     0 0 60px rgba(6, 182, 212, 0.08);
 }
 
+.window-titlebar {
+  background: linear-gradient(180deg, rgba(12, 20, 36, 0.98) 0%, rgba(8, 13, 22, 0.98) 100%);
+  border-bottom: 1px solid rgba(74, 163, 255, 0.16);
+}
+
+.window-content {
+  background: rgba(5, 5, 5, 0.92);
+}
+
+.os-taskbar {
+  background: linear-gradient(180deg, rgba(10, 14, 26, 0.95) 0%, rgba(5, 5, 5, 0.98) 100%);
+  border-top: 1px solid rgba(30, 58, 138, 0.35);
+}
+
 .os-window-docked,
 .os-window-docked.os-window-active {
   box-shadow: none;
@@ -662,408 +676,745 @@ button {
 }
 
 /* ==========================================================================
-   MOSAIC DESIGN SYSTEM (Architectural Swiss Minimalist Theme)
-   Source of Truth: newTheme.html
+   GLOBAL APPEARANCE MODES
+   Light and dark are independent from the selected visual theme.
    ========================================================================== */
 
-/* Architectural Callout Tags & Badges */
-.arch-tag,
-.mosaic-tag {
-  background: #FDE047;
-  color: #000000;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, monospace, sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border: 1px solid #1E293B;
-  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.85);
-  white-space: nowrap;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border-radius: 2px;
+html[data-appearance='dark'] {
+  color-scheme: dark;
 }
 
-.arch-tag:hover,
-.mosaic-tag:hover {
-  transform: translateY(-1px) scale(1.03);
-  box-shadow: 3px 3px 0px #000000;
-  background: #FEF08A;
+html[data-appearance='light'] {
+  color-scheme: light;
+  --color-os-bg: #f2f2f7;
+  --color-os-panel: #fff;
+  --color-os-surface: #e9e9ee;
+  --color-os-border: #b8b8c0;
+  --color-os-text: #1d1d1f;
+  --color-os-text-muted: #62626a;
+  --color-os-text-dim: #8a8a93;
+  --color-os-glass: rgba(255, 255, 255, 0.78);
+  --void: #f2f2f7;
+  --navy: #fff;
+  --ink: #e9e9ee;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-2: rgba(246, 246, 248, 0.88);
+  --line: rgba(60, 60, 67, 0.14);
+  --line-strong: rgba(60, 60, 67, 0.24);
+  --silver: #1d1d1f;
+  --mute: #6e6e73;
+  --faint: #8e8e93;
 }
 
-.arch-tag.active,
-.mosaic-tag.active {
-  background: #000000;
-  color: #FDE047;
-  border-color: #000000;
-  box-shadow: 0 0 0 2px #FDE047, 3px 3px 0 rgba(0, 0, 0, 0.9);
+[data-appearance='light'] body,
+[data-appearance='light'] .nammu-os-shell {
+  background: #f2f2f7;
+  color: #1d1d1f;
 }
 
-/* Blueprint Grid Background */
-.blueprint-grid {
-  background-size: 30px 30px;
-  background-image: 
-    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+[data-appearance='light'] .os-desktop {
+  background:
+    radial-gradient(
+      circle at 22% 18%,
+      rgba(var(--os-accent-rgb, 0, 122, 255), 0.16),
+      transparent 34%
+    ),
+    linear-gradient(145deg, #f8f8fb 0%, #e5e8ef 52%, #d8dce6 100%);
 }
 
-/* Scoped Theme Isolation: Mosaic */
-html[data-theme="mosaic"],
-body[data-theme="mosaic"],
-[data-theme="mosaic"] {
-  --color-os-bg: #F8F9FA;
-  --color-os-panel: #FFFFFF;
-  --color-os-surface: #F8FAFC;
-  --color-os-border: #E2E8F0;
-  --color-os-accent: #FDE047;
-  --color-os-accent-glow: #60A5FA;
-  --color-os-emerald: #4ADE80;
-  --color-os-amber: #FDE047;
-  --color-os-red: #F87171;
-  --color-os-text: #1E293B;
-  --color-os-text-muted: #64748B;
-  --color-os-text-dim: #94A3B8;
-  --color-os-glass: rgba(255, 255, 255, 0.96);
-
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, monospace;
-  --font-mono: 'Space Grotesk', ui-monospace, SFMono-Regular, monospace;
-
-  --void: #F8F9FA;
-  --navy: #FFFFFF;
-  --ink: #F1F5F9;
-  --panel: rgba(255, 255, 255, 0.98);
-  --panel-2: rgba(248, 250, 252, 0.98);
-  --line: #E2E8F0;
-  --line-strong: #CBD5E1;
-  --electric: #1E293B;
-  --electric-dim: rgba(253, 224, 71, 0.35);
-  --cyan: #60A5FA;
-  --emerald: #4ADE80;
-  --silver: #1E293B;
-  --mute: #64748B;
-  --faint: #94A3B8;
-  --warm: #FDE047;
+[data-appearance='light'] .desktop-grid {
+  opacity: 0.018 !important;
+}
+[data-appearance='light'] .wallpaper-mask {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(25, 25, 30, 0.16)) !important;
 }
 
-[data-theme="mosaic"] {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-  color: #1E293B !important;
+[data-appearance='light'] .os-window-chrome {
+  background: rgba(250, 250, 252, 0.94);
+  border-color: rgba(60, 60, 67, 0.2);
+  color: #1d1d1f;
+  box-shadow: 0 18px 48px rgba(37, 40, 48, 0.2);
 }
 
-[data-theme="mosaic"] ::selection {
-  background: #FDE047 !important;
-  color: #000000 !important;
+[data-appearance='light'] .window-titlebar {
+  background: rgba(246, 246, 248, 0.9);
+  border-bottom-color: rgba(60, 60, 67, 0.12);
 }
 
-/* Mosaic Scrollbar */
-[data-theme="mosaic"] ::-webkit-scrollbar,
-[data-theme="mosaic"] .os-scrollbar::-webkit-scrollbar {
-  width: 5px !important;
-  height: 5px !important;
+[data-appearance='light'] .window-title,
+[data-appearance='light'] .os-window-chrome [class*='text-[#c9d7e3]'],
+[data-appearance='light'] .os-window-chrome [class*='text-[#d5e0ea]'],
+[data-appearance='light'] .settings-app [class*='text-[#e8eef4]'],
+[data-appearance='light'] .settings-app [class*='text-[#d5e0ea]'],
+[data-appearance='light'] .settings-app [class*='text-[#c5d4e2]'],
+[data-appearance='light'] .settings-app [class*='text-white'] {
+  color: #1d1d1f !important;
 }
 
-[data-theme="mosaic"] ::-webkit-scrollbar-track,
-[data-theme="mosaic"] .os-scrollbar::-webkit-scrollbar-track {
-  background: #F1F5F9 !important;
+[data-appearance='light'] .os-window-chrome [class*='text-[#71889d]'],
+[data-appearance='light'] .os-window-chrome [class*='text-[#70869a]'],
+[data-appearance='light'] .os-window-chrome [class*='text-[#61788c]'],
+[data-appearance='light'] .settings-app [class*='text-[#71889d]'],
+[data-appearance='light'] .settings-app [class*='text-[#64748b]'],
+[data-appearance='light'] .settings-app [class*='text-[#61788c]'],
+[data-appearance='light'] .settings-app [class*='text-[#476077]'] {
+  color: #6e6e73 !important;
 }
 
-[data-theme="mosaic"] ::-webkit-scrollbar-thumb,
-[data-theme="mosaic"] .os-scrollbar::-webkit-scrollbar-thumb {
-  background: #CBD5E1 !important;
-  border-radius: 4px !important;
+[data-appearance='light'] .window-content,
+[data-appearance='light'] .settings-app,
+[data-appearance='light'] .settings-app [class*='bg-[#05080d]'] {
+  background: #f2f2f7 !important;
 }
 
-[data-theme="mosaic"] ::-webkit-scrollbar-thumb:hover,
-[data-theme="mosaic"] .os-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8 !important;
+[data-appearance='light'] .settings-app aside,
+[data-appearance='light'] .settings-app [class*='bg-[#05070b]'],
+[data-appearance='light'] .settings-app [class*='bg-black/'] {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(60, 60, 67, 0.14) !important;
 }
 
-/* Mosaic Scanline Override */
-[data-theme="mosaic"] .os-scanline {
+[data-appearance='light'] .settings-app [class*='border-white'] {
+  border-color: rgba(60, 60, 67, 0.14) !important;
+}
+
+[data-appearance='light'] .settings-app button:hover {
+  background-color: rgba(60, 60, 67, 0.08);
+}
+
+[data-appearance='light'] .os-taskbar,
+[data-appearance='light'] .os-rail {
+  background: rgba(248, 248, 250, 0.82) !important;
+  border-color: rgba(60, 60, 67, 0.16) !important;
+  color: #1d1d1f;
+}
+
+[data-appearance='light'] .music-sidebar {
+  background: rgba(248, 248, 250, 0.88) !important;
+  border-color: rgba(60, 60, 67, 0.16) !important;
+  color: #1d1d1f;
+}
+
+[data-appearance='light'] .music-sidebar .music-atmosphere {
+  opacity: 0.06 !important;
+}
+
+[data-appearance='light'] .music-sidebar .music-atmosphere-mask {
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.92)) !important;
+}
+
+[data-appearance='light'] .music-sidebar [class*='text-[#e8eef4]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#d5e4f0]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#c5d2de]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#b7c8d6]'] {
+  color: #1d1d1f !important;
+}
+
+[data-appearance='light'] .music-sidebar [class*='text-[#8aa0b2]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#7d90a2]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#5a6d7c]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#4a5c6c]'],
+[data-appearance='light'] .music-sidebar [class*='text-[#3d4c5a]'] {
+  color: #6e6e73 !important;
+}
+
+[data-appearance='light'] .music-sidebar [class*='border-white'] {
+  border-color: rgba(60, 60, 67, 0.14) !important;
+}
+
+[data-appearance='light'] .start-menu-panel,
+[data-appearance='light'] .search-launcher-panel,
+[data-appearance='light'] .glass-panel,
+[data-appearance='light'] [role='menu'],
+[data-appearance='light'] .context-menu-popover {
+  background: rgba(250, 250, 252, 0.9) !important;
+  border-color: rgba(60, 60, 67, 0.16) !important;
+  color: #1d1d1f !important;
+  box-shadow: 0 18px 54px rgba(30, 30, 35, 0.2) !important;
+}
+
+[data-appearance='light'] .start-menu-panel [class*='text-[#d5e0ea]'],
+[data-appearance='light'] .start-menu-panel [class*='text-[#c5d2de]'],
+[data-appearance='light'] .search-launcher-panel [class*='text-os-text'] {
+  color: #1d1d1f !important;
+}
+
+[data-appearance='light'] .start-menu-panel [class*='text-[#8aa0b2]'],
+[data-appearance='light'] .start-menu-panel [class*='text-[#4a5c6c]'] {
+  color: #6e6e73 !important;
+}
+
+[data-appearance='light'] input,
+[data-appearance='light'] textarea,
+[data-appearance='light'] select,
+[data-appearance='light'] .os-input {
+  color: #1d1d1f;
+}
+
+.macos-menu-bar {
+  display: none;
+}
+
+/* ==========================================================================
+   MACOS 27 THEME
+   Adapted from the supplied Figma community library. Library credit stays in
+   source code; no design-library chrome is displayed inside Nammu OS.
+   ========================================================================== */
+
+html[data-theme='macos'] {
+  --color-os-bg: #f2f2f7;
+  --color-os-panel: #fff;
+  --color-os-surface: #e5e5ea;
+  --color-os-border: #8e8e93;
+  --color-os-accent-glow: #64d2ff;
+  --color-os-emerald: #34c759;
+  --color-os-amber: #ffcc00;
+  --color-os-red: #ff453a;
+  --color-os-text: #1d1d1f;
+  --color-os-text-muted: #6e6e73;
+  --color-os-text-dim: #8e8e93;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SFMono-Regular', 'SF Mono', ui-monospace, Menlo, monospace;
+  --mac-window: rgba(250, 250, 252, 0.88);
+  --mac-toolbar: rgba(255, 255, 255, 0.72);
+  --mac-thick: rgba(246, 246, 246, 0.72);
+  --mac-ultra-thick: rgba(236, 236, 236, 0.88);
+  --mac-label: rgba(0, 0, 0, 0.85);
+  --mac-secondary-label: rgba(0, 0, 0, 0.5);
+  --mac-separator: rgba(60, 60, 67, 0.18);
+  --mac-shadow: 0 0 1px rgba(0, 0, 0, 0.8), 0 18px 54px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme='macos'][data-appearance='dark'] {
+  --color-os-bg: #111116;
+  --color-os-panel: #1e1e1e;
+  --color-os-surface: #2c2c2e;
+  --color-os-border: #636366;
+  --color-os-text: rgba(255, 255, 255, 0.92);
+  --color-os-text-muted: rgba(255, 255, 255, 0.58);
+  --color-os-text-dim: rgba(255, 255, 255, 0.28);
+  --mac-window: rgba(30, 30, 32, 0.9);
+  --mac-toolbar: rgba(38, 38, 40, 0.72);
+  --mac-thick: rgba(0, 0, 0, 0.4);
+  --mac-ultra-thick: rgba(0, 0, 0, 0.5);
+  --mac-label: rgba(255, 255, 255, 0.92);
+  --mac-secondary-label: rgba(255, 255, 255, 0.56);
+  --mac-separator: rgba(255, 255, 255, 0.12);
+  --mac-shadow: 0 0 1px rgba(255, 255, 255, 0.18), 0 18px 54px rgba(0, 0, 0, 0.58);
+}
+
+[data-theme='macos'] {
+  font-family: var(--font-sans) !important;
+  letter-spacing: 0;
+}
+
+[data-theme='macos'] body {
+  font-size: 13px;
+  line-height: 16px;
+}
+[data-theme='macos'] ::selection {
+  background: rgba(var(--os-accent-rgb, 0, 136, 255), 0.3);
+  color: inherit;
+}
+
+[data-theme='macos'] .nammu-os-shell,
+[data-theme='macos'] .os-desktop {
+  background:
+    radial-gradient(ellipse at 14% 14%, rgba(255, 210, 142, 0.48), transparent 32%),
+    radial-gradient(ellipse at 80% 28%, rgba(184, 198, 255, 0.44), transparent 38%),
+    linear-gradient(145deg, #d4aa75 0%, #b89183 40%, #70728e 72%, #36384e 100%);
+}
+
+[data-theme='macos'][data-appearance='dark'] .nammu-os-shell,
+[data-theme='macos'][data-appearance='dark'] .os-desktop {
+  background:
+    radial-gradient(ellipse at 28% 24%, rgba(81, 82, 142, 0.68), transparent 40%),
+    radial-gradient(ellipse at 78% 72%, rgba(42, 48, 90, 0.72), transparent 42%),
+    linear-gradient(145deg, #24243c, #11111c 72%);
+}
+
+[data-theme='macos'] .desktop-grid,
+[data-theme='macos'] .os-scanline {
   display: none !important;
 }
 
-/* Mosaic Desktop Base */
-[data-theme="mosaic"] .fixed.inset-0.overflow-hidden {
-  background: #F8F9FA !important;
+[data-theme='macos'] .macos-menu-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 9997;
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 16px 2px 10px;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 13px;
+  font-weight: 590;
+  line-height: 16px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  background: rgba(35, 35, 38, 0.14);
+  box-shadow: inset 0 -0.67px rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(24px) saturate(1.5);
 }
 
-[data-theme="mosaic"] .blueprint-grid,
-[data-theme="mosaic"] .fixed.inset-0.overflow-hidden > div:first-child {
-  opacity: 1 !important;
-  background-size: 30px 30px !important;
-  background-image: 
-    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px) !important;
+[data-theme='macos'][data-appearance='light'] .macos-menu-bar {
+  color: rgba(0, 0, 0, 0.85);
+  text-shadow: 0 1px rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 -0.67px rgba(0, 0, 0, 0.08);
 }
 
-/* Mosaic Identity Branding */
-[data-theme="mosaic"] .nammu-identity h1 {
-  color: #0F172A !important;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, monospace !important;
-  letter-spacing: 0.15em !important;
-  text-shadow: none !important;
+[data-theme='macos'] .macos-menu-leading,
+[data-theme='macos'] .macos-menu-trailing {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  white-space: nowrap;
 }
 
-[data-theme="mosaic"] .nammu-identity .wordmark-os {
-  color: #000000 !important;
-  background: #FDE047 !important;
+[data-theme='macos'] .macos-menu-leading {
+  gap: 17px;
+}
+[data-theme='macos'] .macos-menu-leading strong {
+  font-weight: 860;
+}
+[data-theme='macos'] .macos-menu-mark {
+  font-size: 13px;
+}
+[data-theme='macos'] .macos-menu-trailing {
+  gap: 10px;
+}
+[data-theme='macos'] .desktop-system-status,
+[data-theme='macos'] .desktop-version {
+  display: none;
+}
+
+[data-theme='macos'] .wallpaper-mask {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.18)) !important;
+}
+
+[data-theme='macos'] .nammu-identity h1 {
+  font-family: var(--font-display) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.035em !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28) !important;
+}
+
+[data-theme='macos'] .nammu-identity .wordmark-os {
+  color: inherit !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important;
+  border-radius: 999px !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.2) !important;
+  margin-left: 6px !important;
   padding: 2px 8px !important;
-  border-radius: 2px !important;
-  border: 1px solid #1E293B !important;
-  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.85) !important;
-  text-shadow: none !important;
-  margin-left: 8px !important;
 }
 
-[data-theme="mosaic"] .nammu-identity .dark-mask {
-  opacity: 0.1 !important;
-  filter: grayscale(100%) contrast(120%) !important;
+[data-theme='macos'] .os-window-chrome {
+  background: var(--mac-window) !important;
+  border: 0.67px solid rgba(0, 0, 0, 0.22) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--mac-shadow) !important;
+  color: var(--mac-label) !important;
+  backdrop-filter: blur(30px) saturate(1.55) !important;
 }
 
-[data-theme="mosaic"] .nammu-identity .status-dot {
-  background: #4ADE80 !important;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6) !important;
+[data-theme='macos'][data-appearance='dark'] .os-window-chrome {
+  border-color: rgba(255, 255, 255, 0.16) !important;
 }
 
-/* Mosaic Window Chrome */
-[data-theme="mosaic"] .os-window-chrome {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
-  backdrop-filter: none !important;
-  color: #1E293B !important;
-  border-radius: 6px !important;
-}
-
-[data-theme="mosaic"] .os-window-active {
-  border-color: #CBD5E1 !important;
-  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
-}
-
-[data-theme="mosaic"] .os-window-docked {
+[data-theme='macos'] .os-window-docked {
   border-radius: 0 !important;
   box-shadow: none !important;
 }
 
-[data-theme="mosaic"] .os-window-chrome > div:first-child {
-  background: #F8FAFC !important;
-  border-bottom: 1px solid #E2E8F0 !important;
-  color: #0F172A !important;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, monospace !important;
+[data-theme='macos'] .window-titlebar {
+  height: 44px !important;
+  justify-content: flex-start !important;
+  gap: 16px;
+  padding: 8px 12px !important;
+  background: var(--mac-toolbar) !important;
+  border-bottom: 0.67px solid var(--mac-separator) !important;
+  backdrop-filter: blur(30px) saturate(1.5);
 }
 
-[data-theme="mosaic"] .os-window-chrome > div:first-child span {
-  color: #0F172A !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.02em !important;
-  font-size: 11px !important;
+[data-theme='macos'] .window-controls {
+  order: -1;
+  gap: 9px !important;
+  padding-left: 0 !important;
 }
 
-[data-theme="mosaic"] .os-window-chrome > div:first-child button {
-  color: #64748B !important;
-  border-radius: 3px !important;
+[data-theme='macos'] .window-title-group {
+  gap: 0 !important;
+}
+[data-theme='macos'] .window-focus-dot,
+[data-theme='macos'] .window-snap-control,
+[data-theme='macos'] .corner-accent {
+  display: none !important;
 }
 
-[data-theme="mosaic"] .os-window-chrome > div:first-child button:hover {
-  background: #E2E8F0 !important;
-  color: #0F172A !important;
-}
-
-/* Mosaic Taskbar */
-[data-theme="mosaic"] .fixed.bottom-0.left-0.right-0 {
-  background: #FFFFFF !important;
-  border-top: 1px solid #E2E8F0 !important;
-  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04) !important;
-  color: #1E293B !important;
-}
-
-[data-theme="mosaic"] .taskbar-button {
-  color: #64748B !important;
-  border-radius: 4px !important;
-}
-
-[data-theme="mosaic"] .taskbar-button:hover {
-  background: #F1F5F9 !important;
-  border-color: #E2E8F0 !important;
-  color: #0F172A !important;
-}
-
-[data-theme="mosaic"] .taskbar-button.active {
-  background: #F8FAFC !important;
-  border-color: #CBD5E1 !important;
-  color: #0F172A !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-}
-
-[data-theme="mosaic"] .taskbar-button.active div.bg-os-accent,
-[data-theme="mosaic"] .taskbar-button div.bg-os-accent {
-  background: #FDE047 !important;
-  border: 1px solid #1E293B !important;
-  height: 2px !important;
-}
-
-[data-theme="mosaic"] .taskbar-button svg.text-os-accent {
-  color: #0F172A !important;
-}
-
-/* Mosaic Navigation Rail */
-[data-theme="mosaic"] aside.fixed.left-0 {
-  background: #FFFFFF !important;
-  border-right: 1px solid #E2E8F0 !important;
-  box-shadow: 1px 0 3px rgba(0, 0, 0, 0.04) !important;
-  color: #1E293B !important;
-}
-
-[data-theme="mosaic"] aside.fixed.left-0 button {
-  color: #64748B !important;
-}
-
-[data-theme="mosaic"] aside.fixed.left-0 button:hover {
-  background: #F1F5F9 !important;
-  color: #0F172A !important;
-}
-
-[data-theme="mosaic"] aside.fixed.left-0 button.bg-white\/\[0\.08\],
-[data-theme="mosaic"] aside.fixed.left-0 button.text-white {
-  background: #FDE047 !important;
-  color: #000000 !important;
-  border: 1px solid #1E293B !important;
-  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.85) !important;
+[data-theme='macos'] .window-title {
+  color: var(--mac-label) !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
+  line-height: 15px !important;
+  letter-spacing: 0 !important;
 }
 
-/* Mosaic Start Menu & Launcher */
-[data-theme="mosaic"] .fixed.inset-x-0.bottom-\[32px\] > div,
-[data-theme="mosaic"] .search-launcher-panel {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
-  color: #1E293B !important;
-  backdrop-filter: none !important;
+[data-theme='macos'] .window-control {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px;
+  border: 0.5px solid rgba(0, 0, 0, 0.38);
+  border-radius: 999px !important;
+  box-shadow: inset 0 0 0 0.25px rgba(255, 255, 255, 0.42);
+}
+
+[data-theme='macos'] .window-control svg {
+  width: 9px;
+  height: 9px;
+  color: rgba(0, 0, 0, 0.7) !important;
+  opacity: 0;
+}
+
+[data-theme='macos'] .window-controls:hover .window-control svg {
+  opacity: 0.68;
+}
+[data-theme='macos'] .window-close-control {
+  order: 1;
+  background: #ff5c60 !important;
+}
+[data-theme='macos'] .window-minimize-control {
+  order: 2;
+  background: #fac800 !important;
+}
+[data-theme='macos'] .window-maximize-control {
+  order: 3;
+  background: #35c759 !important;
+}
+[data-theme='macos'] .window-content {
+  background: var(--mac-window) !important;
+}
+
+[data-theme='macos'] .os-taskbar {
+  left: calc(50% - 146px) !important;
+  right: auto !important;
+  bottom: 12px !important;
+  width: min(900px, calc(100vw - 340px));
+  height: 60px !important;
+  transform: translateX(-50%);
+  gap: 4px !important;
+  padding: 7px 10px !important;
+  background:
+    linear-gradient(rgba(77, 77, 77, 0.3), rgba(77, 77, 77, 0.3)), rgba(255, 255, 255, 0.16) !important;
+  border: 0.67px solid rgba(255, 255, 255, 0.36) !important;
+  border-radius: 18px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.28),
+    0 12px 34px rgba(0, 0, 0, 0.28) !important;
+  backdrop-filter: blur(30px) saturate(1.65) !important;
+}
+
+[data-theme='macos'] .music-sidebar {
+  top: 38px !important;
+  right: 10px !important;
+  bottom: 84px !important;
+  width: 282px !important;
+  border: 0.67px solid rgba(255, 255, 255, 0.26) !important;
+  border-radius: 16px !important;
+  background: var(--mac-thick) !important;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(30px) saturate(1.5) !important;
+}
+
+[data-theme='macos'][data-appearance='dark'] .os-taskbar {
+  background: rgba(26, 26, 28, 0.54) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-theme='macos'] .taskbar-button,
+[data-theme='macos'] .os-taskbar > button {
+  min-width: 42px;
+  height: 44px !important;
+  justify-content: center;
+  padding: 7px !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+}
+
+[data-theme='macos'] .taskbar-button:hover,
+[data-theme='macos'] .os-taskbar > button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-4px) scale(1.06);
+}
+
+[data-theme='macos'] .taskbar-button.active {
+  background: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 0 0 0.67px rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-theme='macos'] .taskbar-button svg {
+  width: 21px;
+  height: 21px;
+}
+[data-theme='macos'] .taskbar-button > span {
+  display: none !important;
+}
+[data-theme='macos'] .os-taskbar > div:last-child {
+  display: none;
+}
+
+[data-theme='macos'] .taskbar-button.pinned::after {
+  bottom: -2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--mac-label);
+}
+
+[data-theme='macos'] .os-rail {
+  top: 50% !important;
+  bottom: auto !important;
+  left: 10px !important;
+  width: 44px !important;
+  max-height: calc(100vh - 180px);
+  transform: translateY(-50%);
+  padding: 7px 0 !important;
+  background: var(--mac-thick) !important;
+  border: 0.67px solid rgba(255, 255, 255, 0.28) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(30px) saturate(1.5) !important;
+}
+
+[data-theme='macos'] .os-rail button {
+  width: 32px !important;
+  height: 32px !important;
   border-radius: 8px !important;
 }
 
-[data-theme="mosaic"] .search-launcher-panel input,
-[data-theme="mosaic"] .cmd-input {
-  background: #F8FAFC !important;
-  border: 1px solid #CBD5E1 !important;
-  color: #0F172A !important;
-  font-family: 'Inter', sans-serif !important;
+[data-theme='macos'] .os-rail button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
 }
 
-[data-theme="mosaic"] .search-launcher-panel input:focus,
-[data-theme="mosaic"] .cmd-input:focus {
-  border-color: #1E293B !important;
-  box-shadow: 0 0 0 2px rgba(253, 224, 71, 0.4) !important;
+[data-theme='macos'] .start-menu-panel,
+[data-theme='macos'] .search-launcher-panel,
+[data-theme='macos'] .glass-panel,
+[data-theme='macos'] [role='menu'],
+[data-theme='macos'] .context-menu-popover {
+  background: var(--mac-thick) !important;
+  border: 0.67px solid rgba(255, 255, 255, 0.28) !important;
+  border-radius: 12px !important;
+  color: var(--mac-label) !important;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(30px) saturate(1.55) !important;
 }
 
-[data-theme="mosaic"] .tool-tile {
-  background: #F8FAFC !important;
-  border: 1px solid #E2E8F0 !important;
-  color: #1E293B !important;
-  border-radius: 6px !important;
+[data-theme='macos'] .start-menu-panel {
+  position: fixed !important;
+  bottom: 84px !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  border-radius: 16px !important;
 }
 
-[data-theme="mosaic"] .tool-tile:hover {
-  background: #F1F5F9 !important;
-  border-color: #CBD5E1 !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+[data-theme='macos'] .search-launcher-shell {
+  bottom: 84px !important;
+  left: 60px !important;
+  right: 60px !important;
 }
 
-[data-theme="mosaic"] .launcher-category-tab {
-  color: #64748B !important;
-  font-family: 'Space Grotesk', monospace !important;
-  text-transform: uppercase !important;
+[data-theme='macos'] .tool-tile {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 0.67px solid var(--mac-separator) !important;
+  border-radius: 10px !important;
+}
+
+[data-theme='macos'] .tool-tile:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(var(--os-accent-rgb, 0, 136, 255), 0.42) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='macos'] .launcher-category-tab {
+  min-height: 24px;
+  padding: 4px 10px !important;
+  border-radius: 7px !important;
+  color: var(--mac-secondary-label) !important;
+  font-size: 11px !important;
+  font-weight: 590 !important;
+}
+
+[data-theme='macos'] .launcher-category-tab.active {
+  color: #fff !important;
+  background: var(--os-accent, #0088ff) !important;
+  border-color: transparent !important;
+}
+
+[data-theme='macos'] .os-btn {
+  min-height: 28px;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.18) !important;
+  border: 0.67px solid var(--mac-separator) !important;
+  border-radius: 7px !important;
+  color: var(--mac-label) !important;
+  font-size: 13px;
+  font-weight: 590;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='macos'] .os-btn:hover {
+  background: rgba(255, 255, 255, 0.28) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='macos'] .os-btn-primary {
+  color: #fff !important;
+  background: var(--os-accent, #0088ff) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme='macos'] .os-input,
+[data-theme='macos'] input,
+[data-theme='macos'] textarea,
+[data-theme='macos'] select {
+  border-radius: 7px !important;
+}
+
+[data-theme='macos'] .os-input {
+  background: rgba(255, 255, 255, 0.48) !important;
+  border: 0.67px solid var(--mac-separator) !important;
+  color: var(--mac-label) !important;
+}
+
+[data-theme='macos'][data-appearance='dark'] .os-input {
+  background: rgba(0, 0, 0, 0.24) !important;
+}
+
+[data-theme='macos'] .os-input:focus,
+[data-theme='macos'] input:focus,
+[data-theme='macos'] textarea:focus,
+[data-theme='macos'] select:focus {
+  border-color: var(--os-accent, #0088ff) !important;
+  box-shadow: 0 0 0 3px rgba(var(--os-accent-rgb, 0, 136, 255), 0.2) !important;
+  outline: 0;
+}
+
+[data-theme='macos'] .settings-app {
+  background: var(--mac-window) !important;
+  color: var(--mac-label);
+  font-size: 13px !important;
+}
+
+[data-theme='macos'] .settings-app .font-mono {
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='macos'] .settings-app [class*='text-[8px]'] {
   font-size: 10px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.05em !important;
 }
 
-[data-theme="mosaic"] .launcher-category-tab.active {
-  background: #FDE047 !important;
-  color: #000000 !important;
-  border: 1px solid #1E293B !important;
-  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.8) !important;
+[data-theme='macos'] .settings-app [class*='text-[9px]'],
+[data-theme='macos'] .settings-app [class*='text-[9.5px]'] {
+  font-size: 11px !important;
+  line-height: 14px;
 }
 
-/* Mosaic OS Buttons & Inputs */
-[data-theme="mosaic"] .os-btn {
-  background: #F8FAFC !important;
-  border: 1px solid #E2E8F0 !important;
-  color: #1E293B !important;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, monospace !important;
-  font-weight: 600 !important;
-  border-radius: 4px !important;
+[data-theme='macos'] .settings-app [class*='text-[10px]'],
+[data-theme='macos'] .settings-app [class*='text-[10.5px]'] {
+  font-size: 12px !important;
+  line-height: 15px;
 }
 
-[data-theme="mosaic"] .os-btn:hover {
-  background: #F1F5F9 !important;
-  border-color: #CBD5E1 !important;
-  color: #0F172A !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+[data-theme='macos'] .settings-app [class*='text-[11px]'] {
+  font-size: 13px !important;
+  line-height: 16px;
 }
 
-[data-theme="mosaic"] .os-btn-primary {
-  background: #FDE047 !important;
-  border: 1px solid #1E293B !important;
-  color: #000000 !important;
-  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.85) !important;
+[data-theme='macos'] .settings-app aside {
+  width: 190px;
+  padding: 10px !important;
+  background: var(--mac-thick) !important;
+  border-color: var(--mac-separator) !important;
+  backdrop-filter: blur(30px) saturate(1.45);
 }
 
-[data-theme="mosaic"] .os-btn-primary:hover {
-  background: #FEF08A !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 3px 3px 0px #000000 !important;
+[data-theme='macos'] .settings-app main {
+  max-width: 720px;
+  padding: 20px 24px !important;
 }
 
-[data-theme="mosaic"] .os-input {
-  background: #FFFFFF !important;
-  border: 1px solid #CBD5E1 !important;
-  color: #1E293B !important;
-  font-family: 'Inter', sans-serif !important;
-  border-radius: 4px !important;
+[data-theme='macos'] .settings-app .settings-card,
+[data-theme='macos'] .settings-app [class*='bg-[#05070b]'] {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--mac-separator) !important;
+  border-radius: 12px !important;
 }
 
-[data-theme="mosaic"] .os-input:focus {
-  border-color: #60A5FA !important;
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2) !important;
+[data-theme='macos'] .settings-app button {
+  border-radius: 8px;
 }
 
-[data-theme="mosaic"] .os-panel,
-[data-theme="mosaic"] .glass-panel {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  color: #1E293B !important;
-  backdrop-filter: none !important;
+[data-theme='macos'] .appearance-segment {
+  background: rgba(118, 118, 128, 0.16) !important;
+  border: 0 !important;
+  border-radius: 8px !important;
 }
 
-/* Mosaic Context Menu & Popovers */
-[data-theme="mosaic"] [role="menu"],
-[data-theme="mosaic"] .context-menu-popover {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12) !important;
-  color: #1E293B !important;
-  font-family: 'Inter', sans-serif !important;
-  border-radius: 6px !important;
+[data-theme='macos'] .appearance-segment button[aria-pressed='true'] {
+  color: var(--mac-label) !important;
+  background: var(--mac-ultra-thick) !important;
+  box-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.24) !important;
 }
 
-[data-theme="mosaic"] [role="menuitem"]:hover,
-[data-theme="mosaic"] .context-menu-item:hover {
-  background: #F1F5F9 !important;
-  color: #0F172A !important;
+[data-theme='macos'] ::-webkit-scrollbar,
+[data-theme='macos'] .os-scrollbar::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
 }
 
-/* Mosaic Music & Workspace Panels */
-[data-theme="mosaic"] .music-sidebar,
-[data-theme="mosaic"] .music-panel-open {
-  background: #FFFFFF !important;
-  border-left: 1px solid #E2E8F0 !important;
-  color: #1E293B !important;
+[data-theme='macos'] ::-webkit-scrollbar-track,
+[data-theme='macos'] .os-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
 }
 
+[data-theme='macos'] ::-webkit-scrollbar-thumb,
+[data-theme='macos'] .os-scrollbar::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  background: rgba(0, 0, 0, 0.42) !important;
+  border: 3px solid transparent;
+  border-radius: 999px !important;
+  background-clip: padding-box !important;
+}
+
+[data-theme='macos'][data-appearance='dark'] ::-webkit-scrollbar-thumb,
+[data-theme='macos'][data-appearance='dark'] .os-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.34) !important;
+}
+
+[data-theme='macos'] ::-webkit-scrollbar-thumb:hover,
+[data-theme='macos'] .os-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(var(--os-accent-rgb, 0, 136, 255), 0.7) !important;
+}
+
+@media (max-width: 760px) {
+  [data-theme='macos'] .os-taskbar {
+    left: 50% !important;
+    width: calc(100vw - 16px);
+    bottom: 8px !important;
+  }
+
+  [data-theme='macos'] .os-rail {
+    display: none;
+  }
+  [data-theme='macos'] .os-taskbar > div:nth-last-child(-n + 2) {
+    display: none;
+  }
+  [data-theme='macos'] .settings-app aside {
+    width: 150px;
+  }
+}
