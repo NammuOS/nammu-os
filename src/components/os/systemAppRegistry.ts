@@ -157,7 +157,7 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     title: 'Projects',
     icon: Layers3,
     startMenu: true,
-    keywords: ['projects', 'environments', 'workspaces', 'tasks', 'todo', 'kanban'],
+    keywords: ['projects', 'portfolio', 'showcase', 'websites', 'developer work', 'case studies'],
   },
   {
     id: 'ai',

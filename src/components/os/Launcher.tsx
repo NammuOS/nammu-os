@@ -63,7 +63,7 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   maps: 'Interactive maps with place search, map styles, pins, and current location',
   calendar: 'Calendar, events and scheduled tasks',
   settings: 'System configuration, appearance and performance',
-  projects: 'Project directories and repository manager',
+  projects: 'Portfolio of shipped websites and application work',
   ai: 'Nammu OS AI copilot and assistant',
 };
 

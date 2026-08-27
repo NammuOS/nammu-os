@@ -418,13 +418,19 @@ export function SettingsApp() {
 
     const keys = [
       'nammu-notes',
-      'nammu-projects',
       'nammu-calendar-events',
       'nammu-calc-history',
       'nammu-settings',
       'nammu-pinned-tools',
       'nammu-volume',
     ];
+
+    if (typeof localStorage === 'undefined') {
+      return {
+        totalBytes,
+        items: keys.map((key) => ({ key, bytes: 0, count: '—' })),
+      };
+    }
 
     keys.forEach((k) => {
       const val = localStorage.getItem(k) || '';
@@ -492,7 +498,7 @@ export function SettingsApp() {
   const handleFactoryReset = () => {
     if (
       window.confirm(
-        'Are you sure you want to reset all Nammu OS settings, notes, calendar events, and projects to factory defaults?',
+        'Are you sure you want to reset all Nammu OS settings, notes, and calendar events to factory defaults?',
       )
     ) {
       const keysToRemove: string[] = [];
@@ -1526,8 +1532,7 @@ export function SettingsApp() {
             <div className="bg-[#05070b] border border-[#f43f5e]/20 p-3 rounded space-y-2">
               <div className="text-[10.5px] text-[#fda4af] font-medium">Factory Reset</div>
               <p className="text-[9.5px] text-[#8aa0b2]">
-                Erase all customized notes, calendar entries, active project workflows, and
-                settings.
+                Erase all customized notes, calendar entries, and settings.
               </p>
               <button
                 onClick={handleFactoryReset}

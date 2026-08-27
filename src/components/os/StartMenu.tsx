@@ -88,16 +88,14 @@ export default function StartMenu({
 
   const reorderApp = (sourceId: SystemAppId, targetId: SystemAppId) => {
     if (sourceId === targetId) return;
-    setPreferences((current) => {
-      return saveStartMenuPreferences({
-        ...current,
-        order: reorderIds(current.order, sourceId, targetId),
-      });
+    saveStartMenuPreferences({
+      ...preferences,
+      order: reorderIds(preferences.order, sourceId, targetId),
     });
   };
 
   const resetAppOrder = () => {
-    setPreferences(saveStartMenuPreferences({ order: DEFAULT_START_MENU_ORDER, hidden: [] }));
+    saveStartMenuPreferences({ order: DEFAULT_START_MENU_ORDER, hidden: [] });
   };
 
   const startMenuContext: ContextMenuEntry[] = [

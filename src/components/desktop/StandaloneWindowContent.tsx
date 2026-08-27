@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { findToolById } from '../../lib/toolRegistry';
 import { SYSTEM_APPS } from '../os/systemAppRegistry';
 import { SystemAppContent } from '../os/SystemApps';
@@ -14,12 +14,21 @@ interface StandaloneWindowContentProps {
   id: string;
 }
 
+const subscribeToClientReady = () => () => {};
+const getClientReadySnapshot = () => true;
+const getServerReadySnapshot = () => false;
+
 export default function StandaloneWindowContent({ kind, id }: StandaloneWindowContentProps) {
   const systemApp = kind === 'app' ? SYSTEM_APPS.find((app) => app.id === id) : undefined;
   const tool = kind === 'tool' ? findToolById(id) : undefined;
   const ToolComponent = tool ? TOOL_COMPONENTS[tool.component] : undefined;
   const title = systemApp?.title || tool?.name || 'Unavailable';
   const safeArea = useMemo(() => ({ left: 0, right: 0, top: 0, bottom: 0, margin: 6 }), []);
+  const clientReady = useSyncExternalStore(
+    subscribeToClientReady,
+    getClientReadySnapshot,
+    getServerReadySnapshot,
+  );
 
   useEffect(() => {
     document.title = `${title} — Nammu OS`;
@@ -61,7 +70,17 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
   return (
     <ContextMenuProvider safeArea={safeArea}>
       <main className="nammu-os-shell h-dvh w-screen overflow-hidden bg-[#05070b]">
-        {systemApp ? (
+        {!clientReady ? (
+          <div className="grid h-full place-items-center bg-[#05070b] px-6 text-center">
+            <div className="flex flex-col items-center">
+              <span className="mb-3 h-5 w-5 animate-spin rounded-full border border-os-accent/20 border-t-os-accent" />
+              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-os-text-muted">
+                Opening {title}
+              </div>
+              <div className="mt-1 text-[9px] text-os-text-dim">Loading local workspace state…</div>
+            </div>
+          </div>
+        ) : systemApp ? (
           <SystemAppContent appId={systemApp.id} />
         ) : ToolComponent ? (
           <div

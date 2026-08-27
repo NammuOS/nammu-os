@@ -161,7 +161,7 @@ export default function Identity({
               size={10}
               className="text-electric/80 transition-colors group-hover:text-[#72b5ff]"
             />{' '}
-            Open a project
+            View projects
           </button>
           <button
             onClick={() => {
