@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   Settings,
   SlidersHorizontal,
-  Terminal,
   FileText,
   Code,
   Wrench,
@@ -294,14 +293,6 @@ export default function Desktop({
         <div className="flex items-center gap-1.5">
           <div className="status-dot" />
           <span className="text-[9px] text-os-emerald tracking-wider uppercase">Online</span>
-        </div>
-      </div>
-
-      {/* Bottom left micro info */}
-      <div className="desktop-version absolute bottom-11 left-12 text-[9px] text-os-text-dim">
-        <div className="flex items-center gap-1.5">
-          <Terminal size={10} />
-          <span>v2.4.1 — core stable</span>
         </div>
       </div>
     </div>

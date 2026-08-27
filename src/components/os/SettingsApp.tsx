@@ -6,6 +6,9 @@ import {
   Database,
   Info,
   Check,
+  Bell,
+  Folder,
+  Grid3X3,
   Trash2,
   Download,
   Upload,
@@ -13,6 +16,18 @@ import {
   Sun,
   VolumeX,
   Image as ImageIcon,
+  Music2,
+  Shield,
+  ExternalLink,
+  GripVertical,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  UserRound,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  LayoutGrid,
 } from 'lucide-react';
 import {
   WALLPAPERS,
@@ -29,31 +44,67 @@ import {
   type MatrixWallpaperVariant,
 } from '../../lib/wallpapers';
 import { useMasterVolume } from '../../hooks/useMasterVolume';
+import {
+  DEFAULT_ICON_SETTINGS,
+  applyIconSettings,
+  normalizeIconSettings,
+  type IconSettings,
+} from '../../lib/iconSettings';
+import {
+  DEFAULT_MUSIC_SETTINGS,
+  MUSIC_SETTINGS_CHANGE_EVENT,
+  MUSIC_VOLUME_CHANGE_EVENT,
+  getSavedMusicSettings,
+  getSavedMusicVolume,
+  saveMusicSettings,
+  saveMusicVolume,
+  type MusicPlayerSettings,
+} from '../../lib/musicSettings';
+import {
+  DEFAULT_START_MENU_ORDER,
+  START_MENU_ORDER_CHANGE_EVENT,
+  getStartMenuPreferences,
+  reorderIds,
+  saveStartMenuPreferences,
+  type StartMenuPreferences,
+} from '../../lib/appOrder';
+import { SYSTEM_APPS, type SystemAppId } from './systemAppRegistry';
+import {
+  createLockProfile,
+  getStoredLockProfile,
+  normalizeLockUsername,
+  saveLockState,
+  saveLockProfile,
+  type OsLockProfile,
+} from '../../lib/osLock';
 
-export interface SystemSettings {
+export interface SystemSettings extends IconSettings {
   accentColor: string;
   themeStyle: 'cyber' | 'obsidian' | 'midnight' | 'macos';
   appearance: 'light' | 'dark';
   enableScanlines: boolean;
-  blurIntensity: number; // 0 to 20 px
-  clockFormat: '24h' | '12h';
   showSeconds: boolean;
   showWeekday: boolean;
   uiSounds: boolean;
   reduceMotion: boolean;
+  autoLockMinutes: number;
+  lockShowDate: boolean;
+  lockShowProfile: boolean;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
   accentColor: '#4aa3ff',
   themeStyle: 'cyber',
   appearance: 'dark',
-  enableScanlines: false,
-  blurIntensity: 12,
-  clockFormat: '24h',
+  enableScanlines: true,
   showSeconds: false,
   showWeekday: true,
   uiSounds: true,
   reduceMotion: false,
+  autoLockMinutes: 0,
+  lockShowDate: true,
+  lockShowProfile: true,
+  ...DEFAULT_ICON_SETTINGS,
 };
 
 const THEME_OPTIONS = [
@@ -101,18 +152,83 @@ const ACCENT_COLORS = [
   { name: 'Crimson Rose', hex: '#f43f5e' },
 ];
 
+const CREDITS = [
+  {
+    product: 'Browser engine',
+    project: 'HeyPuter/firefox-wasm',
+    url: 'https://github.com/HeyPuter/firefox-wasm',
+  },
+  {
+    product: 'Cloud foundation',
+    project: 'dimartarmizi/OmniCloud',
+    url: 'https://github.com/dimartarmizi/OmniCloud',
+  },
+  {
+    product: 'Synth Rain wallpaper',
+    project: 'Saganaki22/SynthRain',
+    url: 'https://github.com/Saganaki22/SynthRain',
+  },
+  {
+    product: 'Chaos Flow wallpaper',
+    project: 'Yufok1/Matrix-Rain-HTML-Background',
+    url: 'https://github.com/Yufok1/Matrix-Rain-HTML-Background',
+  },
+  { product: 'Map rendering', project: 'Leaflet', url: 'https://leafletjs.com/' },
+  {
+    product: 'Map data',
+    project: 'OpenStreetMap contributors',
+    url: 'https://www.openstreetmap.org/copyright',
+  },
+  { product: 'Map tile styles', project: 'CARTO', url: 'https://carto.com/attributions' },
+  {
+    product: 'Browser transport',
+    project: 'Mercury Workshop Wisp',
+    url: 'https://github.com/MercuryWorkshop/wisp-js',
+  },
+  { product: 'Interface icons', project: 'Lucide', url: 'https://lucide.dev/' },
+  { product: 'Application framework', project: 'Next.js + React', url: 'https://nextjs.org/' },
+  { product: 'PDF processing', project: 'pdf-lib + jsPDF', url: 'https://pdf-lib.js.org/' },
+  {
+    product: 'QR generation',
+    project: 'node-qrcode',
+    url: 'https://github.com/soldair/node-qrcode',
+  },
+  { product: 'CSV processing', project: 'Papa Parse', url: 'https://www.papaparse.com/' },
+  { product: 'Markdown rendering', project: 'Marked', url: 'https://marked.js.org/' },
+  { product: 'Motion primitives', project: 'Motion', url: 'https://motion.dev/' },
+  {
+    product: 'Database and authentication SDK',
+    project: 'Supabase JavaScript',
+    url: 'https://github.com/supabase/supabase-js',
+  },
+  {
+    product: 'Cloud integrations',
+    project: 'Dropbox SDK + AWS SDK',
+    url: 'https://github.com/dropbox/dropbox-sdk-js',
+  },
+  { product: 'MEGA integration', project: 'megajs', url: 'https://mega.js.org/' },
+  {
+    product: 'Local database',
+    project: 'better-sqlite3 + Drizzle ORM',
+    url: 'https://github.com/WiseLibs/better-sqlite3',
+  },
+] as const;
+
 export function SettingsApp() {
   const [settings, setSettings] = useState<SystemSettings>(() => {
     try {
       const saved = localStorage.getItem('nammu-settings');
       if (!saved) return DEFAULT_SETTINGS;
       const parsed = JSON.parse(saved);
+      delete parsed.blurIntensity;
+      delete parsed.clockFormat;
       const savedTheme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
         ? parsed.themeStyle
         : DEFAULT_SETTINGS.themeStyle;
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
+        ...normalizeIconSettings(parsed),
         themeStyle: savedTheme,
         appearance: parsed.appearance === 'light' ? 'light' : 'dark',
       };
@@ -122,9 +238,34 @@ export function SettingsApp() {
   });
 
   const [activeTab, setActiveTab] = useState<
-    'appearance' | 'wallpaper' | 'audio' | 'taskbar' | 'storage' | 'about'
+    | 'appearance'
+    | 'wallpaper'
+    | 'icons'
+    | 'audio'
+    | 'taskbar'
+    | 'start-menu'
+    | 'security'
+    | 'storage'
+    | 'credits'
+    | 'about'
   >('appearance');
   const { volume, setVolume: handleVolumeChange } = useMasterVolume();
+  const [musicSettings, setMusicSettings] = useState<MusicPlayerSettings>(getSavedMusicSettings);
+  const [musicVolume, setMusicVolume] = useState(getSavedMusicVolume);
+  const [startMenuPreferences, setStartMenuPreferences] = useState<StartMenuPreferences>(() => ({
+    order: DEFAULT_START_MENU_ORDER,
+    hidden: [],
+  }));
+  const [draggedStartApp, setDraggedStartApp] = useState<SystemAppId | null>(null);
+  const [lockProfile, setLockProfile] = useState<OsLockProfile | null>(getStoredLockProfile);
+  const [lockUsername, setLockUsername] = useState(() => lockProfile?.username || 'nammu');
+  const [lockDisplayName, setLockDisplayName] = useState(
+    () => lockProfile?.displayName || 'Nammu User',
+  );
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [securityStatus, setSecurityStatus] = useState('');
 
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [importStatus, setImportStatus] = useState<string>('');
@@ -134,6 +275,79 @@ export function SettingsApp() {
     getSavedMatrixEffectSettings(),
   );
   const activeMatrixEffect = getMatrixWallpaperVariant(wallpaperSrc);
+
+  useEffect(() => {
+    const syncStartMenu = () => setStartMenuPreferences(getStartMenuPreferences());
+    const syncMusic = () => {
+      setMusicSettings(getSavedMusicSettings());
+      setMusicVolume(getSavedMusicVolume());
+    };
+    syncStartMenu();
+    window.addEventListener(START_MENU_ORDER_CHANGE_EVENT, syncStartMenu);
+    window.addEventListener(MUSIC_SETTINGS_CHANGE_EVENT, syncMusic);
+    window.addEventListener(MUSIC_VOLUME_CHANGE_EVENT, syncMusic);
+    return () => {
+      window.removeEventListener(START_MENU_ORDER_CHANGE_EVENT, syncStartMenu);
+      window.removeEventListener(MUSIC_SETTINGS_CHANGE_EVENT, syncMusic);
+      window.removeEventListener(MUSIC_VOLUME_CHANGE_EVENT, syncMusic);
+    };
+  }, []);
+
+  const updateMusicSetting = <Key extends keyof MusicPlayerSettings>(
+    key: Key,
+    value: MusicPlayerSettings[Key],
+  ) => {
+    const next = saveMusicSettings({ ...musicSettings, [key]: value });
+    setMusicSettings(next);
+  };
+
+  const updateMusicVolume = (value: number) => {
+    const next = saveMusicVolume(value);
+    setMusicVolume(next);
+  };
+
+  const updateStartMenuPreferences = (next: StartMenuPreferences) => {
+    setStartMenuPreferences(saveStartMenuPreferences(next));
+  };
+
+  const moveStartMenuApp = (sourceId: SystemAppId, targetId: SystemAppId) => {
+    updateStartMenuPreferences({
+      ...startMenuPreferences,
+      order: reorderIds(startMenuPreferences.order, sourceId, targetId),
+    });
+  };
+
+  const saveSecurityProfile = async () => {
+    setSecurityStatus('');
+    const username = normalizeLockUsername(lockUsername);
+    if (username.length < 2) {
+      setSecurityStatus('Username must contain at least 2 valid characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setSecurityStatus('New passwords do not match.');
+      return;
+    }
+    try {
+      const nextProfile = newPassword
+        ? await createLockProfile(username, newPassword)
+        : lockProfile
+          ? { ...lockProfile, username }
+          : null;
+      if (!nextProfile) {
+        setSecurityStatus('Create a password to enable the lock profile.');
+        return;
+      }
+      nextProfile.displayName = lockDisplayName.trim().slice(0, 48) || 'Nammu User';
+      saveLockProfile(nextProfile);
+      setLockProfile(nextProfile);
+      setNewPassword('');
+      setConfirmPassword('');
+      setSecurityStatus('Lock profile saved.');
+    } catch (error) {
+      setSecurityStatus(error instanceof Error ? error.message : 'Unable to save lock profile.');
+    }
+  };
 
   const selectWallpaper = (src: string | null) => {
     setWallpaperSrc(src);
@@ -172,6 +386,11 @@ export function SettingsApp() {
     document.documentElement.style.setProperty('--os-accent', settings.accentColor);
     document.documentElement.style.setProperty('--color-os-accent', settings.accentColor);
     document.documentElement.style.setProperty('--os-accent-rgb', hexToRgb(settings.accentColor));
+    applyIconSettings(document.documentElement, settings);
+    document.documentElement.setAttribute(
+      'data-crt-scanlines',
+      settings.enableScanlines ? 'on' : 'off',
+    );
 
     // Apply theme attribute across the operating system
     document.documentElement.setAttribute('data-theme', settings.themeStyle);
@@ -179,7 +398,11 @@ export function SettingsApp() {
     document.documentElement.style.colorScheme = settings.appearance;
     window.dispatchEvent(
       new CustomEvent('nammu-theme-change', {
-        detail: { theme: settings.themeStyle, appearance: settings.appearance },
+        detail: {
+          theme: settings.themeStyle,
+          appearance: settings.appearance,
+          enableScanlines: settings.enableScanlines,
+        },
       }),
     );
   }, [settings]);
@@ -294,16 +517,16 @@ export function SettingsApp() {
       {/* Left Settings Navigation */}
       <aside className="w-44 shrink-0 border-r border-white/[0.06] bg-white/[0.012] p-2 flex flex-col justify-between select-none">
         <div className="space-y-1">
-          <div className="mb-2 px-2 font-mono text-[8px] uppercase tracking-[0.2em] text-[#476077]">
-            System Control
-          </div>
-
           {[
             { id: 'appearance', label: 'Appearance', icon: Palette },
             { id: 'wallpaper', label: 'Wallpaper', icon: ImageIcon },
+            { id: 'icons', label: 'Icons & Layout', icon: Grid3X3 },
             { id: 'audio', label: 'Sound & Audio', icon: Volume2 },
-            { id: 'taskbar', label: 'Taskbar & Clock', icon: Monitor },
+            { id: 'taskbar', label: 'Taskbar', icon: Monitor },
+            { id: 'start-menu', label: 'Start Menu', icon: LayoutGrid },
+            { id: 'security', label: 'Lock Screen', icon: Shield },
             { id: 'storage', label: 'Storage & Backup', icon: Database },
+            { id: 'credits', label: 'Credits', icon: ExternalLink },
             { id: 'about', label: 'System Info', icon: Info },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -331,14 +554,14 @@ export function SettingsApp() {
       </aside>
 
       {/* Main Settings Body */}
-      <main className="flex-1 overflow-y-auto os-scrollbar p-5 max-w-xl">
+      <main className="os-scrollbar min-w-0 flex-1 overflow-y-auto p-5">
         {/* APPEARANCE */}
         {activeTab === 'appearance' && (
           <div className="space-y-4">
             <div>
               <h2 className="text-xs font-semibold text-[#e8eef4]">Appearance & Visuals</h2>
               <p className="text-[10px] text-[#71889d]">
-                Customize system theme architectures, accent colors, shaders, and UI rendering.
+                Customize system themes, accent colors, motion, and UI rendering.
               </p>
             </div>
 
@@ -458,27 +681,27 @@ export function SettingsApp() {
             </div>
 
             {/* Visual Effects */}
-            <div className="bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-3">
+            <div className="space-y-3 rounded border border-white/[0.05] bg-[#05070b] p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[11px] text-[#d5e0ea] font-medium">CRT Scanline Shader</div>
+                  <div className="text-[11px] font-medium text-[#d5e0ea]">CRT Scanline Shader</div>
                   <div className="text-[9.5px] text-[#61788c]">
-                    Retro phosphor scanlines across the desktop
+                    Subtle phosphor scanlines across the desktop
                   </div>
                 </div>
                 <button
                   onClick={() => updateSetting('enableScanlines', !settings.enableScanlines)}
-                  className={`px-2.5 py-1 rounded text-[9.5px] font-mono font-semibold transition-colors ${
+                  className={`rounded px-2.5 py-1 font-mono text-[9.5px] font-semibold transition-colors ${
                     settings.enableScanlines
-                      ? 'bg-os-accent/20 border border-os-accent text-os-accent'
-                      : 'bg-white/[0.04] border border-white/[0.08] text-[#71889d]'
+                      ? 'border border-os-accent bg-os-accent/20 text-os-accent'
+                      : 'border border-white/[0.08] bg-white/[0.04] text-[#71889d]'
                   }`}
                 >
                   {settings.enableScanlines ? 'ENABLED' : 'OFF'}
                 </button>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-white/[0.04]">
+              <div className="flex items-center justify-between border-t border-white/[0.04] pt-2">
                 <div>
                   <div className="text-[11px] text-[#d5e0ea] font-medium">Reduce Motion</div>
                   <div className="text-[9.5px] text-[#61788c]">
@@ -496,6 +719,101 @@ export function SettingsApp() {
                   {settings.reduceMotion ? 'RESTRAINED' : 'SMOOTH'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ICONS & LAYOUT */}
+        {activeTab === 'icons' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Icons &amp; Layout</h2>
+              <p className="text-[10px] text-[#71889d]">
+                Tune icon scale, line weight, and interaction feedback across Nammu OS.
+              </p>
+            </div>
+
+            <div className="settings-card space-y-4 border border-white/[0.05] bg-[#05070b] p-3">
+              <label className="block space-y-2">
+                <span className="flex items-center justify-between text-[10px] text-[#c5d4e2]">
+                  <span>Global icon size</span>
+                  <span className="font-mono text-[9px] text-os-accent">{settings.iconScale}%</span>
+                </span>
+                <input
+                  type="range"
+                  min="75"
+                  max="135"
+                  step="5"
+                  value={settings.iconScale}
+                  onChange={(event) => updateSetting('iconScale', Number(event.target.value))}
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${((settings.iconScale - 75) / 60) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                />
+              </label>
+
+              <label className="block space-y-2 border-t border-white/[0.05] pt-3">
+                <span className="flex items-center justify-between text-[10px] text-[#c5d4e2]">
+                  <span>Stroke weight</span>
+                  <span className="font-mono text-[9px] text-os-accent">
+                    {settings.iconStrokeWidth.toFixed(1)}px
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.1"
+                  value={settings.iconStrokeWidth}
+                  onChange={(event) => updateSetting('iconStrokeWidth', Number(event.target.value))}
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${((settings.iconStrokeWidth - 1) / 2) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                />
+              </label>
+
+              <label className="block space-y-2 border-t border-white/[0.05] pt-3">
+                <span className="flex items-center justify-between text-[10px] text-[#c5d4e2]">
+                  <span>Hover enlargement</span>
+                  <span className="font-mono text-[9px] text-os-accent">
+                    {settings.iconHoverScale}%
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min="100"
+                  max="125"
+                  step="1"
+                  value={settings.iconHoverScale}
+                  onChange={(event) => updateSetting('iconHoverScale', Number(event.target.value))}
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${(settings.iconHoverScale - 100) * 4}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                />
+              </label>
+
+              <div className="flex items-center justify-between border-t border-white/[0.05] pt-3">
+                <div>
+                  <div className="text-[10px] font-medium text-[#c5d4e2]">Icon motion</div>
+                  <div className="text-[9px] text-[#61788c]">Animate icons during hover</div>
+                </div>
+                <button
+                  onClick={() => updateSetting('iconMotion', !settings.iconMotion)}
+                  className={`border px-2.5 py-1 font-mono text-[8px] font-semibold ${settings.iconMotion ? 'border-os-accent/40 bg-os-accent/10 text-os-accent' : 'border-white/[0.08] text-[#71889d]'}`}
+                >
+                  {settings.iconMotion ? 'ENABLED' : 'OFF'}
+                </button>
+              </div>
+
+              <button
+                onClick={() => setSettings((current) => ({ ...current, ...DEFAULT_ICON_SETTINGS }))}
+                className="border border-white/[0.08] px-3 py-1.5 font-mono text-[8px] uppercase tracking-wider text-[#71889d] hover:border-os-accent/30 hover:text-os-accent"
+              >
+                Reset icon controls
+              </button>
             </div>
           </div>
         )}
@@ -598,127 +916,6 @@ export function SettingsApp() {
                   );
                 })}
               </div>
-
-              {activeMatrixEffect && (
-                <div className="space-y-3 border-t border-white/[0.04] pt-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-medium text-[#d5e0ea]">
-                        {activeMatrixEffect === 'synth-rain' ? 'Synth Rain' : 'Chaos Flow'} Controls
-                      </div>
-                      <div className="text-[9.5px] text-[#61788c]">
-                        Changes are applied to the desktop in real time.
-                      </div>
-                    </div>
-                    <span className="rounded-sm border border-os-accent/30 bg-os-accent/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-os-accent">
-                      Live
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <label className="flex min-w-0 flex-col gap-2 rounded border border-white/[0.06] bg-white/[0.018] p-2.5">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-medium text-[#c5d4e2]">Color</span>
-                        <span className="font-mono text-[8.5px] uppercase text-[#71889d]">
-                          {matrixEffectSettings[activeMatrixEffect].color}
-                        </span>
-                      </span>
-                      <span className="flex h-7 items-center gap-2 rounded-sm border border-white/[0.08] bg-black/25 p-1">
-                        <input
-                          type="color"
-                          value={matrixEffectSettings[activeMatrixEffect].color}
-                          onChange={(event) =>
-                            updateMatrixEffectSetting(
-                              activeMatrixEffect,
-                              'color',
-                              event.target.value,
-                            )
-                          }
-                          className="h-5 w-full cursor-pointer border-0 bg-transparent p-0"
-                          aria-label={`${activeMatrixEffect} color`}
-                        />
-                      </span>
-                    </label>
-
-                    <label className="flex min-w-0 flex-col gap-2 rounded border border-white/[0.06] bg-white/[0.018] p-2.5">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-medium text-[#c5d4e2]">Speed</span>
-                        <span className="font-mono text-[8.5px] text-[#71889d]">
-                          {matrixEffectSettings[activeMatrixEffect].speed}%
-                        </span>
-                      </span>
-                      <input
-                        type="range"
-                        min="25"
-                        max="200"
-                        step="5"
-                        value={matrixEffectSettings[activeMatrixEffect].speed}
-                        onChange={(event) =>
-                          updateMatrixEffectSetting(
-                            activeMatrixEffect,
-                            'speed',
-                            Number(event.target.value),
-                          )
-                        }
-                        className="os-range"
-                        style={{
-                          background: `linear-gradient(90deg, var(--color-os-accent) ${((matrixEffectSettings[activeMatrixEffect].speed - 25) / 175) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
-                        }}
-                        aria-label={`${activeMatrixEffect} speed`}
-                      />
-                    </label>
-
-                    <label className="flex min-w-0 flex-col gap-2 rounded border border-white/[0.06] bg-white/[0.018] p-2.5">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-medium text-[#c5d4e2]">Size</span>
-                        <span className="font-mono text-[8.5px] text-[#71889d]">
-                          {matrixEffectSettings[activeMatrixEffect].size}px
-                        </span>
-                      </span>
-                      <input
-                        type="range"
-                        min="10"
-                        max="28"
-                        step="1"
-                        value={matrixEffectSettings[activeMatrixEffect].size}
-                        onChange={(event) =>
-                          updateMatrixEffectSetting(
-                            activeMatrixEffect,
-                            'size',
-                            Number(event.target.value),
-                          )
-                        }
-                        className="os-range"
-                        style={{
-                          background: `linear-gradient(90deg, var(--color-os-accent) ${((matrixEffectSettings[activeMatrixEffect].size - 10) / 18) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
-                        }}
-                        aria-label={`${activeMatrixEffect} character size`}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between border-t border-white/[0.04] pt-3">
-                <div>
-                  <div className="text-[11px] font-medium text-[#d5e0ea]">Readability Mask</div>
-                  <div className="text-[9.5px] text-[#61788c]">
-                    Add subtle edge shading behind desktop controls
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={toggleWallpaperMask}
-                  aria-pressed={wallpaperMask}
-                  className={`rounded px-2.5 py-1 font-mono text-[9.5px] font-semibold transition-colors ${
-                    wallpaperMask
-                      ? 'border border-os-accent bg-os-accent/20 text-os-accent'
-                      : 'border border-white/[0.08] bg-white/[0.04] text-[#71889d]'
-                  }`}
-                >
-                  {wallpaperMask ? 'ENABLED' : 'OFF'}
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -766,6 +963,145 @@ export function SettingsApp() {
               </div>
             </div>
 
+            <div className="settings-card border border-white/[0.05] bg-[#05070b]">
+              <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Music2 size={13} className="text-os-accent" />
+                  <div>
+                    <div className="text-[10.5px] font-medium text-[#d5e0ea]">Music player</div>
+                    <div className="text-[9px] text-[#61788c]">
+                      Local playback controls, independent from master volume
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setMusicSettings(saveMusicSettings(DEFAULT_MUSIC_SETTINGS));
+                    updateMusicVolume(0.72);
+                  }}
+                  className="flex items-center gap-1 border border-white/[0.08] px-2 py-1 font-mono text-[8px] text-os-text-muted hover:border-os-accent/30 hover:text-os-accent"
+                >
+                  <RotateCcw size={9} /> Reset
+                </button>
+              </div>
+
+              <div className="space-y-4 p-3">
+                <label className="block space-y-2">
+                  <span className="flex justify-between text-[9.5px] text-os-text-muted">
+                    <span>Music volume</span>
+                    <span className="font-mono text-os-accent">
+                      {Math.round(musicVolume * 100)}%
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={Math.round(musicVolume * 100)}
+                    onChange={(event) => updateMusicVolume(Number(event.target.value) / 100)}
+                    className="os-range"
+                    style={{
+                      background: `linear-gradient(90deg, var(--color-os-accent) ${musicVolume * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                    }}
+                  />
+                </label>
+
+                <label className="block space-y-2 border-t border-white/[0.05] pt-3">
+                  <span className="flex justify-between text-[9.5px] text-os-text-muted">
+                    <span>Playback speed</span>
+                    <span className="font-mono text-os-accent">
+                      {musicSettings.playbackRate.toFixed(2)}×
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min="50"
+                    max="200"
+                    step="5"
+                    value={musicSettings.playbackRate * 100}
+                    onChange={(event) =>
+                      updateMusicSetting('playbackRate', Number(event.target.value) / 100)
+                    }
+                    className="os-range"
+                    style={{
+                      background: `linear-gradient(90deg, var(--color-os-accent) ${((musicSettings.playbackRate - 0.5) / 1.5) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                    }}
+                  />
+                </label>
+
+                <div className="grid grid-cols-3 gap-2 border-t border-white/[0.05] pt-3">
+                  {(['off', 'all', 'one'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => updateMusicSetting('repeat', mode)}
+                      className={`h-7 border font-mono text-[8px] uppercase ${musicSettings.repeat === mode ? 'border-os-accent/35 bg-os-accent/10 text-os-accent' : 'border-white/[0.07] text-os-text-dim'}`}
+                    >
+                      Repeat {mode}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ['shuffle', 'Shuffle queue'],
+                    ['autoAdvance', 'Auto-advance'],
+                    ['atmosphere', 'Artwork atmosphere'],
+                    ['motion', 'Player motion'],
+                  ].map(([key, label]) => {
+                    const settingKey = key as 'shuffle' | 'autoAdvance' | 'atmosphere' | 'motion';
+                    const enabled = musicSettings[settingKey];
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => updateMusicSetting(settingKey, !enabled)}
+                        className="flex h-8 items-center justify-between border border-white/[0.07] px-2.5 text-[9px] text-os-text-muted hover:border-os-accent/25"
+                      >
+                        <span>{label}</span>
+                        <span className={enabled ? 'text-os-accent' : 'text-os-text-dim'}>
+                          {enabled ? 'ON' : 'OFF'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 border-t border-white/[0.05] pt-3">
+                  <label className="block space-y-2">
+                    <span className="flex justify-between text-[9px] text-os-text-muted">
+                      <span>Transparency</span>
+                      <span className="font-mono text-os-accent">
+                        {musicSettings.transparency}%
+                      </span>
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="70"
+                      value={musicSettings.transparency}
+                      onChange={(event) =>
+                        updateMusicSetting('transparency', Number(event.target.value))
+                      }
+                      className="os-range"
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="flex justify-between text-[9px] text-os-text-muted">
+                      <span>Backdrop blur</span>
+                      <span className="font-mono text-os-accent">{musicSettings.blur}px</span>
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="36"
+                      value={musicSettings.blur}
+                      onChange={(event) => updateMusicSetting('blur', Number(event.target.value))}
+                      className="os-range"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-[#05070b] border border-white/[0.05] p-3 rounded flex items-center justify-between">
               <div>
                 <div className="text-[11px] text-[#d5e0ea] font-medium">UI Sound Effects</div>
@@ -787,39 +1123,41 @@ export function SettingsApp() {
           </div>
         )}
 
-        {/* TASKBAR & CLOCK */}
+        {/* TASKBAR */}
         {activeTab === 'taskbar' && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-xs font-semibold text-[#e8eef4]">Taskbar & Clock</h2>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Taskbar</h2>
               <p className="text-[10px] text-[#71889d]">
-                Configure taskbar tray clock formatting and layout.
+                Configure the tray clock and taskbar behavior.
               </p>
             </div>
 
             <div className="bg-[#05070b] border border-white/[0.05] p-3 rounded space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[11px] text-[#d5e0ea] font-medium">Time Display Format</div>
+                  <div className="text-[11px] text-[#d5e0ea] font-medium">Show seconds</div>
                   <div className="text-[9.5px] text-[#61788c]">
-                    24-hour military clock vs 12-hour AM/PM
+                    Add live seconds to the taskbar and clock popup
                   </div>
                 </div>
                 <button
-                  onClick={() =>
-                    updateSetting('clockFormat', settings.clockFormat === '24h' ? '12h' : '24h')
-                  }
-                  className="px-2.5 py-1 rounded text-[9.5px] font-mono font-semibold bg-white/[0.05] border border-white/[0.08] text-os-accent"
+                  onClick={() => updateSetting('showSeconds', !settings.showSeconds)}
+                  className={`px-2.5 py-1 rounded text-[9.5px] font-mono font-semibold transition-colors ${
+                    settings.showSeconds
+                      ? 'bg-os-accent/20 border border-os-accent text-os-accent'
+                      : 'bg-white/[0.04] border border-white/[0.08] text-[#71889d]'
+                  }`}
                 >
-                  {settings.clockFormat.toUpperCase()}
+                  {settings.showSeconds ? 'SHOW' : 'HIDE'}
                 </button>
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-white/[0.04]">
                 <div>
-                  <div className="text-[11px] text-[#d5e0ea] font-medium">Show Day & Month</div>
+                  <div className="text-[11px] text-[#d5e0ea] font-medium">Show date line</div>
                   <div className="text-[9.5px] text-[#61788c]">
-                    Display formatted calendar badge (e.g. Fri, 21 Aug)
+                    Display weekday, day, and month below the time
                   </div>
                 </div>
                 <button
@@ -834,6 +1172,292 @@ export function SettingsApp() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* START MENU */}
+        {activeTab === 'start-menu' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Start Menu</h2>
+              <p className="text-[10px] text-[#71889d]">
+                Arrange, show, or hide registered apps. Newly registered apps are added
+                automatically.
+              </p>
+            </div>
+
+            <div className="settings-card border border-white/[0.05] bg-[#05070b]">
+              <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2">
+                <span className="font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-dim">
+                  App order
+                </span>
+                <button
+                  onClick={() =>
+                    updateStartMenuPreferences({ order: DEFAULT_START_MENU_ORDER, hidden: [] })
+                  }
+                  className="flex items-center gap-1 font-mono text-[8px] text-os-text-muted hover:text-os-accent"
+                >
+                  <RotateCcw size={9} /> Restore default
+                </button>
+              </div>
+              <div className="divide-y divide-white/[0.05]">
+                {startMenuPreferences.order.map((appId, index) => {
+                  const app = SYSTEM_APPS.find((candidate) => candidate.id === appId);
+                  if (!app) return null;
+                  const Icon = app.icon;
+                  const hidden = startMenuPreferences.hidden.includes(appId);
+                  return (
+                    <div
+                      key={appId}
+                      draggable
+                      onDragStart={(event) => {
+                        setDraggedStartApp(appId);
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', appId);
+                      }}
+                      onDragOver={(event) => {
+                        if (!draggedStartApp || draggedStartApp === appId) return;
+                        event.preventDefault();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const sourceId = (draggedStartApp ||
+                          event.dataTransfer.getData('text/plain')) as SystemAppId;
+                        if (sourceId) moveStartMenuApp(sourceId, appId);
+                        setDraggedStartApp(null);
+                      }}
+                      onDragEnd={() => setDraggedStartApp(null)}
+                      className={`flex items-center gap-2 px-3 py-2 ${draggedStartApp === appId ? 'opacity-40' : ''}`}
+                    >
+                      <GripVertical size={11} className="cursor-grab text-os-text-dim" />
+                      <Icon size={13} className="text-os-accent" />
+                      <span className="min-w-0 flex-1 truncate text-[10px] text-os-text-muted">
+                        {app.title}
+                      </span>
+                      <span className="w-5 text-right font-mono text-[8px] text-os-text-dim">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      <button
+                        onClick={() =>
+                          index > 0 &&
+                          moveStartMenuApp(appId, startMenuPreferences.order[index - 1])
+                        }
+                        disabled={index === 0}
+                        className="grid h-6 w-6 place-items-center text-os-text-dim hover:text-os-accent disabled:opacity-20"
+                        aria-label={`Move ${app.title} up`}
+                      >
+                        <ArrowUp size={10} />
+                      </button>
+                      <button
+                        onClick={() =>
+                          index < startMenuPreferences.order.length - 1 &&
+                          moveStartMenuApp(appId, startMenuPreferences.order[index + 1])
+                        }
+                        disabled={index === startMenuPreferences.order.length - 1}
+                        className="grid h-6 w-6 place-items-center text-os-text-dim hover:text-os-accent disabled:opacity-20"
+                        aria-label={`Move ${app.title} down`}
+                      >
+                        <ArrowDown size={10} />
+                      </button>
+                      <button
+                        onClick={() =>
+                          updateStartMenuPreferences({
+                            ...startMenuPreferences,
+                            hidden: hidden
+                              ? startMenuPreferences.hidden.filter((id) => id !== appId)
+                              : [...startMenuPreferences.hidden, appId],
+                          })
+                        }
+                        className={`grid h-6 w-6 place-items-center ${hidden ? 'text-os-text-dim' : 'text-os-accent'}`}
+                        aria-label={`${hidden ? 'Show' : 'Hide'} ${app.title}`}
+                      >
+                        {hidden ? <EyeOff size={11} /> : <Eye size={11} />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LOCK SCREEN */}
+        {activeTab === 'security' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Lock Screen &amp; Identity</h2>
+              <p className="text-[10px] text-[#71889d]">
+                Manage the local workstation identity, password, visibility, and automatic locking.
+              </p>
+            </div>
+
+            <div className="settings-card space-y-3 border border-white/[0.05] bg-[#05070b] p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1.5">
+                  <span className="font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                    User ID
+                  </span>
+                  <div className="flex h-8 items-center gap-2 border border-white/[0.08] px-2.5">
+                    <UserRound size={11} className="text-os-text-dim" />
+                    <input
+                      value={lockUsername}
+                      onChange={(event) => setLockUsername(event.target.value)}
+                      maxLength={32}
+                      className="min-w-0 flex-1 bg-transparent text-[10px] text-os-text outline-none"
+                    />
+                  </div>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                    Display name
+                  </span>
+                  <input
+                    value={lockDisplayName}
+                    onChange={(event) => setLockDisplayName(event.target.value)}
+                    maxLength={48}
+                    className="h-8 w-full border border-white/[0.08] bg-transparent px-2.5 text-[10px] text-os-text outline-none focus:border-os-accent/35"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-white/[0.05] pt-3">
+                <label className="space-y-1.5">
+                  <span className="font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                    New password
+                  </span>
+                  <div className="flex h-8 items-center gap-2 border border-white/[0.08] px-2.5">
+                    <LockKeyhole size={11} className="text-os-text-dim" />
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder={
+                        lockProfile ? 'Leave blank to keep current' : 'At least 6 characters'
+                      }
+                      className="min-w-0 flex-1 bg-transparent text-[10px] text-os-text outline-none"
+                    />
+                    <button
+                      onClick={() => setShowNewPassword((current) => !current)}
+                      className="text-os-text-dim hover:text-os-accent"
+                      aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                    >
+                      {showNewPassword ? <EyeOff size={11} /> : <Eye size={11} />}
+                    </button>
+                  </div>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                    Confirm password
+                  </span>
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    className="h-8 w-full border border-white/[0.08] bg-transparent px-2.5 text-[10px] text-os-text outline-none focus:border-os-accent/35"
+                  />
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-white/[0.05] pt-3">
+                <div>
+                  <div className="text-[10px] text-os-text-muted">Automatic lock</div>
+                  <div className="text-[9px] text-os-text-dim">Lock after inactivity</div>
+                </div>
+                <select
+                  value={settings.autoLockMinutes}
+                  onChange={(event) => updateSetting('autoLockMinutes', Number(event.target.value))}
+                  className="h-8 border border-white/[0.08] bg-[#070b12] px-2 text-[9px] text-os-text outline-none"
+                >
+                  <option value="0">Never</option>
+                  <option value="1">1 minute</option>
+                  <option value="5">5 minutes</option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ['lockShowProfile', 'Show profile identity'],
+                  ['lockShowDate', 'Show date and time'],
+                ].map(([key, label]) => {
+                  const settingKey = key as 'lockShowProfile' | 'lockShowDate';
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => updateSetting(settingKey, !settings[settingKey])}
+                      className="flex h-8 items-center justify-between border border-white/[0.07] px-2.5 text-[9px] text-os-text-muted"
+                    >
+                      <span>{label}</span>
+                      <span
+                        className={settings[settingKey] ? 'text-os-accent' : 'text-os-text-dim'}
+                      >
+                        {settings[settingKey] ? 'ON' : 'OFF'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {securityStatus && (
+                <div className="border-l-2 border-os-accent/40 bg-os-accent/[0.04] px-2.5 py-2 font-mono text-[8px] text-os-text-muted">
+                  {securityStatus}
+                </div>
+              )}
+
+              <div className="flex gap-2 border-t border-white/[0.05] pt-3">
+                <button
+                  onClick={() => void saveSecurityProfile()}
+                  className="h-8 flex-1 border border-os-accent/30 bg-os-accent/10 font-mono text-[8px] uppercase tracking-wider text-os-accent hover:bg-os-accent/15"
+                >
+                  Save lock profile
+                </button>
+                <button
+                  onClick={() => {
+                    saveLockState(true);
+                    window.dispatchEvent(new Event('nammu-lock-now'));
+                  }}
+                  className="h-8 flex-1 border border-white/[0.08] font-mono text-[8px] uppercase tracking-wider text-os-text-muted hover:border-os-accent/25 hover:text-os-accent"
+                >
+                  Lock now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CREDITS */}
+        {activeTab === 'credits' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Credits &amp; Open Source</h2>
+              <p className="text-[10px] text-[#71889d]">
+                Nammu OS is built with and inspired by these third-party projects.
+              </p>
+            </div>
+            <div className="settings-card divide-y divide-white/[0.05] border border-white/[0.05] bg-[#05070b]">
+              {CREDITS.map((credit) => (
+                <a
+                  key={`${credit.product}-${credit.project}`}
+                  href={credit.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.025]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] text-os-text">{credit.product}</div>
+                    <div className="mt-0.5 truncate font-mono text-[8px] text-os-text-dim">
+                      {credit.project}
+                    </div>
+                  </div>
+                  <ExternalLink size={11} className="shrink-0 text-os-accent" />
+                </a>
+              ))}
+            </div>
+            <p className="text-[8.5px] leading-relaxed text-os-text-dim">
+              Each project remains subject to its own license and attribution requirements. This
+              list can be extended as Nammu OS adopts additional third-party components.
+            </p>
           </div>
         )}
 
@@ -950,6 +1574,302 @@ export function SettingsApp() {
           </div>
         )}
       </main>
+
+      <aside className="settings-inspector os-scrollbar w-56 shrink-0 overflow-y-auto border-l border-white/[0.06] bg-white/[0.012] p-3">
+        {activeTab === 'appearance' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section">
+              <div className="settings-inspector-label">Active interface</div>
+              <div className="mt-2 flex items-center gap-2">
+                <span
+                  className="h-8 w-8 border border-white/[0.1]"
+                  style={{ background: settings.accentColor }}
+                />
+                <div className="min-w-0">
+                  <div className="truncate text-[10px] font-medium text-os-text">
+                    {THEME_OPTIONS.find((theme) => theme.id === settings.themeStyle)?.name}
+                  </div>
+                  <div className="font-mono text-[8px] uppercase text-os-text-dim">
+                    {settings.appearance} · {settings.accentColor}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Theme and appearance changes are applied to every open application immediately.
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'wallpaper' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section overflow-hidden p-0">
+              <div
+                className="h-28 bg-cover bg-center"
+                style={
+                  wallpaperSrc === null
+                    ? {
+                        background:
+                          'radial-gradient(ellipse at 50% 30%, var(--color-os-panel), var(--color-os-bg))',
+                      }
+                    : getMatrixWallpaperVariant(wallpaperSrc)
+                      ? {
+                          background: WALLPAPERS.find((wallpaper) => wallpaper.src === wallpaperSrc)
+                            ?.preview,
+                        }
+                      : { backgroundImage: `url("${encodeURI(wallpaperSrc)}")` }
+                }
+              />
+              <div className="border-t border-white/[0.06] p-2.5">
+                <div className="text-[10px] font-medium text-os-text">
+                  {getWallpaperName(wallpaperSrc)}
+                </div>
+                <div className="mt-0.5 font-mono text-[7.5px] uppercase tracking-wider text-os-text-dim">
+                  Active wallpaper
+                </div>
+              </div>
+            </div>
+
+            {activeMatrixEffect && (
+              <div className="settings-inspector-section space-y-3">
+                <div className="settings-inspector-label">
+                  {activeMatrixEffect === 'synth-rain' ? 'Synth Rain' : 'Chaos Flow'} controls
+                </div>
+                <label className="block space-y-1.5">
+                  <span className="flex justify-between text-[9px] text-os-text-muted">
+                    <span>Color</span>
+                    <span className="font-mono text-[7.5px]">
+                      {matrixEffectSettings[activeMatrixEffect].color}
+                    </span>
+                  </span>
+                  <input
+                    type="color"
+                    value={matrixEffectSettings[activeMatrixEffect].color}
+                    onChange={(event) =>
+                      updateMatrixEffectSetting(activeMatrixEffect, 'color', event.target.value)
+                    }
+                    className="h-7 w-full cursor-pointer border border-white/[0.08] bg-transparent p-0.5"
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="flex justify-between text-[9px] text-os-text-muted">
+                    <span>Speed</span>
+                    <span className="font-mono text-[8px] text-os-accent">
+                      {matrixEffectSettings[activeMatrixEffect].speed}%
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min="25"
+                    max="200"
+                    step="5"
+                    value={matrixEffectSettings[activeMatrixEffect].speed}
+                    onChange={(event) =>
+                      updateMatrixEffectSetting(
+                        activeMatrixEffect,
+                        'speed',
+                        Number(event.target.value),
+                      )
+                    }
+                    className="os-range"
+                    style={{
+                      background: `linear-gradient(90deg, var(--color-os-accent) ${((matrixEffectSettings[activeMatrixEffect].speed - 25) / 175) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                    }}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="flex justify-between text-[9px] text-os-text-muted">
+                    <span>Size</span>
+                    <span className="font-mono text-[8px] text-os-accent">
+                      {matrixEffectSettings[activeMatrixEffect].size}px
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min="10"
+                    max="28"
+                    value={matrixEffectSettings[activeMatrixEffect].size}
+                    onChange={(event) =>
+                      updateMatrixEffectSetting(
+                        activeMatrixEffect,
+                        'size',
+                        Number(event.target.value),
+                      )
+                    }
+                    className="os-range"
+                    style={{
+                      background: `linear-gradient(90deg, var(--color-os-accent) ${((matrixEffectSettings[activeMatrixEffect].size - 10) / 18) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                    }}
+                  />
+                </label>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={toggleWallpaperMask}
+              className="settings-inspector-option"
+              aria-pressed={wallpaperMask}
+            >
+              <span>Readability mask</span>
+              <span className={wallpaperMask ? 'text-os-accent' : 'text-os-text-dim'}>
+                {wallpaperMask ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'icons' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section">
+              <div className="settings-inspector-label">Live icon preview</div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-os-text-muted">
+                {[Folder, Bell, Palette, Grid3X3].map((Icon, index) => (
+                  <button
+                    key={index}
+                    className="grid h-12 place-items-center border border-white/[0.06] hover:border-os-accent/25 hover:text-os-accent"
+                  >
+                    <Icon size={18} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Icon controls affect Lucide interface icons in apps, tools, menus, windows, and the
+              taskbar.
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'audio' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section text-center">
+              <div className="font-mono text-[28px] leading-none text-os-accent">{volume}%</div>
+              <div className="mt-2 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                Master output
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Music retains its own local gain while master output controls all OS media.
+            </div>
+            <div className="settings-inspector-section text-center">
+              <div className="font-mono text-[22px] leading-none text-os-text">
+                {Math.round(musicVolume * 100)}%
+              </div>
+              <div className="mt-2 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                Music output
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'taskbar' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section">
+              <div className="settings-inspector-label">Taskbar interaction</div>
+              <ul className="mt-2 space-y-2 text-[9px] leading-relaxed text-os-text-muted">
+                <li>Drag pinned icons to rearrange them.</li>
+                <li>Middle-click a running app to close it.</li>
+                <li>Scroll over running apps to switch focus.</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'start-menu' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section text-center">
+              <div className="font-mono text-[24px] leading-none text-os-accent">
+                {startMenuPreferences.order.length - startMenuPreferences.hidden.length}
+              </div>
+              <div className="mt-2 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                Visible apps
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Drag rows here or app icons directly inside the Start Menu. The registry automatically
+              appends future apps.
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'security' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section">
+              <div className="settings-inspector-label">Local identity</div>
+              <div className="mt-3 flex items-center gap-2">
+                <div className="grid h-9 w-9 place-items-center border border-os-accent/25 bg-os-accent/[0.06] font-display text-[12px] text-os-accent">
+                  {(lockDisplayName || 'NU')
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-[10px] text-os-text">{lockDisplayName}</div>
+                  <div className="truncate font-mono text-[8px] text-os-text-dim">
+                    @{normalizeLockUsername(lockUsername)}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Password hashes are salted with PBKDF2 and remain in this browser profile.
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'credits' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section text-center">
+              <div className="font-mono text-[24px] leading-none text-os-accent">
+                {CREDITS.length}
+              </div>
+              <div className="mt-2 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                Credited projects
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Attribution is kept in Settings so it remains accessible without covering application
+              content.
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'storage' && (
+          <div className="settings-inspector-section text-center">
+            <div className="font-mono text-[22px] leading-none text-os-accent">
+              {(storageStats.totalBytes / 1024).toFixed(2)} KB
+            </div>
+            <div className="mt-2 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+              Local OS data
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'about' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section">
+              <div className="settings-inspector-label">Runtime</div>
+              <div className="mt-2 space-y-1.5 font-mono text-[8px] text-os-text-muted">
+                <div className="flex justify-between">
+                  <span>VERSION</span>
+                  <span className="text-os-text">4.1.0</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>UPTIME</span>
+                  <span className="text-os-accent">{formatUptime(uptimeSeconds)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>MODE</span>
+                  <span className="text-os-text">LOCAL</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

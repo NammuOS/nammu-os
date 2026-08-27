@@ -1130,7 +1130,7 @@ export default function BrowserApp() {
       {/* 1. Multi-Tab Header Bar */}
       <div
         onContextMenu={(e) => handleOpenContextMenu(e, 'page')}
-        className="flex h-8 shrink-0 items-center bg-[#070c14] px-1.5 pt-1 border-b border-white/[0.06] gap-1 overflow-x-auto os-scrollbar overflow-hidden"
+        className="flex h-8 shrink-0 items-center bg-[#070c14] px-1.5 pt-1 border-b border-white/6 gap-1 overflow-x-auto os-scrollbar overflow-hidden"
       >
         {tabs.map((tab, tabIndex) => {
           const isActive = tab.id === activeTabId;
@@ -1145,11 +1145,11 @@ export default function BrowserApp() {
               className={`group relative flex h-7 items-center border-t border-x text-[10.5px] cursor-pointer transition-[width,background-color,border-color,color] ${
                 tab.isPinned
                   ? `w-8 min-w-8 max-w-8 flex-none justify-center px-0 ${isLastPinned ? 'mr-1' : ''}`
-                  : 'max-w-[200px] min-w-[120px] flex-1 justify-between px-2'
+                  : 'max-w-50 min-w-30 flex-1 justify-between px-2'
               } ${
                 isActive
-                  ? 'border-white/[0.12] bg-[#0b121c] text-[#e0ecf7] font-medium'
-                  : 'border-transparent bg-white/[0.015] text-[#71889d] hover:bg-white/[0.04] hover:text-[#bcd0df]'
+                  ? 'border-white/12 bg-[#0b121c] text-[#e0ecf7] font-medium'
+                  : 'border-transparent bg-white/1.5 text-[#71889d] hover:bg-white/4 hover:text-[#bcd0df]'
               }`}
             >
               <div
@@ -1161,7 +1161,7 @@ export default function BrowserApp() {
                   <ShieldCheck size={10} className="shrink-0 text-[#b589ff]" />
                 )}
                 {tab.isLoading ? (
-                  <RotateCw size={11} className="animate-spin text-[#4aa3ff] shrink-0" />
+                  <RotateCw size={11} className="animate-spin text-electric shrink-0" />
                 ) : tab.favicon ? (
                   <img
                     src={tab.favicon}
@@ -1172,7 +1172,7 @@ export default function BrowserApp() {
                     }}
                   />
                 ) : (
-                  <Globe size={11} className={isActive ? 'text-[#4aa3ff]' : 'text-[#61788c]'} />
+                  <Globe size={11} className={isActive ? 'text-electric' : 'text-[#61788c]'} />
                 )}
                 {!tab.isPinned && <span className="truncate">{tab.title || 'New Tab'}</span>}
                 {tab.isMuted && !tab.isPinned && (
@@ -1190,7 +1190,7 @@ export default function BrowserApp() {
               {!tab.isPinned && (
                 <button
                   onClick={(e) => handleCloseTab(tab.id, e)}
-                  className="ml-1 grid h-4 w-4 place-items-center opacity-40 hover:opacity-100 hover:bg-white/[0.1] transition-opacity"
+                  className="ml-1 grid h-4 w-4 place-items-center opacity-40 hover:opacity-100 hover:bg-white/10 transition-opacity"
                   title="Close Tab (Ctrl+W)"
                 >
                   <X size={10} />
@@ -1203,7 +1203,7 @@ export default function BrowserApp() {
         {/* New Tab Button */}
         <button
           onClick={() => handleNewTab()}
-          className="grid h-6 w-6 shrink-0 place-items-center border border-white/[0.06] text-[#71889d] hover:bg-white/[0.04] hover:text-[#bcd0df] transition-colors"
+          className="grid h-6 w-6 shrink-0 place-items-center border border-white/6 text-[#71889d] hover:bg-white/4 hover:text-[#bcd0df] transition-colors"
           title="New Tab (Ctrl+T)"
         >
           <Plus size={12} />
@@ -1211,12 +1211,12 @@ export default function BrowserApp() {
       </div>
 
       {/* 2. Navigation & Smart Omnibox Toolbar */}
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-white/[0.06] bg-[#080e18] px-2">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-white/6 bg-[#080e18] px-2">
         {/* History Nav Buttons */}
         <button
           onClick={handleGoBack}
           disabled={!activeTab?.canGoBack}
-          className="grid h-6 w-6 place-items-center border border-white/[0.06] text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0] disabled:opacity-30 transition-colors"
+          className="grid h-6 w-6 place-items-center border border-white/6 text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0] disabled:opacity-30 transition-colors"
           title="Back (Alt+Left)"
         >
           <ArrowLeft size={11} />
@@ -1225,7 +1225,7 @@ export default function BrowserApp() {
         <button
           onClick={handleGoForward}
           disabled={!activeTab?.canGoForward}
-          className="grid h-6 w-6 place-items-center border border-white/[0.06] text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0] disabled:opacity-30 transition-colors"
+          className="grid h-6 w-6 place-items-center border border-white/6 text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0] disabled:opacity-30 transition-colors"
           title="Forward (Alt+Right)"
         >
           <ArrowRight size={11} />
@@ -1233,7 +1233,7 @@ export default function BrowserApp() {
 
         <button
           onClick={activeTab?.isLoading ? handleStopLoading : handleReload}
-          className="grid h-6 w-6 place-items-center border border-white/[0.06] text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0] transition-colors"
+          className="grid h-6 w-6 place-items-center border border-white/6 text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0] transition-colors"
           title={activeTab?.isLoading ? 'Stop Loading (Esc)' : 'Reload (Ctrl+R)'}
         >
           {activeTab?.isLoading ? <X size={11} /> : <RotateCw size={11} />}
@@ -1241,7 +1241,7 @@ export default function BrowserApp() {
 
         <button
           onClick={() => handleNavigate('about:home')}
-          className="grid h-6 w-6 place-items-center border border-white/[0.06] text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0] transition-colors"
+          className="grid h-6 w-6 place-items-center border border-white/6 text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0] transition-colors"
           title="Home"
         >
           <Home size={11} />
@@ -1250,16 +1250,16 @@ export default function BrowserApp() {
         {/* Smart Omnibox (Address Bar) */}
         <div
           onContextMenu={(e) => handleOpenContextMenu(e, 'omnibox')}
-          className="relative flex min-w-0 flex-1 items-center border border-white/[0.08] bg-black/50 px-2 py-1 focus-within:border-[#4aa3ff]/50 transition-colors"
+          className="relative flex min-w-0 flex-1 items-center border border-white/8 bg-black/50 px-2 py-1 focus-within:border-electric/50 transition-colors"
         >
           {/* SSL / Protocol Badge */}
           <div className="mr-2 flex items-center gap-1 shrink-0 font-mono text-[8px]">
             {activeTab?.url === 'about:home' || activeTab?.url.startsWith('about:') ? (
-              <Sparkles size={10} className="text-[#4aa3ff]" />
+              <Sparkles size={10} className="text-electric" />
             ) : isSecure ? (
-              <Lock size={10} className="text-[#2ee6a6]" />
+              <Lock size={10} className="text-emerald" />
             ) : (
-              <AlertTriangle size={10} className="text-[#f59e0b]" />
+              <AlertTriangle size={10} className="text-os-amber" />
             )}
           </div>
 
@@ -1286,7 +1286,7 @@ export default function BrowserApp() {
           <button
             onClick={handleToggleBookmark}
             className={`grid h-5 w-5 place-items-center transition-colors ${
-              isCurrentBookmarked ? 'text-[#f59e0b]' : 'text-[#5a7184] hover:text-[#bcd0df]'
+              isCurrentBookmarked ? 'text-os-amber' : 'text-[#5a7184] hover:text-[#bcd0df]'
             }`}
             title={isCurrentBookmarked ? 'Remove Bookmark (Ctrl+D)' : 'Bookmark this Tab (Ctrl+D)'}
           >
@@ -1295,14 +1295,14 @@ export default function BrowserApp() {
 
           {/* Autocomplete / Search Suggestions Dropdown */}
           {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-50 mt-1 border border-white/[0.1] bg-[#070d16] shadow-2xl">
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 border border-white/10 bg-[#070d16] shadow-2xl">
               {suggestions.map((sug, i) => (
                 <button
                   key={i}
                   onMouseDown={() => handleNavigate(sug)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[#c0d2e2] hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[#c0d2e2] hover:bg-electric/15 hover:text-white transition-colors"
                 >
-                  <Search size={11} className="text-[#4aa3ff]" />
+                  <Search size={11} className="text-electric" />
                   <span>{sug}</span>
                 </button>
               ))}
@@ -1313,10 +1313,10 @@ export default function BrowserApp() {
         {/* Action Toggles */}
         <button
           onClick={() => setSidePanel((prev) => (prev === 'devtools' ? 'none' : 'devtools'))}
-          className={`grid h-6 w-6 place-items-center border border-white/[0.06] transition-colors ${
+          className={`grid h-6 w-6 place-items-center border border-white/6 transition-colors ${
             sidePanel === 'devtools'
-              ? 'bg-[#4aa3ff]/15 text-[#a0d2ff] border-[#4aa3ff]/50'
-              : 'text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0]'
+              ? 'bg-electric/15 text-[#a0d2ff] border-electric/50'
+              : 'text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
           title="Toggle DevTools & Inspector"
         >
@@ -1325,10 +1325,10 @@ export default function BrowserApp() {
 
         <button
           onClick={() => setSidePanel((prev) => (prev === 'history' ? 'none' : 'history'))}
-          className={`grid h-6 w-6 place-items-center border border-white/[0.06] transition-colors ${
+          className={`grid h-6 w-6 place-items-center border border-white/6 transition-colors ${
             sidePanel === 'history'
-              ? 'bg-[#4aa3ff]/15 text-[#a0d2ff] border-[#4aa3ff]/50'
-              : 'text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0]'
+              ? 'bg-electric/15 text-[#a0d2ff] border-electric/50'
+              : 'text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
           title="Browsing History"
         >
@@ -1337,10 +1337,10 @@ export default function BrowserApp() {
 
         <button
           onClick={() => setSidePanel((prev) => (prev === 'bookmarks' ? 'none' : 'bookmarks'))}
-          className={`grid h-6 w-6 place-items-center border border-white/[0.06] transition-colors ${
+          className={`grid h-6 w-6 place-items-center border border-white/6 transition-colors ${
             sidePanel === 'bookmarks'
-              ? 'bg-[#4aa3ff]/15 text-[#a0d2ff] border-[#4aa3ff]/50'
-              : 'text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0]'
+              ? 'bg-electric/15 text-[#a0d2ff] border-electric/50'
+              : 'text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
           title="Bookmarks"
         >
@@ -1349,10 +1349,10 @@ export default function BrowserApp() {
 
         <button
           onClick={() => setMenuOpen((open) => !open)}
-          className={`browser-menu-trigger grid h-6 w-6 place-items-center border border-white/[0.06] transition-colors ${
+          className={`browser-menu-trigger grid h-6 w-6 place-items-center border border-white/6 transition-colors ${
             menuOpen
-              ? 'border-[#4aa3ff]/50 bg-[#4aa3ff]/15 text-[#a0d2ff]'
-              : 'text-[#8fa5b8] hover:bg-white/[0.04] hover:text-[#d6e5f0]'
+              ? 'border-electric/50 bg-electric/15 text-[#a0d2ff]'
+              : 'text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
           title="Browser Menu"
           aria-expanded={menuOpen}
@@ -1389,9 +1389,9 @@ export default function BrowserApp() {
       )}
 
       {findOpen && (
-        <div className="flex h-8 shrink-0 items-center justify-end gap-1.5 border-b border-white/[0.06] bg-[#070c14] px-2">
-          <div className="flex w-72 items-center border border-white/[0.08] bg-black/40 px-2 py-1 focus-within:border-[#4aa3ff]/50">
-            <FileCode size={10} className="mr-1.5 shrink-0 text-[#4aa3ff]" />
+        <div className="flex h-8 shrink-0 items-center justify-end gap-1.5 border-b border-white/6 bg-[#070c14] px-2">
+          <div className="flex w-72 items-center border border-white/8 bg-black/40 px-2 py-1 focus-within:border-electric/50">
+            <FileCode size={10} className="mr-1.5 shrink-0 text-electric" />
             <input
               ref={findInputRef}
               value={findQuery}
@@ -1415,7 +1415,7 @@ export default function BrowserApp() {
           <button
             type="button"
             onClick={() => void handleFindInPage('previous')}
-            className="grid h-5 w-5 place-items-center border border-white/[0.07] text-[#7790a5] hover:bg-white/[0.04] hover:text-white"
+            className="grid h-5 w-5 place-items-center border border-white/[0.07] text-[#7790a5] hover:bg-white/4 hover:text-white"
             title="Previous match (Shift+Enter)"
           >
             <ChevronUp size={10} />
@@ -1423,7 +1423,7 @@ export default function BrowserApp() {
           <button
             type="button"
             onClick={() => void handleFindInPage('next')}
-            className="grid h-5 w-5 place-items-center border border-white/[0.07] text-[#7790a5] hover:bg-white/[0.04] hover:text-white"
+            className="grid h-5 w-5 place-items-center border border-white/[0.07] text-[#7790a5] hover:bg-white/4 hover:text-white"
             title="Next match (Enter)"
           >
             <ChevronDown size={10} />
@@ -1441,13 +1441,13 @@ export default function BrowserApp() {
 
       {/* 3. Bookmarks Quick Access Bar */}
       {showBookmarksBar && bookmarks.length > 0 && (
-        <div className="flex h-6 shrink-0 items-center gap-1 border-b border-white/[0.04] bg-[#060a12] px-2 overflow-x-auto os-scrollbar">
+        <div className="flex h-6 shrink-0 items-center gap-1 border-b border-white/4 bg-[#060a12] px-2 overflow-x-auto os-scrollbar">
           {bookmarks.map((bm) => (
             <button
               key={bm.id}
               onClick={() => handleNavigate(bm.url)}
               onContextMenu={(e) => handleOpenContextMenu(e, 'bookmark', undefined, bm.id)}
-              className="flex items-center gap-1.5 border border-transparent px-2 py-0.5 font-mono text-[8.5px] text-[#7a92a6] hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-[#d0e0ed] transition-colors"
+              className="flex items-center gap-1.5 border border-transparent px-2 py-0.5 font-mono text-[8.5px] text-[#7a92a6] hover:border-white/6 hover:bg-white/3 hover:text-[#d0e0ed] transition-colors"
             >
               {bm.favicon ? (
                 <img
@@ -1459,9 +1459,9 @@ export default function BrowserApp() {
                   }}
                 />
               ) : (
-                <Globe size={9} className="text-[#4aa3ff]" />
+                <Globe size={9} className="text-electric" />
               )}
-              <span className="truncate max-w-[120px]">{bm.title}</span>
+              <span className="truncate max-w-30">{bm.title}</span>
             </button>
           ))}
         </div>
@@ -1477,7 +1477,7 @@ export default function BrowserApp() {
               <div className="w-full max-w-2xl space-y-6 text-center">
                 {/* Logo & Branding */}
                 <div className="space-y-1">
-                  <div className="mx-auto grid h-12 w-12 place-items-center border border-[#4aa3ff]/40 bg-[#4aa3ff]/10 text-[#4aa3ff]">
+                  <div className="mx-auto grid h-12 w-12 place-items-center border border-electric/40 bg-electric/10 text-electric">
                     <Globe size={24} />
                   </div>
                   <h1 className="text-xl font-bold text-white tracking-tight">Nammu Browser</h1>
@@ -1488,8 +1488,8 @@ export default function BrowserApp() {
 
                 {/* Central Search Bar */}
                 <div className="relative mx-auto max-w-lg">
-                  <div className="flex items-center border border-white/[0.1] bg-black/60 px-3 py-2.5 shadow-2xl focus-within:border-[#4aa3ff]">
-                    <Search size={14} className="mr-2.5 text-[#4aa3ff] shrink-0" />
+                  <div className="flex items-center border border-white/10 bg-black/60 px-3 py-2.5 shadow-2xl focus-within:border-electric">
+                    <Search size={14} className="mr-2.5 text-electric shrink-0" />
                     <input
                       type="text"
                       placeholder="Search Google, YouTube, ChatGPT, or enter any web URL..."
@@ -1514,13 +1514,13 @@ export default function BrowserApp() {
                       <button
                         key={item.id}
                         onClick={() => handleNavigate(item.url)}
-                        className="group flex flex-col p-3 border border-white/[0.06] bg-white/[0.015] hover:border-[#4aa3ff]/50 hover:bg-white/[0.04] transition-all"
+                        className="group flex flex-col p-3 border border-white/6 bg-white/1.5 hover:border-electric/50 hover:bg-white/4 transition-all"
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-lg">{item.icon}</span>
                           <ExternalLink
                             size={10}
-                            className="text-[#415a6e] group-hover:text-[#4aa3ff] transition-colors"
+                            className="text-[#415a6e] group-hover:text-electric transition-colors"
                           />
                         </div>
                         <div className="mt-2 font-medium text-[11.5px] text-[#e0ecf7] group-hover:text-white">
@@ -1547,7 +1547,7 @@ export default function BrowserApp() {
                   <>
                     <div className="flex items-center gap-2 text-[#a855f7]">
                       <Cpu size={24} className="animate-pulse" />
-                      <RotateCw size={14} className="animate-spin text-[#4aa3ff]" />
+                      <RotateCw size={14} className="animate-spin text-electric" />
                     </div>
                     <div className="max-w-sm text-center">
                       <div className="text-[12px] font-medium text-white">
@@ -1573,7 +1573,7 @@ export default function BrowserApp() {
                     <button
                       type="button"
                       onClick={handleRetryEngine}
-                      className="border border-[#4aa3ff]/50 bg-[#4aa3ff]/10 px-3 py-1.5 font-mono text-[9px] text-[#a0d2ff] hover:bg-[#4aa3ff]/20"
+                      className="border border-electric/50 bg-electric/10 px-3 py-1.5 font-mono text-[9px] text-[#a0d2ff] hover:bg-electric/20"
                     >
                       Retry engine
                     </button>
@@ -1611,12 +1611,12 @@ export default function BrowserApp() {
 
         {/* 5. Side Panels (DevTools, History, Bookmarks) */}
         {sidePanel !== 'none' && (
-          <aside className="w-80 shrink-0 border-l border-white/[0.08] bg-[#070b14] p-3 flex flex-col justify-between overflow-y-auto os-scrollbar">
+          <aside className="w-80 shrink-0 border-l border-white/8 bg-[#070b14] p-3 flex flex-col justify-between overflow-y-auto os-scrollbar">
             {/* DevTools Inspector Panel */}
             {sidePanel === 'devtools' && (
               <div className="space-y-3 flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-[#4aa3ff]">
+                <div className="flex items-center justify-between border-b border-white/6 pb-2">
+                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-electric">
                     Page DevTools & Inspector
                   </span>
                   <button
@@ -1642,8 +1642,8 @@ export default function BrowserApp() {
                         onClick={() => setViewportMode(mode.id as any)}
                         className={`flex items-center justify-center gap-1 border py-1 font-mono text-[8px] transition-colors ${
                           viewportMode === mode.id
-                            ? 'border-[#4aa3ff]/60 bg-[#4aa3ff]/15 text-[#a0d2ff]'
-                            : 'border-white/[0.06] text-[#69849b] hover:bg-white/[0.03]'
+                            ? 'border-electric/60 bg-electric/15 text-[#a0d2ff]'
+                            : 'border-white/6 text-[#69849b] hover:bg-white/3'
                         }`}
                       >
                         <mode.icon size={10} />
@@ -1654,24 +1654,24 @@ export default function BrowserApp() {
                 </div>
 
                 {/* Zoom Controls */}
-                <div className="flex items-center justify-between border border-white/[0.06] bg-black/30 px-2 py-1 font-mono text-[8.5px]">
+                <div className="flex items-center justify-between border border-white/6 bg-black/30 px-2 py-1 font-mono text-[8.5px]">
                   <span>Zoom: {zoomLevel}%</span>
                   <div className="flex gap-1">
                     <button
                       onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
-                      className="border border-white/[0.06] px-1.5 py-0.5 hover:bg-white/[0.04]"
+                      className="border border-white/6 px-1.5 py-0.5 hover:bg-white/4"
                     >
                       <ZoomOut size={10} />
                     </button>
                     <button
                       onClick={() => setZoomLevel(100)}
-                      className="border border-white/[0.06] px-1.5 py-0.5 hover:bg-white/[0.04]"
+                      className="border border-white/6 px-1.5 py-0.5 hover:bg-white/4"
                     >
                       100%
                     </button>
                     <button
                       onClick={() => setZoomLevel((z) => Math.min(200, z + 10))}
-                      className="border border-white/[0.06] px-1.5 py-0.5 hover:bg-white/[0.04]"
+                      className="border border-white/6 px-1.5 py-0.5 hover:bg-white/4"
                     >
                       <ZoomIn size={10} />
                     </button>
@@ -1679,16 +1679,16 @@ export default function BrowserApp() {
                 </div>
 
                 {/* Network Logs */}
-                <div className="flex-1 space-y-1 min-h-[140px] flex flex-col">
+                <div className="flex-1 space-y-1 min-h-35 flex flex-col">
                   <div className="font-mono text-[8px] text-[#557087]">NETWORK TRAFFIC</div>
-                  <div className="flex-1 overflow-auto os-scrollbar border border-white/[0.06] bg-black/50 p-2 font-mono text-[8.5px] space-y-1">
+                  <div className="flex-1 overflow-auto os-scrollbar border border-white/6 bg-black/50 p-2 font-mono text-[8.5px] space-y-1">
                     {networkLogs.map((n, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between border-b border-white/[0.03] pb-0.5"
+                        className="flex items-center justify-between border-b border-white/3 pb-0.5"
                       >
-                        <span className="text-[#2ee6a6]">{n.method}</span>
-                        <span className="truncate max-w-[140px] text-[#90a8bd]">{n.url}</span>
+                        <span className="text-emerald">{n.method}</span>
+                        <span className="truncate max-w-35 text-[#90a8bd]">{n.url}</span>
                         <span className="text-[#69849b]">{n.status}</span>
                       </div>
                     ))}
@@ -1701,9 +1701,9 @@ export default function BrowserApp() {
                 </div>
 
                 {/* Console Output */}
-                <div className="flex-1 space-y-1 min-h-[140px] flex flex-col">
+                <div className="flex-1 space-y-1 min-h-35 flex flex-col">
                   <div className="font-mono text-[8px] text-[#557087]">BROWSER CONSOLE</div>
-                  <div className="flex-1 overflow-auto os-scrollbar border border-white/[0.06] bg-black/50 p-2 font-mono text-[8.5px] space-y-1">
+                  <div className="flex-1 overflow-auto os-scrollbar border border-white/6 bg-black/50 p-2 font-mono text-[8.5px] space-y-1">
                     {devLogs.map((log, i) => (
                       <div key={i} className="text-[#a0d2ff]">
                         <span className="text-[#415a6e]">[{log.time}]</span> {log.msg}
@@ -1722,8 +1722,8 @@ export default function BrowserApp() {
             {/* Browsing History Panel */}
             {sidePanel === 'history' && (
               <div className="space-y-3 flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-[#4aa3ff]">
+                <div className="flex items-center justify-between border-b border-white/6 pb-2">
+                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-electric">
                     Browsing History
                   </span>
                   <button
@@ -1742,7 +1742,7 @@ export default function BrowserApp() {
                     <button
                       key={item.id}
                       onClick={() => handleNavigate(item.url)}
-                      className="flex w-full items-center gap-2 border border-transparent p-1.5 text-left hover:border-white/[0.06] hover:bg-white/[0.025] transition-colors"
+                      className="flex w-full items-center gap-2 border border-transparent p-1.5 text-left hover:border-white/6 hover:bg-white/2.5 transition-colors"
                     >
                       {item.favicon ? (
                         <img
@@ -1751,7 +1751,7 @@ export default function BrowserApp() {
                           className="h-3.5 w-3.5 object-contain shrink-0"
                         />
                       ) : (
-                        <Globe size={11} className="text-[#4aa3ff] shrink-0" />
+                        <Globe size={11} className="text-electric shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[10.5px] text-[#e0ecf7]">{item.title}</div>
@@ -1771,8 +1771,8 @@ export default function BrowserApp() {
             {/* Bookmarks Library */}
             {sidePanel === 'bookmarks' && (
               <div className="flex min-h-0 flex-1 flex-col space-y-3">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-[#4aa3ff]">
+                <div className="flex items-center justify-between border-b border-white/6 pb-2">
+                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-electric">
                     Bookmarks Library
                   </span>
                   <button
@@ -1787,7 +1787,7 @@ export default function BrowserApp() {
                   {bookmarks.map((bookmark) => (
                     <div
                       key={bookmark.id}
-                      className="group flex items-center gap-2 rounded border border-transparent p-1.5 hover:border-white/[0.06] hover:bg-white/[0.025]"
+                      className="group flex items-center gap-2 rounded border border-transparent p-1.5 hover:border-white/6 hover:bg-white/2.5"
                     >
                       <button
                         type="button"
@@ -1801,7 +1801,7 @@ export default function BrowserApp() {
                             className="h-3.5 w-3.5 shrink-0 object-contain"
                           />
                         ) : (
-                          <Globe size={11} className="shrink-0 text-[#4aa3ff]" />
+                          <Globe size={11} className="shrink-0 text-electric" />
                         )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[10.5px] text-[#e0ecf7]">
@@ -1836,8 +1836,8 @@ export default function BrowserApp() {
             {/* Browser Preferences */}
             {sidePanel === 'settings' && (
               <div className="flex min-h-0 flex-1 flex-col space-y-3">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <span className="flex items-center gap-1.5 font-mono text-[8.5px] uppercase tracking-wider text-[#4aa3ff]">
+                <div className="flex items-center justify-between border-b border-white/6 pb-2">
+                  <span className="flex items-center gap-1.5 font-mono text-[8.5px] uppercase tracking-wider text-electric">
                     <Settings2 size={11} /> Browser Settings
                   </span>
                   <button
@@ -1850,7 +1850,7 @@ export default function BrowserApp() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block rounded border border-white/[0.06] bg-black/25 p-2.5">
+                  <label className="block rounded border border-white/6 bg-black/25 p-2.5">
                     <span className="mb-1.5 block text-[10px] font-medium text-[#d4e1ed]">
                       Default Search Engine
                     </span>
@@ -1859,7 +1859,7 @@ export default function BrowserApp() {
                       onChange={(event) =>
                         updatePreference('searchEngine', event.target.value as SearchEngine)
                       }
-                      className="w-full rounded border border-white/[0.08] bg-[#080d15] px-2 py-1.5 text-[10px] text-[#bcd0df] outline-none focus:border-[#4aa3ff]/50"
+                      className="w-full rounded border border-white/8 bg-[#080d15] px-2 py-1.5 text-[10px] text-[#bcd0df] outline-none focus:border-electric/50"
                     >
                       <option value="google">Google</option>
                       <option value="duckduckgo">DuckDuckGo</option>
@@ -1889,7 +1889,7 @@ export default function BrowserApp() {
                       key={option.key}
                       type="button"
                       onClick={() => updatePreference(option.key, !preferences[option.key])}
-                      className="flex w-full items-center justify-between gap-3 rounded border border-white/[0.06] bg-black/25 p-2.5 text-left hover:bg-white/[0.025]"
+                      className="flex w-full items-center justify-between gap-3 rounded border border-white/6 bg-black/25 p-2.5 text-left hover:bg-white/2.5"
                     >
                       <span>
                         <span className="block text-[10px] font-medium text-[#d4e1ed]">
@@ -1902,8 +1902,8 @@ export default function BrowserApp() {
                       <span
                         className={`relative h-4 w-7 shrink-0 rounded-full border transition-colors ${
                           preferences[option.key]
-                            ? 'border-[#4aa3ff]/60 bg-[#4aa3ff]/35'
-                            : 'border-white/[0.1] bg-white/[0.04]'
+                            ? 'border-electric/60 bg-electric/35'
+                            : 'border-white/10 bg-white/4'
                         }`}
                       >
                         <span
@@ -1917,7 +1917,7 @@ export default function BrowserApp() {
                     </button>
                   ))}
 
-                  <div className="rounded border border-white/[0.06] bg-black/25 p-2.5">
+                  <div className="rounded border border-white/6 bg-black/25 p-2.5">
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-[10px] font-medium text-[#d4e1ed]">
                         Default Page Zoom
@@ -1945,7 +1945,7 @@ export default function BrowserApp() {
                   </div>
                 </div>
 
-                <div className="space-y-1 border-t border-white/[0.06] pt-3">
+                <div className="space-y-1 border-t border-white/6 pt-3">
                   {[
                     { label: 'Downloads', url: 'about:downloads' },
                     { label: 'Saved Passwords', url: 'about:logins' },
@@ -1962,7 +1962,7 @@ export default function BrowserApp() {
                         handleNewTab(item.url);
                         setSidePanel('none');
                       }}
-                      className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-[9.5px] text-[#8fa7bb] hover:bg-white/[0.04] hover:text-white"
+                      className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-[9.5px] text-[#8fa7bb] hover:bg-white/4 hover:text-white"
                     >
                       <span>{item.label}</span>
                       <ArrowRight size={10} />
@@ -1970,7 +1970,7 @@ export default function BrowserApp() {
                   ))}
                 </div>
 
-                <div className="mt-auto border-t border-white/[0.06] pt-3">
+                <div className="mt-auto border-t border-white/6 pt-3">
                   <button
                     type="button"
                     onClick={handleClearBrowsingData}
@@ -1989,7 +1989,7 @@ export default function BrowserApp() {
       {contextMenu.isOpen && (
         <div
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="absolute z-50 max-h-[90%] min-w-[210px] overflow-y-auto border border-white/[0.14] bg-[#0a1018]/95 p-1 font-mono text-[10px] text-[#c9d7e2] shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100 os-scrollbar"
+          className="absolute z-50 max-h-[90%] min-w-52.5 overflow-y-auto border border-white/[0.14] bg-navy/95 p-1 font-mono text-[10px] text-[#c9d7e2] shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100 os-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
           {/* TAB CONTEXT MENU */}
@@ -2000,10 +2000,10 @@ export default function BrowserApp() {
                   handleNewTab();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Plus size={11} className="text-[#4aa3ff]" />
+                  <Plus size={11} className="text-electric" />
                   <span>New Tab</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+T</span>
@@ -2014,10 +2014,10 @@ export default function BrowserApp() {
                   handleDuplicateTab(contextMenu.targetTabId!);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Copy size={11} className="text-[#4aa3ff]" />
+                  <Copy size={11} className="text-electric" />
                   <span>Duplicate Tab</span>
                 </div>
               </button>
@@ -2027,23 +2027,23 @@ export default function BrowserApp() {
                   handleReload();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <RotateCw size={11} className="text-[#4aa3ff]" />
+                  <RotateCw size={11} className="text-electric" />
                   <span>Reload Tab</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+R</span>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {
                   handleTogglePinTab(contextMenu.targetTabId!);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <Pin size={11} className="text-[#a0d2ff]" />
@@ -2060,11 +2060,11 @@ export default function BrowserApp() {
                   handleToggleMuteTab(contextMenu.targetTabId!);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
                   {tabs.find((t) => t.id === contextMenu.targetTabId)?.isMuted ? (
-                    <Volume2 size={11} className="text-[#2ee6a6]" />
+                    <Volume2 size={11} className="text-emerald" />
                   ) : (
                     <VolumeX size={11} className="text-[#f43f5e]" />
                   )}
@@ -2082,15 +2082,15 @@ export default function BrowserApp() {
                   if (target?.url) navigator.clipboard?.writeText(target.url);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Share2 size={11} className="text-[#4aa3ff]" />
+                  <Share2 size={11} className="text-electric" />
                   <span>Copy Page URL</span>
                 </div>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {
@@ -2111,7 +2111,7 @@ export default function BrowserApp() {
                   handleCloseOtherTabs(contextMenu.targetTabId!);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/[0.05] transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/5 transition-colors"
               >
                 <span>Close Other Tabs</span>
               </button>
@@ -2121,7 +2121,7 @@ export default function BrowserApp() {
                   handleCloseTabsToRight(contextMenu.targetTabId!);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/[0.05] transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/5 transition-colors"
               >
                 <span>Close Tabs to the Right</span>
               </button>
@@ -2139,10 +2139,10 @@ export default function BrowserApp() {
                   }
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Scissors size={11} className="text-[#4aa3ff]" />
+                  <Scissors size={11} className="text-electric" />
                   <span>Cut</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+X</span>
@@ -2153,10 +2153,10 @@ export default function BrowserApp() {
                   navigator.clipboard?.writeText(omniboxInput);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Copy size={11} className="text-[#4aa3ff]" />
+                  <Copy size={11} className="text-electric" />
                   <span>Copy</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+C</span>
@@ -2170,10 +2170,10 @@ export default function BrowserApp() {
                   } catch {}
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Clipboard size={11} className="text-[#4aa3ff]" />
+                  <Clipboard size={11} className="text-electric" />
                   <span>Paste</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+V</span>
@@ -2190,23 +2190,23 @@ export default function BrowserApp() {
                   } catch {}
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <CornerDownLeft size={11} className="text-[#2ee6a6]" />
+                  <CornerDownLeft size={11} className="text-emerald" />
                   <span>Paste and Go</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Enter</span>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {
                   omniboxRef.current?.select();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <span>Select All</span>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+A</span>
@@ -2217,7 +2217,7 @@ export default function BrowserApp() {
                   setOmniboxInput('');
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/[0.05] transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/5 transition-colors"
               >
                 <span>Clear Address</span>
               </button>
@@ -2233,10 +2233,10 @@ export default function BrowserApp() {
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
                 disabled={!activeTab?.canGoBack}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white disabled:opacity-30 transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white disabled:opacity-30 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <ArrowLeft size={11} className="text-[#4aa3ff]" />
+                  <ArrowLeft size={11} className="text-electric" />
                   <span>Back</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Alt+←</span>
@@ -2248,10 +2248,10 @@ export default function BrowserApp() {
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
                 disabled={!activeTab?.canGoForward}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white disabled:opacity-30 transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white disabled:opacity-30 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <ArrowRight size={11} className="text-[#4aa3ff]" />
+                  <ArrowRight size={11} className="text-electric" />
                   <span>Forward</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Alt+→</span>
@@ -2262,29 +2262,29 @@ export default function BrowserApp() {
                   handleReload();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <RotateCw size={11} className="text-[#4aa3ff]" />
+                  <RotateCw size={11} className="text-electric" />
                   <span>Reload</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+R</span>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {
                   handleToggleBookmark();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <Star
                     size={11}
                     fill={isCurrentBookmarked ? '#f59e0b' : 'none'}
-                    className="text-[#f59e0b]"
+                    className="text-os-amber"
                   />
                   <span>{isCurrentBookmarked ? 'Remove Bookmark' : 'Bookmark Page'}</span>
                 </div>
@@ -2296,25 +2296,25 @@ export default function BrowserApp() {
                   if (activeTab?.url) navigator.clipboard?.writeText(activeTab.url);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Copy size={11} className="text-[#4aa3ff]" />
+                  <Copy size={11} className="text-electric" />
                   <span>Copy Page URL</span>
                 </div>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {
                   openFindBar();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Search size={11} className="text-[#4aa3ff]" />
+                  <Search size={11} className="text-electric" />
                   <span>Find in Page</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+F</span>
@@ -2325,10 +2325,10 @@ export default function BrowserApp() {
                   handleSavePage();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <FileDown size={11} className="text-[#4aa3ff]" />
+                  <FileDown size={11} className="text-electric" />
                   <span>Save Page</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+S</span>
@@ -2339,10 +2339,10 @@ export default function BrowserApp() {
                   handlePrintPage();
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Printer size={11} className="text-[#4aa3ff]" />
+                  <Printer size={11} className="text-electric" />
                   <span>Print</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+P</span>
@@ -2355,25 +2355,25 @@ export default function BrowserApp() {
                   }
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <FileCode size={11} className="text-[#4aa3ff]" />
+                  <FileCode size={11} className="text-electric" />
                   <span>View Page Source</span>
                 </div>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {
                   setSidePanel((p) => (p === 'devtools' ? 'none' : 'devtools'));
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <FileCode size={11} className="text-[#4aa3ff]" />
+                  <FileCode size={11} className="text-electric" />
                   <span>Inspect DevTools</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+Shift+I</span>
@@ -2384,7 +2384,7 @@ export default function BrowserApp() {
                   setZoomLevel(100);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/[0.05] transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-white/5 transition-colors"
               >
                 <span>Reset Zoom (100%)</span>
               </button>
@@ -2400,10 +2400,10 @@ export default function BrowserApp() {
                   if (bm) handleNewTab(bm.url);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <ExternalLink size={11} className="text-[#4aa3ff]" />
+                  <ExternalLink size={11} className="text-electric" />
                   <span>Open in New Tab</span>
                 </div>
               </button>
@@ -2414,15 +2414,15 @@ export default function BrowserApp() {
                   if (bm?.url) navigator.clipboard?.writeText(bm.url);
                   setContextMenu((prev) => ({ ...prev, isOpen: false }));
                 }}
-                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-[#4aa3ff]/15 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left hover:bg-electric/15 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Copy size={11} className="text-[#4aa3ff]" />
+                  <Copy size={11} className="text-electric" />
                   <span>Copy Link Address</span>
                 </div>
               </button>
 
-              <div className="my-1 border-t border-white/[0.08]" />
+              <div className="my-1 border-t border-white/8" />
 
               <button
                 onClick={() => {

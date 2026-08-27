@@ -38,6 +38,7 @@ interface TaskbarProps {
   onCloseWindow: (id: string) => void;
   onPinTool: (toolId: string) => void;
   onUnpinTool: (toolId: string) => void;
+  onReorderPinned: (sourceId: string, targetId: string) => void;
   onOpenSystemApp: (appId: SystemAppId) => void;
   musicOpen: boolean;
   onToggleMusic: () => void;
@@ -82,6 +83,7 @@ export default function Taskbar({
   onCloseWindow,
   onPinTool,
   onUnpinTool,
+  onReorderPinned,
   onOpenSystemApp,
   musicOpen,
   onToggleMusic,
@@ -96,6 +98,8 @@ export default function Taskbar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showClock, setShowClock] = useState(false);
   const [showPower, setShowPower] = useState(false);
+  const [clockSettings, setClockSettings] = useState({ showSeconds: false, showWeekday: true });
+  const [draggedPinnedId, setDraggedPinnedId] = useState<string | null>(null);
   const [notifications] = useState([
     { id: 1, text: 'NammuOS initialized', time: 'Just now', read: true },
     { id: 2, text: 'All systems nominal', time: 'Just now', read: true },
@@ -105,6 +109,27 @@ export default function Taskbar({
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const syncClockSettings = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('nammu-settings') || '{}');
+        setClockSettings({
+          showSeconds: saved.showSeconds === true,
+          showWeekday: saved.showWeekday !== false,
+        });
+      } catch {
+        setClockSettings({ showSeconds: false, showWeekday: true });
+      }
+    };
+    syncClockSettings();
+    window.addEventListener('nammu-theme-change', syncClockSettings);
+    window.addEventListener('storage', syncClockSettings);
+    return () => {
+      window.removeEventListener('nammu-theme-change', syncClockSettings);
+      window.removeEventListener('storage', syncClockSettings);
+    };
   }, []);
 
   const closeFlyouts = useCallback(() => {
@@ -203,13 +228,18 @@ export default function Taskbar({
   const unpinnedMinimizedTools = minimizedTools.filter((win) => !isPinnedWindow(win));
 
   const formatTime = (d: Date) =>
-    d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: clockSettings.showSeconds ? '2-digit' : undefined,
+      hour12: true,
+    });
   const formatFullTime = (d: Date) =>
     d.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
+      second: clockSettings.showSeconds ? '2-digit' : undefined,
+      hour12: true,
     });
   const formatDate = (d: Date) => {
     const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
@@ -224,6 +254,17 @@ export default function Taskbar({
       day: 'numeric',
       year: 'numeric',
     });
+  const calendarDays = (() => {
+    const year = time.getFullYear();
+    const month = time.getMonth();
+    const leadingDays = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cellCount = Math.ceil((leadingDays + daysInMonth) / 7) * 7;
+    return Array.from({ length: cellCount }, (_, index) => {
+      const day = index - leadingDays + 1;
+      return day >= 1 && day <= daysInMonth ? day : null;
+    });
+  })();
 
   const taskbarMenu: ContextMenuEntry[] = [
     { id: 'taskbar-header', type: 'header', label: 'Taskbar' },
@@ -311,7 +352,7 @@ export default function Taskbar({
 
       {/* Pinned apps & tools */}
       <div className="flex items-center gap-0.5">
-        {pinnedTools.map((pinnedId) => {
+        {pinnedTools.map((pinnedId, pinnedIndex) => {
           const item = resolvePinnedItem(pinnedId);
           if (!item) return null;
           const isOpen = openTools.some((w) => w.toolId === item.windowId || w.toolId === item.id);
@@ -323,6 +364,24 @@ export default function Taskbar({
           return (
             <button
               key={pinnedId}
+              draggable
+              onDragStart={(event) => {
+                setDraggedPinnedId(pinnedId);
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', pinnedId);
+              }}
+              onDragOver={(event) => {
+                if (!draggedPinnedId || draggedPinnedId === pinnedId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const sourceId = draggedPinnedId || event.dataTransfer.getData('text/plain');
+                if (sourceId && sourceId !== pinnedId) onReorderPinned(sourceId, pinnedId);
+                setDraggedPinnedId(null);
+              }}
+              onDragEnd={() => setDraggedPinnedId(null)}
               onClick={() => {
                 if (!existing) {
                   if (item.isSystemApp) onOpenSystemApp(item.id as SystemAppId);
@@ -335,8 +394,16 @@ export default function Taskbar({
                   onFocusWindow(existing.id);
                 }
               }}
-              className={`taskbar-button relative ${isOpen || isMinimized ? 'active' : ''} ${isOpen ? 'pinned' : ''}`}
-              title={item.name}
+              onMouseDown={(event) => {
+                if (event.button === 1) event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1 || !existing) return;
+                event.preventDefault();
+                onCloseWindow(existing.id);
+              }}
+              className={`taskbar-button relative ${isOpen || isMinimized ? 'active' : ''} ${isOpen ? 'pinned' : ''} ${draggedPinnedId === pinnedId ? 'opacity-40' : ''}`}
+              title={`${item.name}${existing ? ' · Middle-click to close' : ''}`}
               onContextMenu={(event) => {
                 contextMenu.openAtEvent(
                   event,
@@ -370,6 +437,18 @@ export default function Taskbar({
                       label: 'Unpin from taskbar',
                       icon: PinOff,
                       action: () => onUnpinTool(pinnedId),
+                    },
+                    {
+                      id: `pinned-${pinnedId}-move-left`,
+                      label: 'Move left',
+                      disabled: pinnedIndex === 0,
+                      action: () => onReorderPinned(pinnedId, pinnedTools[pinnedIndex - 1]),
+                    },
+                    {
+                      id: `pinned-${pinnedId}-move-right`,
+                      label: 'Move right',
+                      disabled: pinnedIndex === pinnedTools.length - 1,
+                      action: () => onReorderPinned(pinnedId, pinnedTools[pinnedIndex + 1]),
                     },
                     ...(existing
                       ? [
@@ -420,6 +499,14 @@ export default function Taskbar({
             <button
               key={win.id}
               onClick={() => (win.isFocused ? onMinimizeWindow(win.id) : onFocusWindow(win.id))}
+              onMouseDown={(event) => {
+                if (event.button === 1) event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) return;
+                event.preventDefault();
+                onCloseWindow(win.id);
+              }}
               className={`taskbar-button max-w-35 ${win.isFocused ? 'active' : ''}`}
               title={win.title}
               onContextMenu={(event) =>
@@ -481,6 +568,14 @@ export default function Taskbar({
             <button
               key={win.id}
               onClick={() => onRestoreWindow(win.id)}
+              onMouseDown={(event) => {
+                if (event.button === 1) event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) return;
+                event.preventDefault();
+                onCloseWindow(win.id);
+              }}
               className="taskbar-button opacity-60 hover:opacity-100"
               title={win.title}
               onContextMenu={(event) =>
@@ -751,9 +846,11 @@ export default function Taskbar({
             <span className="text-[11px] font-mono text-os-text leading-tight font-medium">
               {formatTime(time)}
             </span>
-            <span className="text-[9px] font-mono text-os-text-muted leading-tight">
-              {formatDate(time)}
-            </span>
+            {clockSettings.showWeekday && (
+              <span className="text-[9px] font-mono text-os-text-muted leading-tight">
+                {formatDate(time)}
+              </span>
+            )}
           </button>
           {showClock && (
             <div className="taskbar-popover absolute bottom-9 right-0 z-50 w-64">
@@ -766,6 +863,34 @@ export default function Taskbar({
                 </div>
                 <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.08em] text-os-text-muted">
                   {formatFullDate(time)}
+                </div>
+              </div>
+              <div className="border-t border-os-border/20 px-3 pb-3 pt-2.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-os-text">
+                    {time.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <span className="font-mono text-[7px] uppercase tracking-[0.12em] text-os-text-dim">
+                    Current month
+                  </span>
+                </div>
+                <div className="grid grid-cols-7 text-center font-mono text-[7px] uppercase text-os-text-dim">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                    <span key={`${day}-${index}`} className="py-1">
+                      {day}
+                    </span>
+                  ))}
+                  {calendarDays.map((day, index) => {
+                    const isToday = day === time.getDate();
+                    return (
+                      <span
+                        key={`${day ?? 'empty'}-${index}`}
+                        className={`grid h-6 place-items-center text-[8px] ${day === null ? 'text-transparent' : isToday ? 'bg-os-accent font-semibold text-[#05080d]' : 'text-os-text-muted'}`}
+                      >
+                        {day ?? '·'}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             </div>

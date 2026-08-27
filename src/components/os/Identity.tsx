@@ -69,18 +69,19 @@ export default function Identity({
 
   return (
     <header className="nammu-identity absolute left-24 right-73 top-0 z-20 overflow-visible">
-      <div className="pointer-events-none absolute left-[12%] top-6 font-mono text-[8px] tracking-[0.28em] text-cyan/35">
-        18.42° · RING LOCK
-      </div>
-      <div className="pointer-events-none absolute right-[10%] top-10 font-mono text-[8px] tracking-[0.22em] text-white/20">
-        SYS.CORE 4.1.0
-      </div>
-
       <div className="relative z-10 flex flex-col items-center pb-1 pt-10">
-        <div className="mb-1.5 flex items-center gap-2 font-mono text-[8px] uppercase tracking-[0.42em] text-[#7d90a2]">
-          <span className="status-dot bg-emerald" style={{ color: '#2ee6a6' }} />
-          private workstation<span className="text-white/15">·</span>
-          {now.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase()}
+        <div className="mb-1.5 grid w-full max-w-160 grid-cols-[1fr_auto_1fr] items-center gap-8 font-mono text-[8px] uppercase leading-none">
+          <span className="pointer-events-none text-right tracking-[0.22em] text-cyan/35">
+            18.42° · RING LOCK
+          </span>
+          <span className="flex items-center gap-2 tracking-[0.32em] text-[#7d90a2]">
+            <span className="status-dot bg-emerald" style={{ color: '#2ee6a6' }} />
+            private workstation<span className="text-white/15">·</span>
+            {now.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase()}
+          </span>
+          <span className="pointer-events-none text-left tracking-[0.22em] text-white/20">
+            SYS.CORE 4.1.0
+          </span>
         </div>
 
         <h1

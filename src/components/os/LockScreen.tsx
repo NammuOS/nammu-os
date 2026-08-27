@@ -15,6 +15,17 @@ interface LockScreenProps {
 }
 
 export default function LockScreen({ onUnlock }: LockScreenProps) {
+  const lockPreferences = useMemo(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('nammu-settings') || '{}');
+      return {
+        showDate: saved.lockShowDate !== false,
+        showProfile: saved.lockShowProfile !== false,
+      };
+    } catch {
+      return { showDate: true, showProfile: true };
+    }
+  }, []);
   const [time, setTime] = useState(() => new Date());
   const [profile, setProfile] = useState(() => getStoredLockProfile());
   const [username, setUsername] = useState(() => profile?.username || 'nammu');
@@ -84,22 +95,24 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           <span className="text-os-text-dim">/</span>
           <span>Secure session</span>
         </div>
-        <div className="flex items-center gap-3 font-mono text-[8px] uppercase tracking-[0.12em] text-os-text-muted">
-          <span>
-            {time.toLocaleDateString('en-US', {
-              weekday: 'short',
-              month: 'short',
-              day: 'numeric',
-            })}
-          </span>
-          <span className="font-semibold text-os-text">
-            {time.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            })}
-          </span>
-        </div>
+        {lockPreferences.showDate && (
+          <div className="flex items-center gap-3 font-mono text-[8px] uppercase tracking-[0.12em] text-os-text-muted">
+            <span>
+              {time.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </span>
+            <span className="font-semibold text-os-text">
+              {time.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              })}
+            </span>
+          </div>
+        )}
       </header>
 
       <section className="os-lock-card relative z-10 w-[min(92vw,380px)]">
@@ -113,25 +126,30 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         </div>
 
         <div className="p-5">
-          <div className="flex items-center gap-3 border-b border-os-border/20 pb-4">
-            <div className="os-lock-avatar grid h-14 w-14 shrink-0 place-items-center">
-              {initials ? (
-                <span className="font-display text-[18px] font-semibold tracking-[0.08em] text-os-accent">
-                  {initials}
-                </span>
-              ) : (
-                <UserRound size={23} className="text-os-accent" />
-              )}
-            </div>
-            <div className="min-w-0 text-left">
-              <div className="truncate text-[15px] font-semibold text-os-text">{displayName}</div>
-              <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
-                {isFirstRun ? 'Create local profile' : `@${profile.username}`}
+          {lockPreferences.showProfile && (
+            <div className="flex items-center gap-3 border-b border-os-border/20 pb-4">
+              <div className="os-lock-avatar grid h-14 w-14 shrink-0 place-items-center">
+                {initials ? (
+                  <span className="font-display text-[18px] font-semibold tracking-[0.08em] text-os-accent">
+                    {initials}
+                  </span>
+                ) : (
+                  <UserRound size={23} className="text-os-accent" />
+                )}
+              </div>
+              <div className="min-w-0 text-left">
+                <div className="truncate text-[15px] font-semibold text-os-text">{displayName}</div>
+                <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
+                  {isFirstRun ? 'Create local profile' : `@${profile.username}`}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-3 text-left">
+          <form
+            onSubmit={handleSubmit}
+            className={`${lockPreferences.showProfile ? 'mt-4' : ''} space-y-3 text-left`}
+          >
             {isFirstRun && (
               <label className="block">
                 <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">

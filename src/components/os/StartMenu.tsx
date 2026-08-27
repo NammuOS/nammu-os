@@ -1,9 +1,16 @@
-import { useMemo, useState } from 'react';
-import { FolderOpen, Search, Settings, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, FolderOpen, RotateCcw, Search, Settings, X } from 'lucide-react';
 import { searchTools } from '../../lib/toolRegistry';
 import { SYSTEM_APPS, searchSystemApps, type SystemAppId } from './systemAppRegistry';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
+import {
+  DEFAULT_START_MENU_ORDER,
+  START_MENU_ORDER_CHANGE_EVENT,
+  getStartMenuPreferences,
+  reorderIds,
+  saveStartMenuPreferences,
+} from '../../lib/appOrder';
 
 interface StartMenuProps {
   isOpen: boolean;
@@ -19,7 +26,31 @@ export default function StartMenu({
   onOpenSystemApp,
 }: StartMenuProps) {
   const [query, setQuery] = useState('');
+  const [preferences, setPreferences] = useState(() => ({
+    order: DEFAULT_START_MENU_ORDER,
+    hidden: [] as SystemAppId[],
+  }));
+  const [draggedAppId, setDraggedAppId] = useState<SystemAppId | null>(null);
   const contextMenu = useContextMenu();
+
+  useEffect(() => {
+    const syncPreferences = () => setPreferences(getStartMenuPreferences());
+    syncPreferences();
+    window.addEventListener(START_MENU_ORDER_CHANGE_EVENT, syncPreferences);
+    window.addEventListener('storage', syncPreferences);
+    return () => {
+      window.removeEventListener(START_MENU_ORDER_CHANGE_EVENT, syncPreferences);
+      window.removeEventListener('storage', syncPreferences);
+    };
+  }, []);
+
+  const orderedApps = useMemo(() => {
+    const appsById = new Map(SYSTEM_APPS.map((app) => [app.id, app]));
+    return preferences.order.flatMap((id) => {
+      const app = appsById.get(id);
+      return app && !preferences.hidden.includes(id) ? [app] : [];
+    });
+  }, [preferences]);
 
   const toolResults = useMemo(() => {
     if (!query.trim()) return [];
@@ -27,9 +58,10 @@ export default function StartMenu({
   }, [query]);
 
   const appResults = useMemo(() => {
-    if (!query.trim()) return SYSTEM_APPS;
-    return searchSystemApps(query);
-  }, [query]);
+    if (!query.trim()) return orderedApps;
+    const matches = new Set(searchSystemApps(query).map((app) => app.id));
+    return orderedApps.filter((app) => matches.has(app.id));
+  }, [orderedApps, query]);
 
   if (!isOpen) return null;
 
@@ -54,6 +86,20 @@ export default function StartMenu({
     }
   };
 
+  const reorderApp = (sourceId: SystemAppId, targetId: SystemAppId) => {
+    if (sourceId === targetId) return;
+    setPreferences((current) => {
+      return saveStartMenuPreferences({
+        ...current,
+        order: reorderIds(current.order, sourceId, targetId),
+      });
+    });
+  };
+
+  const resetAppOrder = () => {
+    setPreferences(saveStartMenuPreferences({ order: DEFAULT_START_MENU_ORDER, hidden: [] }));
+  };
+
   const startMenuContext: ContextMenuEntry[] = [
     { id: 'start-header', type: 'header', label: 'Start menu' },
     {
@@ -71,6 +117,12 @@ export default function StartMenu({
         onOpenSystemApp('settings');
         close();
       },
+    },
+    {
+      id: 'start-reset-order',
+      label: 'Reset app arrangement',
+      icon: RotateCcw,
+      action: resetAppOrder,
     },
     { id: 'start-close', label: 'Close Start menu', icon: X, action: close },
   ];
@@ -110,44 +162,86 @@ export default function StartMenu({
 
         <div className="os-scrollbar min-h-0 overflow-y-auto">
           {!query.trim() ? (
-            <div className="grid grid-cols-3 gap-1">
-              {SYSTEM_APPS.map((app) => {
-                const Icon = app.icon;
-                return (
-                  <button
-                    key={app.id}
-                    onClick={() => {
-                      onOpenSystemApp(app.id);
-                      close();
-                    }}
-                    onContextMenu={(event) =>
-                      contextMenu.openAtEvent(
-                        event,
-                        [
-                          {
-                            id: `start-${app.id}-open`,
-                            label: `Open ${app.title}`,
-                            icon: FolderOpen,
-                            action: () => {
-                              onOpenSystemApp(app.id);
-                              close();
+            <>
+              <div className="mb-1.5 flex items-center justify-between px-1 font-mono text-[7.5px] uppercase tracking-[0.14em] text-os-text-dim">
+                <span>Drag apps to arrange</span>
+                <button onClick={resetAppOrder} className="hover:text-os-accent">
+                  Reset
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {orderedApps.map((app, appIndex) => {
+                  const Icon = app.icon;
+                  return (
+                    <button
+                      key={app.id}
+                      draggable
+                      aria-grabbed={draggedAppId === app.id}
+                      onDragStart={(event) => {
+                        setDraggedAppId(app.id);
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', app.id);
+                      }}
+                      onDragOver={(event) => {
+                        if (!draggedAppId || draggedAppId === app.id) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const sourceId = (draggedAppId ||
+                          event.dataTransfer.getData('text/plain')) as SystemAppId;
+                        if (sourceId) reorderApp(sourceId, app.id);
+                        setDraggedAppId(null);
+                      }}
+                      onDragEnd={() => setDraggedAppId(null)}
+                      onClick={() => {
+                        onOpenSystemApp(app.id);
+                        close();
+                      }}
+                      onContextMenu={(event) =>
+                        contextMenu.openAtEvent(
+                          event,
+                          [
+                            {
+                              id: `start-${app.id}-open`,
+                              label: `Open ${app.title}`,
+                              icon: FolderOpen,
+                              action: () => {
+                                onOpenSystemApp(app.id);
+                                close();
+                              },
                             },
-                          },
-                        ],
-                        { ariaLabel: `${app.title} menu` },
-                      )
-                    }
-                    className="flex min-w-0 flex-col items-center gap-1.5 px-1 py-2.5 text-[#8aa0b2] transition-colors hover:bg-white/[0.04] hover:text-[#d5e4f0] rounded"
-                    title={app.title}
-                  >
-                    <Icon size={16} strokeWidth={1.4} className="text-[#8ec4ff]" />
-                    <span className="w-full truncate text-center font-mono text-[8px] uppercase tracking-[0.12em]">
-                      {app.title}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                            {
+                              id: `start-${app.id}-left`,
+                              label: 'Move earlier',
+                              icon: ArrowLeft,
+                              disabled: appIndex === 0,
+                              action: () => reorderApp(app.id, orderedApps[appIndex - 1].id),
+                            },
+                            {
+                              id: `start-${app.id}-right`,
+                              label: 'Move later',
+                              icon: ArrowRight,
+                              disabled: appIndex === orderedApps.length - 1,
+                              action: () => reorderApp(app.id, orderedApps[appIndex + 1].id),
+                            },
+                          ],
+                          { ariaLabel: `${app.title} menu` },
+                        )
+                      }
+                      className={`flex min-w-0 flex-col items-center gap-1.5 px-1 py-2.5 text-[#8aa0b2] transition-colors hover:bg-white/[0.04] hover:text-[#d5e4f0] rounded ${draggedAppId === app.id ? 'opacity-40' : ''}`}
+                      title={app.title}
+                    >
+                      <Icon size={16} strokeWidth={1.4} className="text-[#8ec4ff]" />
+                      <span className="w-full truncate text-center font-mono text-[8px] uppercase tracking-[0.12em]">
+                        {app.title}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <div>
               {appResults.length > 0 && (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type WheelEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type WheelEvent } from 'react';
 import {
   Download,
   Heart,
@@ -10,6 +10,8 @@ import {
   Play,
   Repeat,
   Repeat1,
+  RotateCcw,
+  Settings2,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -21,6 +23,19 @@ import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 import { useMasterVolume } from '../../hooks/useMasterVolume';
 import { getEffectiveMediaVolume } from '../../lib/osVolume';
+import {
+  DEFAULT_MUSIC_SETTINGS,
+  MUSIC_SETTINGS_CHANGE_EVENT,
+  MUSIC_VOLUME_CHANGE_EVENT,
+  getSavedMusicSettings,
+  getSavedMusicVolume,
+  areMusicSettingsEqual,
+  saveMusicSettings,
+  saveMusicVolume,
+  type MusicPane as Pane,
+  type MusicPlayerSettings,
+  type MusicRepeatMode as RepeatMode,
+} from '../../lib/musicSettings';
 
 interface Track {
   id: string;
@@ -117,26 +132,10 @@ const TRACKS: Track[] = [
 ];
 
 const SHUFFLE_ORDER = [2, 5, 1, 7, 3, 0, 6, 4];
-const MUSIC_VOLUME_STORAGE_KEY = 'nammu-music-volume';
-
-function getSavedMusicVolume(): number {
-  try {
-    const stored = localStorage.getItem(MUSIC_VOLUME_STORAGE_KEY);
-    if (stored === null) return 0.72;
-    const parsed = Number(stored);
-    return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.72;
-  } catch {
-    return 0.72;
-  }
-}
-
 const fmtTime = (seconds: number) => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 };
-
-type Pane = 'now' | 'queue' | 'lyrics';
-type RepeatMode = 'off' | 'all' | 'one';
 
 interface MusicProps {
   isOpen: boolean;
@@ -146,12 +145,13 @@ interface MusicProps {
 export function Music({ isOpen, onMinimize }: MusicProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeTimerRef = useRef<number | null>(null);
+  const initialSettingsRef = useRef<MusicPlayerSettings | null>(null);
+  if (!initialSettingsRef.current) initialSettingsRef.current = getSavedMusicSettings();
+  const initialSettings = initialSettingsRef.current;
   const { volume: masterVolume } = useMasterVolume();
   const masterVolumeRef = useRef(masterVolume);
   const [trackIndex, setTrackIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [shuffle, setShuffle] = useState(false);
-  const [repeat, setRepeat] = useState<RepeatMode>('all');
   const [liked, setLiked] = useState<Record<string, boolean>>({ t1: true, t6: true });
   const [volume, setVolume] = useState(getSavedMusicVolume);
   const volumeRef = useRef(volume);
@@ -159,8 +159,30 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [trackDurations, setTrackDurations] = useState<Record<string, number>>({});
-  const [pane, setPane] = useState<Pane>('now');
   const [showVolumeOverlay, setShowVolumeOverlay] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [playerSettings, setPlayerSettings] = useState(initialSettings);
+  const shuffle = playerSettings.shuffle;
+  const repeat = playerSettings.repeat;
+  const pane = playerSettings.pane;
+  const setShuffle = (value: boolean | ((current: boolean) => boolean)) => {
+    setPlayerSettings((current) => ({
+      ...current,
+      shuffle: typeof value === 'function' ? value(current.shuffle) : value,
+    }));
+  };
+  const setRepeat = (value: RepeatMode | ((current: RepeatMode) => RepeatMode)) => {
+    setPlayerSettings((current) => ({
+      ...current,
+      repeat: typeof value === 'function' ? value(current.repeat) : value,
+    }));
+  };
+  const setPane = (value: Pane | ((current: Pane) => Pane)) => {
+    setPlayerSettings((current) => ({
+      ...current,
+      pane: typeof value === 'function' ? value(current.pane) : value,
+    }));
+  };
   const contextMenu = useContextMenu();
   const track = TRACKS[trackIndex];
   const pct = duration > 0 ? Math.min(100, (progress / duration) * 100) : 0;
@@ -185,6 +207,58 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     }
   }, [masterVolume]);
 
+  useEffect(() => {
+    saveMusicSettings(playerSettings);
+  }, [playerSettings]);
+
+  useEffect(() => {
+    const handleExternalSettings = (event: Event) => {
+      const next = (event as CustomEvent<MusicPlayerSettings>).detail;
+      if (!next) return;
+      setPlayerSettings((current) => (areMusicSettingsEqual(current, next) ? current : next));
+    };
+    const handleExternalVolume = (event: Event) => {
+      const next = (event as CustomEvent<number>).detail;
+      if (!Number.isFinite(next)) return;
+      volumeRef.current = next;
+      setVolume(next);
+      if (audioRef.current) {
+        audioRef.current.volume = getEffectiveMediaVolume(next, masterVolumeRef.current);
+      }
+    };
+    window.addEventListener(MUSIC_SETTINGS_CHANGE_EVENT, handleExternalSettings);
+    window.addEventListener(MUSIC_VOLUME_CHANGE_EVENT, handleExternalVolume);
+    return () => {
+      window.removeEventListener(MUSIC_SETTINGS_CHANGE_EVENT, handleExternalSettings);
+      window.removeEventListener(MUSIC_VOLUME_CHANGE_EVENT, handleExternalVolume);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = playerSettings.playbackRate;
+  }, [playerSettings.playbackRate]);
+
+  useEffect(() => {
+    if (!showSettings) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowSettings(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSettings]);
+
+  const updatePlayerSetting = <Key extends keyof MusicPlayerSettings>(
+    key: Key,
+    value: MusicPlayerSettings[Key],
+  ) => {
+    setPlayerSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const resetPlayerSettings = () => {
+    setPlayerSettings({ ...DEFAULT_MUSIC_SETTINGS });
+    changeVolume(0.72);
+  };
+
   const showVolumeInteraction = () => {
     setShowVolumeOverlay(true);
     if (volumeTimerRef.current) window.clearTimeout(volumeTimerRef.current);
@@ -202,6 +276,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     audio.src = selectedTrack.url;
     audio.load();
     audio.volume = getEffectiveMediaVolume(volumeRef.current, masterVolumeRef.current);
+    audio.playbackRate = playerSettings.playbackRate;
     audio.muted = muted;
     if (autoplay) {
       void audio.play().catch(() => setPlaying(false));
@@ -265,9 +340,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
     volumeRef.current = clampedVolume;
     setVolume(clampedVolume);
     setMuted(false);
-    try {
-      localStorage.setItem(MUSIC_VOLUME_STORAGE_KEY, String(clampedVolume));
-    } catch {}
+    saveMusicVolume(clampedVolume);
     const audio = audioRef.current;
     if (audio) {
       audio.volume = getEffectiveMediaVolume(clampedVolume, masterVolumeRef.current);
@@ -339,7 +412,13 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
 
   return (
     <aside
-      className={`music-sidebar fixed bottom-[32px] right-0 top-0 z-[9996] flex w-[292px] shrink-0 flex-col overflow-hidden border-l border-white/[0.05] bg-[#060910]/90 backdrop-blur-2xl transition-transform duration-200 ${isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'}`}
+      className={`music-sidebar fixed bottom-[32px] right-0 top-0 z-[9996] flex w-[292px] shrink-0 flex-col overflow-hidden border-l border-white/[0.05] transition-transform duration-200 ${playerSettings.motion ? '' : 'music-motion-reduced'} ${isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'}`}
+      style={
+        {
+          '--music-panel-opacity': `${100 - playerSettings.transparency}%`,
+          '--music-panel-blur': `${playerSettings.blur}px`,
+        } as CSSProperties
+      }
       aria-hidden={!isOpen}
       onContextMenu={(event) =>
         contextMenu.openAtEvent(event, musicMenu, {
@@ -377,7 +456,7 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
           if (repeat === 'one' && audio) {
             audio.currentTime = 0;
             void audio.play();
-          } else if (repeat === 'all') {
+          } else if (repeat === 'all' || playerSettings.autoAdvance) {
             nextTrack(true);
           } else {
             setProgress(duration);
@@ -386,10 +465,12 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
         }}
       />
 
-      <div className="music-atmosphere pointer-events-none absolute inset-0 opacity-40">
-        <img src={track.cover} alt="" className="h-full w-full scale-125 object-cover blur-3xl" />
-        <div className="music-atmosphere-mask absolute inset-0 bg-gradient-to-b from-[#05070b]/40 via-[#05070b]/75 to-[#05070b]" />
-      </div>
+      {playerSettings.atmosphere && (
+        <div className="music-atmosphere pointer-events-none absolute inset-0 opacity-40">
+          <img src={track.cover} alt="" className="h-full w-full scale-125 object-cover blur-3xl" />
+          <div className="music-atmosphere-mask absolute inset-0" />
+        </div>
+      )}
 
       <div className="relative flex items-center justify-between px-3 pb-1.5 pt-2.5">
         <div className="flex items-center gap-1.5">
@@ -398,15 +479,229 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
             Listen
           </span>
         </div>
-        <button
-          onClick={onMinimize}
-          className="grid h-5 w-5 place-items-center text-[#4a5c6c] transition-colors hover:text-[#bcd0df]"
-          aria-label="Minimize music player"
-          title="Minimize music player"
-        >
-          <X size={11} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setShowSettings((current) => !current)}
+            className={`grid h-5 w-5 place-items-center transition-colors ${showSettings ? 'bg-os-accent/10 text-os-accent' : 'text-[#4a5c6c] hover:text-[#bcd0df]'}`}
+            aria-label="Music player settings"
+            aria-expanded={showSettings}
+            aria-controls="music-player-settings"
+            title="Music player settings"
+          >
+            <Settings2 size={11} />
+          </button>
+          <button
+            onClick={() => {
+              setShowSettings(false);
+              onMinimize();
+            }}
+            className="grid h-5 w-5 place-items-center text-[#4a5c6c] transition-colors hover:text-[#bcd0df]"
+            aria-label="Minimize music player"
+            title="Minimize music player"
+          >
+            <X size={11} />
+          </button>
+        </div>
       </div>
+
+      {showSettings && (
+        <section
+          id="music-player-settings"
+          className="music-settings-panel absolute inset-x-0 bottom-0 top-9 z-40 flex flex-col"
+        >
+          <div className="music-settings-header flex h-9 shrink-0 items-center justify-between px-3">
+            <span className="flex items-center gap-1.5 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
+              <Settings2 size={11} className="text-os-accent" /> Player settings
+            </span>
+            <button
+              onClick={resetPlayerSettings}
+              className="flex h-6 items-center gap-1 border border-os-border/25 px-1.5 font-mono text-[7.5px] uppercase tracking-wider text-os-text-muted transition-colors hover:border-os-accent/35 hover:text-os-accent"
+            >
+              <RotateCcw size={9} /> Reset
+            </button>
+          </div>
+
+          <div className="os-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+            <div className="music-settings-section">
+              <div className="music-settings-section-title">Output</div>
+              <label className="music-settings-range-row">
+                <span className="flex items-center justify-between">
+                  <span>Music volume</span>
+                  <span className="font-mono text-[8px] text-os-accent">
+                    {muted ? 'MUTED' : `${Math.round(volume * 100)}%`}
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(volume * 100)}
+                  onChange={(event) => changeVolume(Number(event.target.value) / 100)}
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${volume * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                  aria-label="Music player volume"
+                />
+              </label>
+
+              <button onClick={toggleMute} className="music-settings-option" aria-pressed={muted}>
+                <span>Mute music output</span>
+                <span className={`music-settings-switch ${muted ? 'is-on' : ''}`}>
+                  {muted ? 'ON' : 'OFF'}
+                </span>
+              </button>
+
+              <label className="music-settings-range-row">
+                <span className="flex items-center justify-between">
+                  <span>Playback speed</span>
+                  <span className="font-mono text-[8px] text-os-accent">
+                    {playerSettings.playbackRate.toFixed(2)}×
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min="50"
+                  max="200"
+                  step="5"
+                  value={playerSettings.playbackRate * 100}
+                  onChange={(event) =>
+                    updatePlayerSetting('playbackRate', Number(event.target.value) / 100)
+                  }
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${((playerSettings.playbackRate - 0.5) / 1.5) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                  aria-label="Playback speed"
+                />
+              </label>
+            </div>
+
+            <div className="music-settings-section">
+              <div className="music-settings-section-title">Playback</div>
+              <button
+                onClick={() => setShuffle((current) => !current)}
+                className="music-settings-option"
+                aria-pressed={shuffle}
+              >
+                <span>Shuffle queue</span>
+                <span className={`music-settings-switch ${shuffle ? 'is-on' : ''}`}>
+                  {shuffle ? 'ON' : 'OFF'}
+                </span>
+              </button>
+              <button
+                onClick={() => updatePlayerSetting('autoAdvance', !playerSettings.autoAdvance)}
+                className="music-settings-option"
+                aria-pressed={playerSettings.autoAdvance}
+              >
+                <span>Auto-advance queue</span>
+                <span
+                  className={`music-settings-switch ${playerSettings.autoAdvance ? 'is-on' : ''}`}
+                >
+                  {playerSettings.autoAdvance ? 'ON' : 'OFF'}
+                </span>
+              </button>
+              <div className="p-2.5">
+                <div className="mb-2 text-[9px] text-os-text-muted">Repeat mode</div>
+                <div className="grid grid-cols-3 border border-os-border/20">
+                  {(['off', 'all', 'one'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setRepeat(mode)}
+                      className={`h-7 border-r border-os-border/20 font-mono text-[7.5px] uppercase tracking-wider last:border-r-0 ${repeat === mode ? 'bg-os-accent/10 text-os-accent' : 'text-os-text-dim hover:bg-os-surface/25 hover:text-os-text-muted'}`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="music-settings-section">
+              <div className="music-settings-section-title">Appearance</div>
+              <label className="music-settings-range-row">
+                <span className="flex items-center justify-between">
+                  <span>Panel transparency</span>
+                  <span className="font-mono text-[8px] text-os-accent">
+                    {playerSettings.transparency}%
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="70"
+                  value={playerSettings.transparency}
+                  onChange={(event) =>
+                    updatePlayerSetting('transparency', Number(event.target.value))
+                  }
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${(playerSettings.transparency / 70) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                  aria-label="Music player transparency"
+                />
+              </label>
+              <label className="music-settings-range-row">
+                <span className="flex items-center justify-between">
+                  <span>Backdrop blur</span>
+                  <span className="font-mono text-[8px] text-os-accent">
+                    {playerSettings.blur}px
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="36"
+                  value={playerSettings.blur}
+                  onChange={(event) => updatePlayerSetting('blur', Number(event.target.value))}
+                  className="os-range"
+                  style={{
+                    background: `linear-gradient(90deg, var(--color-os-accent) ${(playerSettings.blur / 36) * 100}%, color-mix(in srgb, var(--color-os-text) 8%, transparent) 0%)`,
+                  }}
+                  aria-label="Music player backdrop blur"
+                />
+              </label>
+              <button
+                onClick={() => updatePlayerSetting('atmosphere', !playerSettings.atmosphere)}
+                className="music-settings-option"
+                aria-pressed={playerSettings.atmosphere}
+              >
+                <span>Artwork atmosphere</span>
+                <span
+                  className={`music-settings-switch ${playerSettings.atmosphere ? 'is-on' : ''}`}
+                >
+                  {playerSettings.atmosphere ? 'ON' : 'OFF'}
+                </span>
+              </button>
+              <button
+                onClick={() => updatePlayerSetting('motion', !playerSettings.motion)}
+                className="music-settings-option"
+                aria-pressed={playerSettings.motion}
+              >
+                <span>Player motion</span>
+                <span className={`music-settings-switch ${playerSettings.motion ? 'is-on' : ''}`}>
+                  {playerSettings.motion ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            </div>
+
+            <div className="music-settings-section">
+              <div className="music-settings-section-title">Default workspace</div>
+              <div className="grid grid-cols-3">
+                {(['now', 'queue', 'lyrics'] as const).map((nextPane) => (
+                  <button
+                    key={nextPane}
+                    onClick={() => setPane(nextPane)}
+                    className={`h-8 border-r border-os-border/20 font-mono text-[7.5px] uppercase tracking-wider last:border-r-0 ${pane === nextPane ? 'bg-os-accent/10 text-os-accent' : 'text-os-text-dim hover:bg-os-surface/25 hover:text-os-text-muted'}`}
+                  >
+                    {nextPane}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="relative px-3">
         <div
@@ -543,6 +838,21 @@ export function Music({ isOpen, onMinimize }: MusicProps) {
         </div>
         <div className="mt-1 flex items-center justify-between font-mono text-[8px] text-[#5a6d7c]">
           <span>{track.year}</span>
+          <label className="flex items-center gap-1.5 text-[7.5px] uppercase tracking-[0.1em] text-os-text-dim">
+            <span>Playback</span>
+            <select
+              value={playerSettings.playbackRate}
+              onChange={(event) => updatePlayerSetting('playbackRate', Number(event.target.value))}
+              className="h-5 border border-white/[0.07] bg-black/20 px-1 font-mono text-[8px] text-os-accent outline-none hover:border-os-accent/25"
+              aria-label="Playback speed"
+            >
+              {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                <option key={rate} value={rate}>
+                  {rate.toFixed(2)}×
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 

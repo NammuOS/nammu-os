@@ -19,6 +19,7 @@ import type { WindowState } from '../../hooks/useWindowManager';
 import type { SystemAppId } from './systemAppRegistry';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
+import { useEffect, useState } from 'react';
 
 interface RailProps {
   windows: WindowState[];
@@ -43,6 +44,7 @@ const ITEMS = [
   { id: 'ai', label: 'Nammu AI', icon: Sparkles, app: 'ai' as SystemAppId },
   { id: 'terminal', label: 'Shell', icon: SquareTerminal, app: 'terminal' as SystemAppId },
 ];
+const RAIL_ORDER_KEY = 'nammu-rail-order';
 
 export default function Rail({
   windows,
@@ -56,6 +58,38 @@ export default function Rail({
   onCloseWindow,
 }: RailProps) {
   const contextMenu = useContextMenu();
+  const [itemOrder, setItemOrder] = useState(() => ITEMS.map((item) => item.id));
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(RAIL_ORDER_KEY) || '[]');
+      const available = ITEMS.map((item) => item.id);
+      const valid = Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === 'string' && available.includes(id))
+        : [];
+      setItemOrder([...new Set([...valid, ...available])]);
+    } catch {}
+  }, []);
+
+  const reorderRail = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setItemOrder((current) => {
+      const sourceIndex = current.indexOf(sourceId);
+      const targetIndex = current.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      localStorage.setItem(RAIL_ORDER_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const orderedItems = itemOrder.flatMap((id) => {
+    const item = ITEMS.find((candidate) => candidate.id === id);
+    return item ? [item] : [];
+  });
   const visible = windows.filter((windowState) => !windowState.isMinimized);
   const isActive = (id: string, app?: SystemAppId) =>
     id === 'home'
@@ -112,12 +146,31 @@ export default function Rail({
       onPointerCancel={contextMenu.cancelLongPress}
       onPointerMove={contextMenu.cancelLongPress}
     >
-      {ITEMS.map((item) => {
+      {orderedItems.map((item) => {
         const Icon = item.icon;
         const active = isActive(item.id, item.app);
         return (
           <button
             key={item.id}
+            draggable
+            aria-grabbed={draggedItemId === item.id}
+            onDragStart={(event) => {
+              setDraggedItemId(item.id);
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', item.id);
+            }}
+            onDragOver={(event) => {
+              if (!draggedItemId || draggedItemId === item.id) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const sourceId = draggedItemId || event.dataTransfer.getData('text/plain');
+              if (sourceId) reorderRail(sourceId, item.id);
+              setDraggedItemId(null);
+            }}
+            onDragEnd={() => setDraggedItemId(null)}
             onClick={() => activate(item.id, item.app)}
             onContextMenu={(event) => {
               const existing = item.app
@@ -190,7 +243,7 @@ export default function Rail({
                 ariaLabel: `${item.label} menu`,
               });
             }}
-            className={`group relative my-0.5 grid h-7 w-7 place-items-center rounded-[5px] transition-colors ${active ? 'bg-[#4aa3ff]/10 text-[#9dccff]' : 'text-[#536b7f] hover:bg-white/[0.04] hover:text-[#adc2d4]'}`}
+            className={`group relative my-0.5 grid h-7 w-7 place-items-center rounded-[5px] transition-colors ${draggedItemId === item.id ? 'opacity-40' : ''} ${active ? 'bg-[#4aa3ff]/10 text-[#9dccff]' : 'text-[#536b7f] hover:bg-white/[0.04] hover:text-[#adc2d4]'}`}
             aria-label={item.label}
             title={item.label}
           >

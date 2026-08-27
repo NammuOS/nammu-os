@@ -17,7 +17,8 @@ import { findToolById, findToolsByFileType } from '../../lib/toolRegistry';
 import { Music } from '../os/Music';
 import { TOOL_COMPONENTS } from './toolComponents';
 import LockScreen from '../os/LockScreen';
-import { getStoredLockState, saveLockState } from '../../lib/osLock';
+import { OS_LOCK_STATE_KEY, getStoredLockState, saveLockState } from '../../lib/osLock';
+import { applyIconSettings } from '../../lib/iconSettings';
 
 const DEFAULT_PINS = ['browser', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
 
@@ -158,6 +159,20 @@ export default function DesktopApp() {
     });
   }, []);
 
+  const handleReorderPinned = useCallback((sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setPinnedTools((current) => {
+      const sourceIndex = current.indexOf(sourceId);
+      const targetIndex = current.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const reordered = [...current];
+      const [moved] = reordered.splice(sourceIndex, 1);
+      reordered.splice(targetIndex, 0, moved);
+      localStorage.setItem('nammu-pinned', JSON.stringify(reordered));
+      return reordered;
+    });
+  }, []);
+
   const handleFileDrop = useCallback((files: File[]) => {
     if (files.length === 0) return;
     const file = files[0];
@@ -250,10 +265,15 @@ export default function DesktopApp() {
       const saved = localStorage.getItem('nammu-settings');
       if (saved) {
         const parsed = JSON.parse(saved);
+        applyIconSettings(document.documentElement, parsed);
         const theme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
           ? parsed.themeStyle
           : 'cyber';
         document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute(
+          'data-crt-scanlines',
+          parsed.enableScanlines === false ? 'off' : 'on',
+        );
         if (parsed.themeStyle !== theme) {
           localStorage.setItem('nammu-settings', JSON.stringify({ ...parsed, themeStyle: theme }));
         }
@@ -264,17 +284,30 @@ export default function DesktopApp() {
           document.documentElement.style.setProperty('--os-accent', parsed.accentColor);
           document.documentElement.style.setProperty('--color-os-accent', parsed.accentColor);
         }
+      } else {
+        applyIconSettings(document.documentElement, null);
+        document.documentElement.setAttribute('data-crt-scanlines', 'on');
       }
     } catch {}
 
     const handleThemeChange = (e: Event) => {
-      const customEvent = e as CustomEvent<{ theme: string; appearance?: 'light' | 'dark' }>;
+      const customEvent = e as CustomEvent<{
+        theme: string;
+        appearance?: 'light' | 'dark';
+        enableScanlines?: boolean;
+      }>;
       if (customEvent.detail?.theme) {
         document.documentElement.setAttribute('data-theme', customEvent.detail.theme);
       }
       if (customEvent.detail?.appearance) {
         document.documentElement.setAttribute('data-appearance', customEvent.detail.appearance);
         document.documentElement.style.colorScheme = customEvent.detail.appearance;
+      }
+      if (typeof customEvent.detail?.enableScanlines === 'boolean') {
+        document.documentElement.setAttribute(
+          'data-crt-scanlines',
+          customEvent.detail.enableScanlines ? 'on' : 'off',
+        );
       }
     };
     window.addEventListener('nammu-theme-change', handleThemeChange);
@@ -293,6 +326,46 @@ export default function DesktopApp() {
     setIsLocked(false);
   }, []);
 
+  useEffect(() => {
+    let idleTimer: number | null = null;
+    const readAutoLockMinutes = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('nammu-settings') || '{}');
+        const minutes = Number(saved.autoLockMinutes);
+        return Number.isFinite(minutes) ? Math.max(0, minutes) : 0;
+      } catch {
+        return 0;
+      }
+    };
+    const scheduleAutoLock = () => {
+      if (idleTimer !== null) window.clearTimeout(idleTimer);
+      const minutes = readAutoLockMinutes();
+      if (minutes <= 0 || isLocked) return;
+      idleTimer = window.setTimeout(powerOff, minutes * 60_000);
+    };
+    const handleLockNow = () => powerOff();
+    const handleLockStorage = (event: StorageEvent) => {
+      if (event.key === OS_LOCK_STATE_KEY && event.newValue === 'true') setIsLocked(true);
+    };
+    const activityEvents = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    activityEvents.forEach((eventName) =>
+      window.addEventListener(eventName, scheduleAutoLock, { passive: true }),
+    );
+    window.addEventListener('nammu-theme-change', scheduleAutoLock);
+    window.addEventListener('nammu-lock-now', handleLockNow);
+    window.addEventListener('storage', handleLockStorage);
+    scheduleAutoLock();
+    return () => {
+      if (idleTimer !== null) window.clearTimeout(idleTimer);
+      activityEvents.forEach((eventName) =>
+        window.removeEventListener(eventName, scheduleAutoLock),
+      );
+      window.removeEventListener('nammu-theme-change', scheduleAutoLock);
+      window.removeEventListener('nammu-lock-now', handleLockNow);
+      window.removeEventListener('storage', handleLockStorage);
+    };
+  }, [isLocked, powerOff]);
+
   if (isLocked) return <LockScreen onUnlock={powerOn} />;
 
   return (
@@ -300,8 +373,7 @@ export default function DesktopApp() {
       <div
         className={`nammu-os-shell h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'}`}
       >
-        {/* Subtle scanline */}
-        <div className="os-scanline" />
+        <div className="os-scanline" aria-hidden="true" />
 
         {/* Desktop */}
         <Desktop
@@ -422,6 +494,7 @@ export default function DesktopApp() {
           onCloseWindow={closeWindow}
           onPinTool={handlePin}
           onUnpinTool={handleUnpin}
+          onReorderPinned={handleReorderPinned}
           onOpenSystemApp={openSystemApp}
           musicOpen={musicOpen}
           onToggleMusic={() => setMusicOpen((current) => !current)}

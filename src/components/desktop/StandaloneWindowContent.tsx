@@ -7,6 +7,7 @@ import { SystemAppContent } from '../os/SystemApps';
 import ContextMenu from '../context-menu/ContextMenu';
 import { ContextMenuProvider } from '../context-menu/contextMenuStore';
 import { TOOL_COMPONENTS } from './toolComponents';
+import { applyIconSettings } from '../../lib/iconSettings';
 
 interface StandaloneWindowContentProps {
   kind: string;
@@ -27,6 +28,7 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
       const saved = localStorage.getItem('nammu-settings');
       if (saved) {
         const parsed = JSON.parse(saved);
+        applyIconSettings(document.documentElement, parsed);
         const theme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
           ? parsed.themeStyle
           : 'cyber';
@@ -38,6 +40,8 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
           document.documentElement.style.setProperty('--os-accent', parsed.accentColor);
           document.documentElement.style.setProperty('--color-os-accent', parsed.accentColor);
         }
+      } else {
+        applyIconSettings(document.documentElement, null);
       }
     } catch {}
 
