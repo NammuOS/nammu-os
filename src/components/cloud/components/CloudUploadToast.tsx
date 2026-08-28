@@ -17,10 +17,9 @@ import type { UploadTask } from '../types/cloudTypes';
 interface UploadToastProps {
   tasks: UploadTask[];
   onDismiss: () => void;
-  onDismissTask: (id: string) => void;
 }
 
-export default function CloudUploadToast({ tasks, onDismiss, onDismissTask }: UploadToastProps) {
+export default function CloudUploadToast({ tasks, onDismiss }: UploadToastProps) {
   const [minimized, setMinimized] = useState(false);
 
   if (!tasks.length) return null;

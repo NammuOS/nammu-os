@@ -1,70 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { fileMetadata, cloudAccounts } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+
+import { db } from '@/db';
+import { cloudAccounts, fileMetadata } from '@/db/schema';
+import { normalizeVirtualPath } from '@/server/services/googleDriveService';
+
+const USER_ID = 'local-default-user';
 
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
-    const path = searchParams.get('path') || '/';
+    const path = normalizeVirtualPath(searchParams.get('path') || '/');
     const isStarred = searchParams.get('starred') === '1';
     const isTrash = searchParams.get('trash') === '1';
     const isRecent = searchParams.get('recent') === '1';
-    const search = searchParams.get('search') || '';
+    const isShared = searchParams.get('shared') === '1';
+    const search = (searchParams.get('search') || '').trim().toLowerCase();
 
-    const list = await db.query.fileMetadata.findMany({
-      where: eq(fileMetadata.userId, 'local-default-user'),
-    });
+    const [list, accounts] = await Promise.all([
+      db.query.fileMetadata.findMany({ where: eq(fileMetadata.userId, USER_ID) }),
+      db.query.cloudAccounts.findMany({ where: eq(cloudAccounts.userId, USER_ID) }),
+    ]);
+    const accountMap = new Map(accounts.map((account) => [account.id, account]));
 
-    const accounts = await db.query.cloudAccounts.findMany({
-      where: eq(cloudAccounts.userId, 'local-default-user'),
-    });
-    const accountMap = new Map(accounts.map((a) => [a.id, a]));
+    // Shared-item metadata is not represented by the local filesystem schema yet.
+    // Return an honest empty collection instead of leaking root files into Shared.
+    if (isShared) return NextResponse.json({ data: [] });
 
     let filtered = list;
-
     if (isTrash) {
-      filtered = filtered.filter((f) => f.isTrashed);
+      filtered = filtered.filter((file) => file.isTrashed);
     } else {
-      filtered = filtered.filter((f) => !f.isTrashed);
-
+      filtered = filtered.filter((file) => !file.isTrashed);
       if (isStarred) {
-        filtered = filtered.filter((f) => f.isStarred);
-      } else if (search.trim()) {
-        const s = search.toLowerCase();
-        filtered = filtered.filter((f) => (f.fileName || '').toLowerCase().includes(s));
-      } else if (!isRecent) {
-        filtered = filtered.filter((f) => (f.virtualPath || '').startsWith(path));
+        filtered = filtered.filter((file) => file.isStarred);
+      } else if (search) {
+        filtered = filtered.filter((file) => file.fileName.toLowerCase().includes(search));
+      } else if (isRecent) {
+        filtered = filtered
+          .filter((file) => !file.isFolder)
+          .sort((a, b) => {
+            const aTime = Date.parse(a.remoteModifiedTime || a.updatedAt.toISOString());
+            const bTime = Date.parse(b.remoteModifiedTime || b.updatedAt.toISOString());
+            return bTime - aTime;
+          })
+          .slice(0, 50);
+      } else {
+        // virtualPath is the parent directory. Exact matching prevents descendants
+        // from leaking into the current folder and preserves the Drive hierarchy.
+        filtered = filtered.filter((file) => normalizeVirtualPath(file.virtualPath) === path);
       }
     }
 
-    const formatted = filtered.map((f) => {
-      const acc = accountMap.get(f.cloudAccountId);
-      const fileName = f.fileName || 'Untitled';
-      const virtualPath = f.virtualPath || `/${fileName}`;
+    const formatted = filtered.map((file) => {
+      const account = accountMap.get(file.cloudAccountId);
+      const createdAt = file.remoteCreatedTime || file.createdAt.toISOString();
+      const updatedAt = file.remoteModifiedTime || file.updatedAt.toISOString();
 
       return {
-        id: f.id,
-        name: fileName,
-        file_name: fileName,
-        path: virtualPath,
-        virtual_path: virtualPath,
-        is_folder: Boolean(f.isFolder),
-        is_starred: Boolean(f.isStarred),
-        is_trashed: Boolean(f.isTrashed),
-        size: Number(f.size || 0),
-        mime_type: f.mimeType || 'application/octet-stream',
-        cloud_account_id: f.cloudAccountId,
-        remote_file_id: f.remoteFileId,
-        provider: acc?.provider,
-        email: acc?.email,
-        created_at: f.createdAt ? new Date(f.createdAt).toISOString() : new Date().toISOString(),
-        updated_at: f.updatedAt ? new Date(f.updatedAt).toISOString() : new Date().toISOString(),
+        id: file.id,
+        name: file.fileName,
+        file_name: file.fileName,
+        path: normalizeVirtualPath(file.virtualPath),
+        virtual_path: normalizeVirtualPath(file.virtualPath),
+        is_folder: Boolean(file.isFolder),
+        is_starred: Boolean(file.isStarred),
+        is_trashed: Boolean(file.isTrashed),
+        size: Number(file.size || 0),
+        mime_type: file.mimeType || 'application/octet-stream',
+        cloud_account_id: file.cloudAccountId,
+        remote_file_id: file.remoteFileId,
+        remote_parent_id: file.remoteParentId,
+        provider: account?.provider,
+        email: account?.email,
+        created_at: createdAt,
+        updated_at: updatedAt,
       };
     });
 
     return NextResponse.json({ data: formatted });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to list cloud files.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

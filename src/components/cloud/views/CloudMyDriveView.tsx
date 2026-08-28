@@ -27,7 +27,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import type { CloudFile, CloudProvider } from '../types/cloudTypes';
+import type { CloudAccount, CloudFile, CloudProvider } from '../types/cloudTypes';
 import {
   cloudApi,
   formatBytes,
@@ -38,11 +38,12 @@ import {
 } from '../services/cloudClient';
 
 interface MyDriveViewProps {
+  accounts: CloudAccount[];
   currentPath: string;
   files: CloudFile[];
   onNavigatePath: (path: string) => void;
-  onCreateFolder: (name: string) => Promise<void>;
-  onUploadFiles: (files: File[]) => Promise<void>;
+  onCreateFolder: (name: string, accountId?: string) => Promise<void>;
+  onUploadFiles: (files: File[], accountId?: string) => Promise<void>;
   onRenameFile: (fileId: string, newName: string) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
   onBulkDelete: (fileIds: string[]) => Promise<void>;
@@ -73,6 +74,7 @@ interface ContextMenuState {
 }
 
 export default function CloudMyDriveView({
+  accounts,
   currentPath,
   files,
   onNavigatePath,
@@ -94,6 +96,8 @@ export default function CloudMyDriveView({
   const [selectedProviderFilter, setSelectedProviderFilter] = useState<CloudProvider | 'all'>(
     'all',
   );
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState<string | 'all'>('all');
+  const [expandedProviderFilter, setExpandedProviderFilter] = useState<CloudProvider | null>(null);
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
 
   // Sorting
@@ -145,11 +149,36 @@ export default function CloudMyDriveView({
   // Base displayed files before provider filtering
   const rawDisplayedFiles = searchResults !== null ? searchResults : files;
 
-  // Filtered by provider
+  const selectedAccount = useMemo(
+    () => accounts.find((account) => account.id === selectedAccountFilter) || null,
+    [accounts, selectedAccountFilter],
+  );
+  const hasActiveProviderFilter =
+    selectedProviderFilter !== 'all' || selectedAccountFilter !== 'all';
+  const activeFilterLabel = selectedAccount
+    ? selectedAccount.email
+    : selectedProviderFilter !== 'all'
+      ? getProviderName(selectedProviderFilter)
+      : 'All Providers';
+
+  useEffect(() => {
+    if (selectedAccountFilter !== 'all' && !selectedAccount) {
+      setSelectedAccountFilter('all');
+    }
+  }, [selectedAccount, selectedAccountFilter]);
+
+  // Filtered by provider and then by a specific connected account when selected.
   const providerFilteredFiles = useMemo(() => {
-    if (selectedProviderFilter === 'all') return rawDisplayedFiles;
-    return rawDisplayedFiles.filter((f) => f.provider === selectedProviderFilter);
-  }, [rawDisplayedFiles, selectedProviderFilter]);
+    return rawDisplayedFiles.filter((file) => {
+      if (selectedProviderFilter !== 'all' && file.provider !== selectedProviderFilter) {
+        return false;
+      }
+      if (selectedAccountFilter !== 'all' && file.cloud_account_id !== selectedAccountFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [rawDisplayedFiles, selectedAccountFilter, selectedProviderFilter]);
 
   // Sorted displayed files
   const displayedFiles = useMemo(() => {
@@ -232,17 +261,24 @@ export default function CloudMyDriveView({
     }
   };
 
-  const handleItemDoubleClick = (file: CloudFile) => {
-    setContextMenu(null);
-    if (file.is_folder) {
-      const nextPath = `${file.virtual_path}${file.file_name}/`;
-      setSearchQuery('');
-      setSearchResults(null);
-      onNavigatePath(nextPath);
-    } else {
-      onPreviewFile(file);
-    }
-  };
+  const handleItemDoubleClick = useCallback(
+    (file: CloudFile) => {
+      setContextMenu(null);
+      if (file.is_folder) {
+        if (selectedAccountFilter === 'all' && file.provider) {
+          setSelectedProviderFilter(file.provider);
+          setSelectedAccountFilter(file.cloud_account_id);
+        }
+        const nextPath = `${file.virtual_path}${file.file_name}/`;
+        setSearchQuery('');
+        setSearchResults(null);
+        onNavigatePath(nextPath);
+      } else {
+        onPreviewFile(file);
+      }
+    },
+    [onNavigatePath, onPreviewFile, selectedAccountFilter],
+  );
 
   const handleContextMenu = (e: React.MouseEvent, file: CloudFile) => {
     e.preventDefault();
@@ -336,18 +372,20 @@ export default function CloudMyDriveView({
       activeFile,
       activeFileId,
       displayedFiles,
+      handleItemDoubleClick,
       isNewFolderOpen,
       onDeleteFile,
       onBulkDelete,
       renamingFile,
       searchQuery,
+      selectedIds,
     ],
   );
 
   const submitCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFolderName.trim()) return;
-    await onCreateFolder(newFolderName.trim());
+    await onCreateFolder(newFolderName.trim(), selectedAccount?.id);
     setNewFolderName('');
     setIsNewFolderOpen(false);
   };
@@ -363,7 +401,7 @@ export default function CloudMyDriveView({
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploaded = Array.from(e.target.files || []);
     if (uploaded.length) {
-      onUploadFiles(uploaded);
+      onUploadFiles(uploaded, selectedAccount?.id);
     }
     if (e.target) e.target.value = '';
   };
@@ -482,24 +520,22 @@ export default function CloudMyDriveView({
             onClick={(e) => {
               e.stopPropagation();
               setIsFilterDropdownOpen(!isFilterDropdownOpen);
+              if (isFilterDropdownOpen) setExpandedProviderFilter(null);
             }}
             className={`flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[9px] uppercase tracking-wider transition-all ${
-              selectedProviderFilter !== 'all'
+              hasActiveProviderFilter
                 ? 'border-[#4aa3ff]/50 bg-[#4aa3ff]/15 text-[#badeff]'
                 : 'border-white/[0.06] bg-white/[0.02] text-[#8fa5b8] hover:bg-white/[0.05] hover:text-[#d6e5f0]'
             }`}
           >
-            <Filter
-              size={10}
-              className={selectedProviderFilter !== 'all' ? 'text-[#4aa3ff]' : ''}
-            />
-            {selectedProviderFilter !== 'all' ? (
+            <Filter size={10} className={hasActiveProviderFilter ? 'text-[#4aa3ff]' : ''} />
+            {hasActiveProviderFilter && selectedProviderFilter !== 'all' ? (
               <div className="flex items-center gap-1">
                 <span
                   className="h-1.5 w-1.5 rounded-full"
                   style={{ backgroundColor: getProviderColor(selectedProviderFilter) }}
                 />
-                <span>{getProviderName(selectedProviderFilter)}</span>
+                <span className="max-w-32 truncate">{activeFilterLabel}</span>
               </div>
             ) : (
               <span>All Providers</span>
@@ -509,16 +545,18 @@ export default function CloudMyDriveView({
 
           {isFilterDropdownOpen && (
             <div
-              className="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-white/[0.08] bg-[#080d15] p-1 shadow-2xl backdrop-blur-xl"
+              className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-white/[0.08] bg-[#080d15] p-1 shadow-2xl backdrop-blur-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={() => {
                   setSelectedProviderFilter('all');
+                  setSelectedAccountFilter('all');
+                  setExpandedProviderFilter(null);
                   setIsFilterDropdownOpen(false);
                 }}
                 className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
-                  selectedProviderFilter === 'all'
+                  !hasActiveProviderFilter
                     ? 'bg-[#4aa3ff]/15 text-[#a8d3ff] font-medium'
                     : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
                 }`}
@@ -530,30 +568,102 @@ export default function CloudMyDriveView({
               <div className="my-1 border-t border-white/[0.04]" />
 
               {ALL_PROVIDERS.map((prov) => {
+                const providerAccounts = accounts.filter((account) => account.provider === prov.id);
                 const count = rawDisplayedFiles.filter((f) => f.provider === prov.id).length;
-                const isSelected = selectedProviderFilter === prov.id;
+                const isSelected =
+                  selectedProviderFilter === prov.id && selectedAccountFilter === 'all';
+                const isExpanded = expandedProviderFilter === prov.id;
                 return (
-                  <button
-                    key={prov.id}
-                    onClick={() => {
-                      setSelectedProviderFilter(prov.id);
-                      setIsFilterDropdownOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
-                      isSelected
-                        ? 'bg-[#4aa3ff]/15 text-[#a8d3ff] font-medium'
-                        : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="h-2 w-2 rounded-full shrink-0"
-                        style={{ backgroundColor: getProviderColor(prov.id) }}
-                      />
-                      <span>{prov.name}</span>
-                    </div>
-                    <span className="font-mono text-[8px] opacity-60">{count}</span>
-                  </button>
+                  <div key={prov.id} className="relative">
+                    <button
+                      onMouseEnter={() => setExpandedProviderFilter(prov.id)}
+                      onClick={() => setExpandedProviderFilter(isExpanded ? null : prov.id)}
+                      className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
+                        isSelected || isExpanded
+                          ? 'bg-[#4aa3ff]/15 text-[#a8d3ff] font-medium'
+                          : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: getProviderColor(prov.id) }}
+                        />
+                        <span className="truncate">{prov.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[8px] opacity-60">{count}</span>
+                        <ChevronRight size={9} className="opacity-65" />
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div
+                        className="absolute right-full top-0 z-[60] mr-1 w-64 rounded-lg border border-white/[0.08] bg-[#080d15] p-1 shadow-2xl backdrop-blur-xl"
+                        onMouseLeave={() => setExpandedProviderFilter(null)}
+                      >
+                        <div className="px-2 py-1.5 font-mono text-[8px] uppercase tracking-[0.14em] text-[#557087]">
+                          {prov.name} accounts
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedProviderFilter(prov.id);
+                            setSelectedAccountFilter('all');
+                            setExpandedProviderFilter(null);
+                            setIsFilterDropdownOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
+                            isSelected
+                              ? 'bg-[#4aa3ff]/15 text-[#a8d3ff]'
+                              : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
+                          }`}
+                        >
+                          <span>All {prov.name} accounts</span>
+                          <span className="font-mono text-[8px] opacity-60">{count}</span>
+                        </button>
+
+                        <div className="my-1 border-t border-white/[0.04]" />
+                        {providerAccounts.length ? (
+                          providerAccounts.map((account) => {
+                            const accountCount = rawDisplayedFiles.filter(
+                              (file) => file.cloud_account_id === account.id,
+                            ).length;
+                            const accountSelected = selectedAccountFilter === account.id;
+                            return (
+                              <button
+                                key={account.id}
+                                onClick={() => {
+                                  setSelectedProviderFilter(prov.id);
+                                  setSelectedAccountFilter(account.id);
+                                  setExpandedProviderFilter(null);
+                                  setIsFilterDropdownOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-[10px] transition-colors ${
+                                  accountSelected
+                                    ? 'bg-[#4aa3ff]/15 text-[#a8d3ff]'
+                                    : 'text-[#c0d0de] hover:bg-white/[0.05] hover:text-white'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate">{account.email}</div>
+                                  <div className="font-mono text-[8px] uppercase text-[#557087]">
+                                    {account.status.replace('_', ' ')}
+                                  </div>
+                                </div>
+                                <span className="shrink-0 font-mono text-[8px] opacity-60">
+                                  {accountCount}
+                                </span>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="px-2 py-2 text-[9px] text-[#557087]">
+                            No connected accounts
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -606,17 +716,15 @@ export default function CloudMyDriveView({
       </div>
 
       {/* Global Search / Provider Filter Header Banner */}
-      {(searchResults !== null || selectedProviderFilter !== 'all') && (
+      {(searchResults !== null || hasActiveProviderFilter) && (
         <div className="flex h-7 items-center justify-between border-b border-[#4aa3ff]/20 bg-[#4aa3ff]/10 px-3 font-mono text-[9px] text-[#bde0ff]">
           <div className="flex items-center gap-2">
             {searchResults !== null ? (
               <>
                 <Search size={10} className="text-[#4aa3ff]" />
                 <span>
-                  Search "{searchQuery}"
-                  {selectedProviderFilter !== 'all' &&
-                    ` on ${getProviderName(selectedProviderFilter)}`}
-                  : {displayedFiles.length} result{displayedFiles.length === 1 ? '' : 's'}
+                  Search "{searchQuery}"{hasActiveProviderFilter && ` on ${activeFilterLabel}`}:{' '}
+                  {displayedFiles.length} result{displayedFiles.length === 1 ? '' : 's'}
                 </span>
               </>
             ) : (
@@ -630,18 +738,19 @@ export default function CloudMyDriveView({
                       backgroundColor: getProviderColor(selectedProviderFilter as CloudProvider),
                     }}
                   />
-                  <strong className="text-white">
-                    {getProviderName(selectedProviderFilter as CloudProvider)}
-                  </strong>
-                  ({displayedFiles.length} items in path)
+                  <strong className="text-white">{activeFilterLabel}</strong>(
+                  {displayedFiles.length} items in path)
                 </span>
               </>
             )}
           </div>
           <div className="flex items-center gap-2 font-mono text-[8px] uppercase tracking-wider">
-            {selectedProviderFilter !== 'all' && (
+            {hasActiveProviderFilter && (
               <button
-                onClick={() => setSelectedProviderFilter('all')}
+                onClick={() => {
+                  setSelectedProviderFilter('all');
+                  setSelectedAccountFilter('all');
+                }}
                 className="text-[#84a3be] hover:text-white flex items-center gap-1"
               >
                 <span>Clear Provider Filter</span>
@@ -889,12 +998,10 @@ export default function CloudMyDriveView({
                 <span>
                   {searchResults !== null
                     ? `No cloud resources matching "${searchQuery}"${
-                        selectedProviderFilter !== 'all'
-                          ? ` for ${getProviderName(selectedProviderFilter)}`
-                          : ''
+                        hasActiveProviderFilter ? ` for ${activeFilterLabel}` : ''
                       }`
-                    : selectedProviderFilter !== 'all'
-                      ? `No resources in this folder for ${getProviderName(selectedProviderFilter)}`
+                    : hasActiveProviderFilter
+                      ? `No resources in this folder for ${activeFilterLabel}`
                       : 'No resources found in this path'}
                 </span>
               </div>
@@ -1057,8 +1164,7 @@ export default function CloudMyDriveView({
       <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
         <span>
           {displayedFiles.length} cloud resources
-          {selectedProviderFilter !== 'all' &&
-            ` (Filter: ${getProviderName(selectedProviderFilter)})`}
+          {hasActiveProviderFilter && ` (Filter: ${activeFilterLabel})`}
           {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
         </span>
         <span>

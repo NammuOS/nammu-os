@@ -3,8 +3,6 @@ import {
   X,
   Download,
   FileText,
-  Film,
-  Image as ImageIcon,
   Music,
   Star,
   Loader2,
@@ -37,14 +35,6 @@ export default function CloudFilePreviewModal({
   onToggleStar,
   onDownloadFile,
 }: PreviewModalProps) {
-  if (!isOpen || !file) return null;
-
-  const previewType = file.previewType || getFilePreviewType(file.mime_type, file.file_name);
-  const providerName = getProviderName(file.provider);
-  const providerColor = getProviderColor(file.provider);
-  const previewUrl = cloudApi.getPreviewUrl(file.id);
-  const downloadUrl = cloudApi.getDownloadUrl(file.id);
-
   const [docContent, setDocContent] = useState<string>('');
   const [docLoading, setDocLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -52,7 +42,16 @@ export default function CloudFilePreviewModal({
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  const previewType = file
+    ? file.previewType || getFilePreviewType(file.mime_type, file.file_name)
+    : 'other';
+  const providerName = getProviderName(file?.provider);
+  const providerColor = getProviderColor(file?.provider);
+  const previewUrl = file ? cloudApi.getPreviewUrl(file.id) : '';
+  const downloadUrl = file ? cloudApi.getDownloadUrl(file.id) : '';
+
   useEffect(() => {
+    if (!isOpen || !file) return;
     setMediaError(false);
     setDownloadError(null);
     if (previewType === 'document') {
@@ -73,7 +72,9 @@ export default function CloudFilePreviewModal({
           setDocLoading(false);
         });
     }
-  }, [file.id, previewType, previewUrl, providerName]);
+  }, [file, isOpen, previewType, previewUrl, providerName]);
+
+  if (!isOpen || !file) return null;
 
   const handleDownload = async () => {
     if (onDownloadFile) {

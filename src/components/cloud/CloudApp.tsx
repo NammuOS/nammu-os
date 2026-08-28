@@ -100,7 +100,7 @@ export default function CloudApp() {
     }
   };
 
-  const handleCreateFolder = async (name: string) => {
+  const handleCreateFolder = async (name: string, accountId?: string) => {
     try {
       const task: UploadTask = {
         id: `task-${Date.now()}`,
@@ -111,7 +111,7 @@ export default function CloudApp() {
       };
       setTasks((prev) => [task, ...prev]);
 
-      await cloudApi.createFolder(currentPath, name);
+      await cloudApi.createFolder(currentPath, name, accountId);
       await loadPathFiles(currentPath);
 
       setTasks((prev) =>
@@ -124,7 +124,7 @@ export default function CloudApp() {
     }
   };
 
-  const handleUploadFiles = async (filesToUpload: File[]) => {
+  const handleUploadFiles = async (filesToUpload: File[], accountId?: string) => {
     for (const file of filesToUpload) {
       const taskId = `up-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newTask: UploadTask = {
@@ -139,11 +139,16 @@ export default function CloudApp() {
       setTasks((prev) => [newTask, ...prev]);
 
       try {
-        await cloudApi.initiateAndUpload(file, currentPath, (percent) => {
-          setTasks((prev) =>
-            prev.map((t) => (t.id === taskId ? { ...t, progress_percentage: percent } : t)),
-          );
-        });
+        await cloudApi.initiateAndUpload(
+          file,
+          currentPath,
+          (percent) => {
+            setTasks((prev) =>
+              prev.map((t) => (t.id === taskId ? { ...t, progress_percentage: percent } : t)),
+            );
+          },
+          accountId,
+        );
 
         setTasks((prev) =>
           prev.map((t) =>
@@ -387,6 +392,7 @@ export default function CloudApp() {
 
         {section === 'my-drive' && (
           <CloudMyDriveView
+            accounts={accounts}
             currentPath={currentPath}
             files={currentPathFiles}
             onNavigatePath={(p) => setCurrentPath(p)}
@@ -454,11 +460,7 @@ export default function CloudApp() {
       </main>
 
       {/* Floating Upload Progress Toast */}
-      <CloudUploadToast
-        tasks={tasks}
-        onDismiss={() => setTasks([])}
-        onDismissTask={(id) => setTasks((prev) => prev.filter((t) => t.id !== id))}
-      />
+      <CloudUploadToast tasks={tasks} onDismiss={() => setTasks([])} />
 
       {/* Modals */}
       <CloudConnectModal

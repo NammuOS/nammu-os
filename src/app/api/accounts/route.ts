@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { cloudAccounts } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import crypto from 'crypto';
 
 export async function GET() {
   try {
@@ -12,6 +11,7 @@ export async function GET() {
 
     const formatted = list.map((acc) => ({
       id: acc.id,
+      user_id: acc.userId,
       email: acc.email,
       provider: acc.provider,
       total_space: acc.totalSpace,

@@ -48,6 +48,18 @@ export function formatDate(val: string | number | Date | undefined | null): stri
 export function getFilePreviewType(mime?: string, name?: string): CloudFile['previewType'] {
   const m = (mime || '').toLowerCase();
   const n = (name || '').toLowerCase();
+  if (
+    m === 'application/vnd.google-apps.document' ||
+    m === 'application/vnd.google-apps.spreadsheet'
+  ) {
+    return 'document';
+  }
+  if (
+    m === 'application/vnd.google-apps.presentation' ||
+    m === 'application/vnd.google-apps.drawing'
+  ) {
+    return 'pdf';
+  }
   if (m.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/.test(n)) return 'image';
   if (m.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/.test(n)) return 'video';
   if (m.startsWith('audio/') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(n)) return 'audio';
@@ -184,11 +196,15 @@ class CloudApiClient {
     return res.data || [];
   }
 
-  async createFolder(virtualPath: string, name: string): Promise<CloudFile> {
+  async createFolder(virtualPath: string, name: string, accountId?: string): Promise<CloudFile> {
     const cleanPath = virtualPath.endsWith('/') ? virtualPath : `${virtualPath}/`;
     const res = await this.request<{ data: CloudFile }>('/files/folders', {
       method: 'POST',
-      body: JSON.stringify({ virtual_path: cleanPath, folder_name: name }),
+      body: JSON.stringify({
+        virtual_path: cleanPath,
+        folder_name: name,
+        account_id: accountId,
+      }),
     });
     return res.data;
   }
@@ -257,6 +273,7 @@ class CloudApiClient {
     file: File,
     virtualPath: string,
     onProgress: (percent: number) => void,
+    accountId?: string,
   ): Promise<CloudFile> {
     const cleanPath = virtualPath.endsWith('/') ? virtualPath : `${virtualPath}/`;
 
@@ -268,6 +285,7 @@ class CloudApiClient {
         virtual_path: cleanPath,
         size: file.size,
         mime_type: file.type || 'application/octet-stream',
+        account_id: accountId,
       }),
     });
 

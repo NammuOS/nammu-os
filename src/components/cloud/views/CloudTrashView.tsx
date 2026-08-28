@@ -8,7 +8,6 @@ import {
   Film,
   Music,
   FileText,
-  AlertTriangle,
 } from 'lucide-react';
 import type { CloudFile } from '../types/cloudTypes';
 import {

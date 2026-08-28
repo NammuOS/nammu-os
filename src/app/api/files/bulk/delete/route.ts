@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { fileMetadata } from '@/db/schema';
-import { inArray, and, eq } from 'drizzle-orm';
+
+import { trashCloudFiles } from '@/server/services/cloudMutationService';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const ids: string[] = body.ids || [];
-
-    if (ids.length > 0) {
-      await db
-        .delete(fileMetadata)
-        .where(and(inArray(fileMetadata.id, ids), eq(fileMetadata.userId, 'local-default-user')));
-    }
-
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter((id: unknown): id is string => typeof id === 'string' && Boolean(id))
+      : [];
+    await trashCloudFiles(ids);
     return NextResponse.json({ success: true, count: ids.length });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to delete the selected files.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

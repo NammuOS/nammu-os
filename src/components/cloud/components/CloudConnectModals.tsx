@@ -16,8 +16,6 @@ export default function CloudConnectModal({
   onClose,
   onConnect,
 }: ConnectModalProps) {
-  if (!isOpen || !provider) return null;
-
   // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,6 +32,8 @@ export default function CloudConnectModal({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  if (!isOpen || !provider) return null;
 
   const isOAuth = ['google_drive', 'onedrive', 'dropbox', 'yandex'].includes(provider);
 

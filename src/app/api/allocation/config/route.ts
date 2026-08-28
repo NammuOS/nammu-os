@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import crypto from 'node:crypto';
 
 export async function GET() {
   try {

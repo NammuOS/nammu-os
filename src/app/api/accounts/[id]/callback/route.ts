@@ -4,7 +4,9 @@ import { cloudAccounts } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'crypto';
 import { google } from 'googleapis';
-import { syncGoogleDrive } from '@/server/services/googleDriveService';
+import { syncCloudAccount } from '@/server/services/cloudSyncService';
+import { verifyOAuthState } from '@/server/services/oauthStateService';
+import { decryptJson, encryptJson } from '@/server/services/cryptoUtils';
 
 function renderOAuthHtml(provider: string, status: string, message = '') {
   const oauthResult = JSON.stringify({
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const searchParams = req.nextUrl.searchParams;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
+  const state = searchParams.get('state');
   const origin = req.nextUrl.origin;
 
   if (error) {
@@ -86,6 +89,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   try {
+    verifyOAuthState(state, provider);
     let email = `${provider}-user@nammu.os`;
     let tokens: any = { code };
     let totalSpace = 15 * 1024 * 1024 * 1024; // 15 GB default
@@ -94,7 +98,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (provider === 'google' || provider === 'google_drive') {
       const clientId = process.env.GOOGLE_CLIENT_ID;
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${origin}/api/accounts/google/callback`;
+      const redirectUri =
+        process.env.GOOGLE_REDIRECT_URI || `${origin}/api/accounts/google/callback`;
 
       if (clientId && clientSecret) {
         const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
@@ -126,6 +131,149 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           } catch {}
         }
       }
+    } else if (provider === 'onedrive') {
+      const clientId = process.env.ONEDRIVE_CLIENT_ID;
+      const clientSecret = process.env.ONEDRIVE_CLIENT_SECRET;
+      const redirectUri =
+        process.env.ONEDRIVE_REDIRECT_URI || `${origin}/api/accounts/onedrive/callback`;
+      if (!clientId || !clientSecret) throw new Error('OneDrive OAuth is not configured.');
+      const tokenResponse = await fetch(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            code,
+            redirect_uri: redirectUri,
+            grant_type: 'authorization_code',
+            scope: 'offline_access openid profile email Files.ReadWrite.All User.Read',
+          }),
+        },
+      );
+      const tokenPayload = await tokenResponse.json();
+      if (!tokenResponse.ok) {
+        throw new Error(
+          tokenPayload.error_description || tokenPayload.error || 'OneDrive OAuth failed.',
+        );
+      }
+      tokens = {
+        accessToken: tokenPayload.access_token,
+        refreshToken: tokenPayload.refresh_token,
+        expiresAt: Date.now() + Number(tokenPayload.expires_in || 3600) * 1000,
+        clientId,
+        clientSecret,
+        redirectUri,
+        tenantId: 'common',
+      };
+      const headers = { Authorization: `Bearer ${tokenPayload.access_token}` };
+      const [profileResponse, driveResponse] = await Promise.all([
+        fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName', { headers }),
+        fetch('https://graph.microsoft.com/v1.0/me/drive?$select=quota', { headers }),
+      ]);
+      const profile = await profileResponse.json();
+      const drive = await driveResponse.json();
+      if (!profileResponse.ok || !driveResponse.ok)
+        throw new Error('Unable to read OneDrive account details.');
+      email = profile.mail || profile.userPrincipalName || email;
+      totalSpace = Number(drive.quota?.total || 0);
+      usedSpace = Number(drive.quota?.used || 0);
+    } else if (provider === 'dropbox') {
+      const clientId = process.env.DROPBOX_CLIENT_ID;
+      const clientSecret = process.env.DROPBOX_CLIENT_SECRET;
+      const redirectUri =
+        process.env.DROPBOX_REDIRECT_URI || `${origin}/api/accounts/dropbox/callback`;
+      if (!clientId || !clientSecret) throw new Error('Dropbox OAuth is not configured.');
+      const tokenResponse = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+        }),
+      });
+      const tokenPayload = await tokenResponse.json();
+      if (!tokenResponse.ok) {
+        throw new Error(
+          tokenPayload.error_description || tokenPayload.error || 'Dropbox OAuth failed.',
+        );
+      }
+      tokens = {
+        accessToken: tokenPayload.access_token,
+        refreshToken: tokenPayload.refresh_token,
+        expiresAt: Date.now() + Number(tokenPayload.expires_in || 14_400) * 1000,
+        clientId,
+        clientSecret,
+        redirectUri,
+      };
+      const headers = { Authorization: `Bearer ${tokenPayload.access_token}` };
+      const [profileResponse, usageResponse] = await Promise.all([
+        fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+          method: 'POST',
+          headers,
+        }),
+        fetch('https://api.dropboxapi.com/2/users/get_space_usage', {
+          method: 'POST',
+          headers,
+        }),
+      ]);
+      const profile = await profileResponse.json();
+      const usage = await usageResponse.json();
+      if (!profileResponse.ok || !usageResponse.ok)
+        throw new Error('Unable to read Dropbox account details.');
+      email = profile.email || email;
+      totalSpace = Number(
+        usage.allocation?.allocated ||
+          usage.allocation?.individual?.allocated ||
+          usage.allocation?.team?.allocated ||
+          0,
+      );
+      usedSpace = Number(usage.used || 0);
+    } else if (provider === 'yandex') {
+      const clientId = process.env.YANDEX_CLIENT_ID;
+      const clientSecret = process.env.YANDEX_CLIENT_SECRET;
+      if (!clientId || !clientSecret) throw new Error('Yandex OAuth is not configured.');
+      const tokenResponse = await fetch('https://oauth.yandex.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          client_id: clientId,
+          client_secret: clientSecret,
+        }),
+      });
+      const tokenPayload = await tokenResponse.json();
+      if (!tokenResponse.ok) {
+        throw new Error(
+          tokenPayload.error_description || tokenPayload.error || 'Yandex OAuth failed.',
+        );
+      }
+      tokens = {
+        accessToken: tokenPayload.access_token,
+        refreshToken: tokenPayload.refresh_token,
+        expiresAt: Date.now() + Number(tokenPayload.expires_in || 3600) * 1000,
+        clientId,
+        clientSecret,
+      };
+      const headers = { Authorization: `OAuth ${tokenPayload.access_token}` };
+      const [profileResponse, diskResponse] = await Promise.all([
+        fetch('https://login.yandex.ru/info?format=json', { headers }),
+        fetch('https://cloud-api.yandex.net/v1/disk/', { headers }),
+      ]);
+      const profile = await profileResponse.json();
+      const disk = await diskResponse.json();
+      if (!profileResponse.ok || !diskResponse.ok)
+        throw new Error('Unable to read Yandex account details.');
+      email = profile.default_email || email;
+      totalSpace = Number(disk.total_space || 0);
+      usedSpace = Number(disk.used_space || 0);
+    } else {
+      throw new Error(`Unsupported OAuth provider: ${provider}`);
     }
 
     const normProvider = provider === 'google' ? 'google_drive' : provider;
@@ -143,7 +291,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ),
     });
 
-    const encryptedCredentials = Buffer.from(JSON.stringify(tokens)).toString('base64');
+    if (existing) {
+      try {
+        const previous = decryptJson<Record<string, unknown>>(existing.encryptedCredentials);
+        tokens = { ...previous, ...tokens };
+      } catch {}
+    }
+    const encryptedCredentials = encryptJson(tokens);
     const accountId = existing ? existing.id : crypto.randomUUID();
 
     if (existing) {
@@ -170,13 +324,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       });
     }
 
-    // Automatically synchronize Google Drive files into Nammu OS file metadata
-    if (normProvider === 'google_drive') {
-      try {
-        await syncGoogleDrive(accountId);
-      } catch (syncErr) {
-        console.error('Initial Google Drive sync error:', syncErr);
-      }
+    try {
+      await syncCloudAccount(accountId);
+    } catch (syncErr) {
+      console.error(`Initial ${normProvider} sync error:`, syncErr);
     }
 
     return new NextResponse(renderOAuthHtml(provider, 'success'), {
