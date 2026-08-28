@@ -154,6 +154,11 @@ const ACCENT_COLORS = [
 
 const CREDITS = [
   {
+    product: 'YouTube Music app foundation',
+    project: 'th-ch/youtube-music',
+    url: 'https://github.com/th-ch/youtube-music',
+  },
+  {
     product: 'Browser engine',
     project: 'HeyPuter/firefox-wasm',
     url: 'https://github.com/HeyPuter/firefox-wasm',

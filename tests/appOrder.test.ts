@@ -6,6 +6,7 @@ describe('Start Menu ordering', () => {
     expect(DEFAULT_START_MENU_ORDER).toEqual([
       'files',
       'browser',
+      'youtube-music',
       'cloud',
       'projects',
       'whatsapp',

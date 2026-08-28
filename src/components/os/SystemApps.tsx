@@ -28,6 +28,7 @@ import CloudApp from '../cloud/CloudApp';
 import BrowserApp from '../browser/BrowserApp';
 import WhatsAppApp from '../whatsapp/WhatsAppApp';
 import MapApp from '../maps/MapApp';
+import YouTubeMusicApp from '../youtube-music/YouTubeMusicApp';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 
@@ -613,6 +614,8 @@ export function SystemAppContent({ appId }: { appId: SystemAppId }) {
       return <WhatsAppApp />;
     case 'browser':
       return <BrowserApp />;
+    case 'youtube-music':
+      return <YouTubeMusicApp />;
     case 'files':
       return <FilesApp />;
     case 'cloud':

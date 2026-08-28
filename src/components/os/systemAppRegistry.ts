@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Calculator,
   QrCode,
+  Music2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -32,7 +33,8 @@ export type SystemAppId =
   | 'projects'
   | 'ai'
   | 'calculator'
-  | 'qr-gen';
+  | 'qr-gen'
+  | 'youtube-music';
 
 export interface SystemAppDefinition {
   id: SystemAppId;
@@ -86,6 +88,25 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     title: 'Browser',
     icon: Globe,
     keywords: ['browser', 'web', 'internet', 'proxy', 'surf'],
+  },
+  {
+    id: 'youtube-music',
+    windowId: 'system:youtube-music',
+    title: 'YouTube Music',
+    icon: Music2,
+    startMenu: true,
+    keywords: [
+      'music',
+      'youtube music',
+      'audio',
+      'songs',
+      'albums',
+      'artists',
+      'playlists',
+      'lyrics',
+      'equalizer',
+      'streaming',
+    ],
   },
   {
     id: 'files',

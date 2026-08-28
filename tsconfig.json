@@ -30,5 +30,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "dist", "daedalOS"]
+  "exclude": ["node_modules", "dist", "daedalOS", "youtube-music-3.11.0"]
 }

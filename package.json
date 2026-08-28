@@ -14,7 +14,7 @@
     "format:check": "prettier --check .",
     "docs:screenshots": "node scripts/capture-readme-screenshots.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test --path-ignore-patterns='youtube-music-3.11.0/**'",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",

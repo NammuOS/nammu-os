@@ -14,6 +14,7 @@ export default defineConfig([
     'coverage/**',
     'public/**',
     'firefox-wasm/**',
+    'youtube-music-3.11.0/**',
   ]),
   {
     files: ['**/*.{ts,tsx,js,mjs}'],
