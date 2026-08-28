@@ -78,6 +78,18 @@ export default function CloudFileDetailsModal({ file, isOpen, onClose }: Details
               <span className="text-[#c5d6e6]">{file.virtual_path}</span>
             </div>
             <div className="flex justify-between border-b border-white/[0.04] py-1.5">
+              <span className="text-[#556f84]">Provider ID</span>
+              <span className="max-w-[200px] truncate text-[#c5d6e6]" title={file.email}>
+                {file.email || 'Primary'}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-white/[0.04] py-1.5">
+              <span className="text-[#556f84]">Account ID</span>
+              <span className="max-w-[200px] truncate text-[#86a2ba]" title={file.cloud_account_id}>
+                {file.cloud_account_id}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-white/[0.04] py-1.5">
               <span className="text-[#556f84]">Remote File ID</span>
               <span className="truncate max-w-[200px] text-[#86a2ba]">
                 {file.remote_file_id || 'synced-node'}

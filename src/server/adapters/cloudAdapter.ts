@@ -40,6 +40,49 @@ export interface UploadStreamInput {
   virtualPath: string;
 }
 
+export interface DownloadOptions {
+  end?: number;
+  start?: number;
+}
+
+export function sliceDownloadStream(
+  source: Readable,
+  options?: DownloadOptions,
+  sourceAlreadyRanged = false,
+): Readable {
+  if (options?.start === undefined) return source;
+
+  const start = options.start;
+  const expectedBytes =
+    options.end === undefined ? Number.POSITIVE_INFINITY : options.end - start + 1;
+  return Readable.from(
+    (async function* () {
+      let skip = sourceAlreadyRanged ? 0 : start;
+      let remaining = expectedBytes;
+      try {
+        for await (const chunk of source) {
+          let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          if (skip >= buffer.length) {
+            skip -= buffer.length;
+            continue;
+          }
+          if (skip > 0) {
+            buffer = buffer.subarray(skip);
+            skip = 0;
+          }
+          if (remaining <= 0) break;
+          if (buffer.length > remaining) buffer = buffer.subarray(0, remaining);
+          remaining -= buffer.length;
+          if (buffer.length) yield buffer;
+          if (remaining <= 0) break;
+        }
+      } finally {
+        if (!source.destroyed) source.destroy();
+      }
+    })(),
+  );
+}
+
 export interface ProviderCapabilities {
   permanentDelete: boolean;
   restore: boolean;
@@ -52,7 +95,7 @@ export interface CloudProviderAdapter {
   readonly capabilities: ProviderCapabilities;
   createFolder(virtualPath: string, name: string): Promise<UploadedCloudItem>;
   deletePermanently(file: CloudFileRecord): Promise<void>;
-  download(file: CloudFileRecord): Promise<Readable>;
+  download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable>;
   fetchStructure(): Promise<RemoteCloudItem[]>;
   getStorageSummary(): Promise<{ totalSpace: number; usedSpace: number }>;
   rename(file: CloudFileRecord, newName: string): Promise<void>;
@@ -74,7 +117,7 @@ export abstract class BaseCloudAdapter implements CloudProviderAdapter {
 
   abstract createFolder(virtualPath: string, name: string): Promise<UploadedCloudItem>;
   abstract deletePermanently(file: CloudFileRecord): Promise<void>;
-  abstract download(file: CloudFileRecord): Promise<Readable>;
+  abstract download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable>;
   abstract fetchStructure(): Promise<RemoteCloudItem[]>;
   abstract getStorageSummary(): Promise<{ totalSpace: number; usedSpace: number }>;
   abstract rename(file: CloudFileRecord, newName: string): Promise<void>;
@@ -134,6 +177,8 @@ const MIME_TYPES: Record<string, string> = {
   gif: 'image/gif',
   gz: 'application/gzip',
   html: 'text/html',
+  heic: 'image/heic',
+  heif: 'image/heif',
   jpeg: 'image/jpeg',
   jpg: 'image/jpeg',
   json: 'application/json',
@@ -142,6 +187,11 @@ const MIME_TYPES: Record<string, string> = {
   mov: 'video/quicktime',
   mp3: 'audio/mpeg',
   mp4: 'video/mp4',
+  m4a: 'audio/mp4',
+  m4v: 'video/mp4',
+  oga: 'audio/ogg',
+  ogg: 'audio/ogg',
+  opus: 'audio/opus',
   pdf: 'application/pdf',
   png: 'image/png',
   ppt: 'application/vnd.ms-powerpoint',
@@ -149,6 +199,8 @@ const MIME_TYPES: Record<string, string> = {
   rar: 'application/vnd.rar',
   rtf: 'application/rtf',
   svg: 'image/svg+xml',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
   tar: 'application/x-tar',
   txt: 'text/plain',
   wav: 'audio/wav',

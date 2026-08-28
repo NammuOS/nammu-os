@@ -37,6 +37,8 @@ export default function CloudFilePreviewModal({
 }: PreviewModalProps) {
   const [docContent, setDocContent] = useState<string>('');
   const [docLoading, setDocLoading] = useState(false);
+  const [docTruncated, setDocTruncated] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mediaError, setMediaError] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -54,25 +56,40 @@ export default function CloudFilePreviewModal({
     if (!isOpen || !file) return;
     setMediaError(false);
     setDownloadError(null);
+    setDocContent('');
+    setDocTruncated(false);
+    setPreviewError(null);
+    setDocLoading(false);
     if (previewType === 'document') {
+      const controller = new AbortController();
       setDocLoading(true);
-      fetch(previewUrl, { credentials: 'include' })
+      fetch(previewUrl, { credentials: 'include', signal: controller.signal })
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setDocTruncated(res.headers.get('X-Nammu-Preview-Truncated') === 'true');
           return res.text();
         })
         .then((text) => {
           setDocContent(text);
           setDocLoading(false);
         })
-        .catch(() => {
-          setDocContent(
-            `# ${file.file_name}\n\nVirtual Path: ${file.virtual_path}\nStorage Provider: ${providerName}\nAccount: ${file.email || 'Primary'}\nSize: ${formatBytes(file.size)}\nLast Modified: ${formatDate(file.updated_at)}\n\n[Live Stream Link Ready]`,
-          );
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          setPreviewError(error instanceof Error ? error.message : 'Document preview failed.');
           setDocLoading(false);
         });
+      return () => controller.abort();
     }
   }, [file, isOpen, previewType, previewUrl, providerName]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !file) return null;
 
@@ -182,6 +199,7 @@ export default function CloudFilePreviewModal({
           {previewType === 'image' && !mediaError ? (
             <div className="relative flex max-h-[60vh] max-w-full items-center justify-center">
               <img
+                key={file.id}
                 src={previewUrl}
                 alt={file.file_name}
                 className="max-h-[58vh] max-w-full rounded-lg object-contain shadow-2xl transition-all"
@@ -191,9 +209,11 @@ export default function CloudFilePreviewModal({
           ) : previewType === 'video' && !mediaError ? (
             <div className="flex max-h-[60vh] w-full max-w-2xl flex-col items-center justify-center">
               <video
+                key={file.id}
                 src={previewUrl}
                 controls
                 autoPlay
+                preload="metadata"
                 className="max-h-[58vh] w-full rounded-lg bg-black shadow-2xl"
                 onError={() => setMediaError(true)}
               >
@@ -212,25 +232,48 @@ export default function CloudFilePreviewModal({
                 </div>
               </div>
               <audio
+                key={file.id}
                 src={previewUrl}
                 controls
                 autoPlay
+                preload="metadata"
                 className="mt-2 w-full"
                 onError={() => setMediaError(true)}
               />
             </div>
           ) : previewType === 'pdf' ? (
-            <iframe
-              src={previewUrl}
-              title={file.file_name}
-              className="h-[60vh] w-full rounded-lg border border-white/[0.06] bg-white"
-            />
+            <object
+              key={file.id}
+              data={previewUrl}
+              type="application/pdf"
+              aria-label={file.file_name}
+              className="h-[60vh] w-full border border-white/[0.06] bg-white"
+            >
+              <div className="grid h-full place-items-center text-[#657d91]">
+                PDF preview is unavailable in this browser. Use Download to open it locally.
+              </div>
+            </object>
           ) : previewType === 'document' ? (
             <div className="relative h-full w-full">
               {docLoading ? (
                 <div className="flex h-64 items-center justify-center gap-2 font-mono text-[10px] text-[#6d8599]">
                   <Loader2 size={16} className="animate-spin text-[#4aa3ff]" />
                   Loading document stream...
+                </div>
+              ) : previewError ? (
+                <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
+                  <AlertCircle size={22} className="text-amber-300" />
+                  <div className="font-mono text-[10px] text-amber-200">
+                    This document could not be previewed.
+                  </div>
+                  <div className="max-w-md font-mono text-[9px] text-[#6f879a]">{previewError}</div>
+                  <button
+                    onClick={handleDownload}
+                    className="flex items-center gap-1.5 border border-[#4aa3ff]/30 bg-[#4aa3ff]/15 px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[#a5d2ff] hover:bg-[#4aa3ff]/25"
+                  >
+                    <Download size={11} />
+                    Download File
+                  </button>
                 </div>
               ) : (
                 <>
@@ -246,6 +289,12 @@ export default function CloudFilePreviewModal({
                   <pre className="h-full max-h-[58vh] w-full overflow-auto rounded border border-white/[0.06] bg-black/50 p-4 font-mono text-[11px] leading-relaxed text-[#a8c6df] os-scrollbar">
                     {docContent}
                   </pre>
+                  {docTruncated && (
+                    <div className="mt-2 font-mono text-[8px] text-amber-300/80">
+                      Showing the first 2 MB for a responsive preview. Download the file to view all
+                      content.
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -258,6 +307,12 @@ export default function CloudFilePreviewModal({
               <div className="font-mono text-[9px] text-[#556f84]">
                 {file.mime_type || 'Binary Data'} · {formatBytes(file.size)}
               </div>
+              {mediaError && (
+                <div className="max-w-md font-mono text-[9px] leading-relaxed text-amber-300/80">
+                  The provider stream is available, but this browser cannot decode the file’s media
+                  codec. Download it to play it with a system media player.
+                </div>
+              )}
               <button
                 onClick={handleDownload}
                 disabled={downloading}

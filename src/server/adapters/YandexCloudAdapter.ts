@@ -5,7 +5,9 @@ import {
   BaseCloudAdapter,
   decodeAccountCredentials,
   persistAccountCredentials,
+  sliceDownloadStream,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -212,13 +214,21 @@ export class YandexCloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
     const info = (await this.request('/resources/download', {
       query: { path: file.remoteFileId },
     })) as JsonObject;
-    const response = await fetch(String(info.href || ''));
+    const response = await fetch(String(info.href || ''), {
+      headers:
+        options?.start !== undefined
+          ? { Range: `bytes=${options.start}-${options.end ?? ''}` }
+          : undefined,
+    });
     if (!response.ok || !response.body) throw new Error('Yandex download failed.');
-    return Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream);
+    const stream = Readable.fromWeb(
+      response.body as unknown as import('node:stream/web').ReadableStream,
+    );
+    return sliceDownloadStream(stream, options, response.status === 206);
   }
 
   async rename(file: CloudFileRecord, newName: string): Promise<void> {

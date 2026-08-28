@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const folderName = validateCloudFileName(String(body.folder_name || body.name || ''));
     const virtualPath = normalizeVirtualPath(body.virtual_path || body.path || '/');
     const requestedAccountId = body.account_id ? String(body.account_id) : null;
+    const requestedProvider = body.provider ? String(body.provider) : null;
     const accounts = await db.query.cloudAccounts.findMany({
       where: and(eq(cloudAccounts.userId, USER_ID), eq(cloudAccounts.status, 'active')),
     });
@@ -24,7 +25,9 @@ export async function POST(req: NextRequest) {
     );
     const candidateAccounts = requestedAccountId
       ? supportedAccounts.filter((candidate) => candidate.id === requestedAccountId)
-      : supportedAccounts;
+      : requestedProvider
+        ? supportedAccounts.filter((candidate) => candidate.provider === requestedProvider)
+        : supportedAccounts;
     const selected = candidateAccounts.length
       ? selectMostFree(candidateAccounts.map(withFreeSpace))
       : null;
@@ -37,7 +40,9 @@ export async function POST(req: NextRequest) {
         {
           error: requestedAccountId
             ? 'The selected cloud account is not active or is no longer connected.'
-            : 'Connect an active supported cloud account before creating a folder.',
+            : requestedProvider
+              ? `No active ${requestedProvider} provider account is connected.`
+              : 'Connect an active supported cloud account before creating a folder.',
         },
         { status: 409 },
       );

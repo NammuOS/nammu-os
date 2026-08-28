@@ -60,15 +60,24 @@ export function getFilePreviewType(mime?: string, name?: string): CloudFile['pre
   ) {
     return 'pdf';
   }
-  if (m.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/.test(n)) return 'image';
-  if (m.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/.test(n)) return 'video';
-  if (m.startsWith('audio/') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(n)) return 'audio';
+  if (
+    m.startsWith('image/') ||
+    /\.(png|jpe?g|gif|webp|svg|bmp|ico|heic|heif|tiff?|avif)$/.test(n)
+  ) {
+    return 'image';
+  }
+  if (m.startsWith('video/') || /\.(mp4|m4v|webm|mov|mkv|avi|wmv|flv|3gp)$/.test(n)) {
+    return 'video';
+  }
+  if (m.startsWith('audio/') || /\.(mp3|wav|ogg|oga|flac|aac|m4a|opus|wma)$/.test(n)) {
+    return 'audio';
+  }
   if (m === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
   if (
     m.includes('text') ||
     m.includes('json') ||
     m.includes('javascript') ||
-    /\.(txt|md|ts|tsx|js|jsx|json|html|css|yaml|yml|rs|py|sh|env)$/.test(n)
+    /\.(txt|md|csv|log|ts|tsx|js|mjs|jsx|json|xml|html?|css|yaml|yml|rs|py|sh|env|sql|rtf)$/.test(n)
   ) {
     return 'document';
   }
@@ -196,7 +205,12 @@ class CloudApiClient {
     return res.data || [];
   }
 
-  async createFolder(virtualPath: string, name: string, accountId?: string): Promise<CloudFile> {
+  async createFolder(
+    virtualPath: string,
+    name: string,
+    accountId?: string,
+    provider?: CloudProvider,
+  ): Promise<CloudFile> {
     const cleanPath = virtualPath.endsWith('/') ? virtualPath : `${virtualPath}/`;
     const res = await this.request<{ data: CloudFile }>('/files/folders', {
       method: 'POST',
@@ -204,6 +218,7 @@ class CloudApiClient {
         virtual_path: cleanPath,
         folder_name: name,
         account_id: accountId,
+        provider,
       }),
     });
     return res.data;
@@ -274,6 +289,7 @@ class CloudApiClient {
     virtualPath: string,
     onProgress: (percent: number) => void,
     accountId?: string,
+    provider?: CloudProvider,
   ): Promise<CloudFile> {
     const cleanPath = virtualPath.endsWith('/') ? virtualPath : `${virtualPath}/`;
 
@@ -286,6 +302,7 @@ class CloudApiClient {
         size: file.size,
         mime_type: file.type || 'application/octet-stream',
         account_id: accountId,
+        provider,
       }),
     });
 

@@ -5,7 +5,9 @@ import {
   BaseCloudAdapter,
   decodeAccountCredentials,
   persistAccountCredentials,
+  sliceDownloadStream,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -288,12 +290,18 @@ export class OneDriveCloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
     const response = await this.request(
       `https://graph.microsoft.com/v1.0/me/drive/items/${encoded(file.remoteFileId)}/content`,
+      options?.start !== undefined
+        ? { headers: { Range: `bytes=${options.start}-${options.end ?? ''}` } }
+        : {},
     );
     if (!response.ok || !response.body) throw new Error('OneDrive download failed.');
-    return Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream);
+    const stream = Readable.fromWeb(
+      response.body as unknown as import('node:stream/web').ReadableStream,
+    );
+    return sliceDownloadStream(stream, options, response.status === 206);
   }
 
   async rename(file: CloudFileRecord, newName: string): Promise<void> {

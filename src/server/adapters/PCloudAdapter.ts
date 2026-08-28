@@ -6,8 +6,10 @@ import {
   BaseCloudAdapter,
   decodeAccountCredentials,
   persistAccountCredentials,
+  sliceDownloadStream,
   toIsoDate,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -229,14 +231,22 @@ export class PCloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
     const payload = await this.call('getfilelink', idParams(file));
     const host = String(((payload.hosts || []) as string[])[0] || '');
     const path = String(payload.path || '');
     if (!host || !path) throw new Error('pCloud did not return a download location.');
-    const response = await fetch(`https://${host}${path}`);
+    const response = await fetch(`https://${host}${path}`, {
+      headers:
+        options?.start !== undefined
+          ? { Range: `bytes=${options.start}-${options.end ?? ''}` }
+          : undefined,
+    });
     if (!response.ok || !response.body) throw new Error('pCloud download failed.');
-    return Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream);
+    const stream = Readable.fromWeb(
+      response.body as unknown as import('node:stream/web').ReadableStream,
+    );
+    return sliceDownloadStream(stream, options, response.status === 206);
   }
 
   async rename(file: CloudFileRecord, newName: string): Promise<void> {

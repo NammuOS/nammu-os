@@ -24,9 +24,9 @@ export default function CloudSharedView({ files, onOpenFile, onPreviewFile }: Sh
   );
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-[#05080d] p-3 text-[11px]">
+    <div className="flex flex-1 flex-col overflow-hidden bg-[#05080d] text-[11px]">
       {/* Header bar */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.06] bg-white/[0.01] px-3">
         <div className="flex items-center gap-2">
           <Users size={14} className="text-[#4aa3ff]" />
           <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#556f84]">
@@ -41,7 +41,7 @@ export default function CloudSharedView({ files, onOpenFile, onPreviewFile }: Sh
         />
       </div>
 
-      <div className="flex-1 overflow-auto rounded-lg border border-white/[0.06] bg-white/[0.01] os-scrollbar">
+      <div className="flex-1 overflow-auto os-scrollbar">
         <div className="grid grid-cols-[1fr_130px_120px_100px_80px_70px] border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] uppercase tracking-wider text-[#476077]">
           <span>Name</span>
           <span>Shared By</span>
@@ -57,7 +57,7 @@ export default function CloudSharedView({ files, onOpenFile, onPreviewFile }: Sh
             return (
               <div
                 key={file.id}
-                onClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
+                onDoubleClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
                 className="grid w-full grid-cols-[1fr_130px_120px_100px_80px_70px] items-center px-3 py-2 text-left transition-colors hover:bg-white/[0.03] cursor-pointer"
               >
                 <div className="flex min-w-0 items-center gap-2">
@@ -104,6 +104,10 @@ export default function CloudSharedView({ files, onOpenFile, onPreviewFile }: Sh
             </div>
           )}
         </div>
+      </div>
+      <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
+        <span>{filtered.length} shared resources</span>
+        <span>Double-click to open</span>
       </div>
     </div>
   );

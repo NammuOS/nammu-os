@@ -100,7 +100,7 @@ export default function CloudApp() {
     }
   };
 
-  const handleCreateFolder = async (name: string, accountId?: string) => {
+  const handleCreateFolder = async (name: string, accountId?: string, provider?: CloudProvider) => {
     try {
       const task: UploadTask = {
         id: `task-${Date.now()}`,
@@ -111,7 +111,7 @@ export default function CloudApp() {
       };
       setTasks((prev) => [task, ...prev]);
 
-      await cloudApi.createFolder(currentPath, name, accountId);
+      await cloudApi.createFolder(currentPath, name, accountId, provider);
       await loadPathFiles(currentPath);
 
       setTasks((prev) =>
@@ -124,7 +124,11 @@ export default function CloudApp() {
     }
   };
 
-  const handleUploadFiles = async (filesToUpload: File[], accountId?: string) => {
+  const handleUploadFiles = async (
+    filesToUpload: File[],
+    accountId?: string,
+    provider?: CloudProvider,
+  ) => {
     for (const file of filesToUpload) {
       const taskId = `up-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newTask: UploadTask = {
@@ -148,6 +152,7 @@ export default function CloudApp() {
             );
           },
           accountId,
+          provider,
         );
 
         setTasks((prev) =>
@@ -333,9 +338,11 @@ export default function CloudApp() {
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    const handledByActiveView = e.defaultPrevented;
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
+    if (handledByActiveView) return;
     const droppedFiles = Array.from(e.dataTransfer.files || []);
     if (droppedFiles.length) {
       if (section !== 'my-drive') setSection('my-drive');

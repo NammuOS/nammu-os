@@ -4,6 +4,7 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  Database,
   Download,
   Edit3,
   Eye,
@@ -42,8 +43,8 @@ interface MyDriveViewProps {
   currentPath: string;
   files: CloudFile[];
   onNavigatePath: (path: string) => void;
-  onCreateFolder: (name: string, accountId?: string) => Promise<void>;
-  onUploadFiles: (files: File[], accountId?: string) => Promise<void>;
+  onCreateFolder: (name: string, accountId?: string, provider?: CloudProvider) => Promise<void>;
+  onUploadFiles: (files: File[], accountId?: string, provider?: CloudProvider) => Promise<void>;
   onRenameFile: (fileId: string, newName: string) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
   onBulkDelete: (fileIds: string[]) => Promise<void>;
@@ -99,6 +100,10 @@ export default function CloudMyDriveView({
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string | 'all'>('all');
   const [expandedProviderFilter, setExpandedProviderFilter] = useState<CloudProvider | null>(null);
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+  const [isUploadTargetOpen, setIsUploadTargetOpen] = useState(false);
+  const [uploadTargetAccountId, setUploadTargetAccountId] = useState<'context' | 'auto' | string>(
+    'context',
+  );
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
@@ -120,6 +125,31 @@ export default function CloudMyDriveView({
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const uploadTargetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const dismissPopups = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!filterDropdownRef.current?.contains(target)) {
+        setIsFilterDropdownOpen(false);
+        setExpandedProviderFilter(null);
+      }
+      if (!uploadTargetRef.current?.contains(target)) setIsUploadTargetOpen(false);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsFilterDropdownOpen(false);
+      setExpandedProviderFilter(null);
+      setIsUploadTargetOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissPopups, true);
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissPopups, true);
+      document.removeEventListener('keydown', dismissOnEscape);
+    };
+  }, []);
 
   // Global / Subfolder search across entire cloud database
   useEffect(() => {
@@ -160,12 +190,50 @@ export default function CloudMyDriveView({
     : selectedProviderFilter !== 'all'
       ? getProviderName(selectedProviderFilter)
       : 'All Providers';
+  const connectedProviderCount = useMemo(
+    () => accounts.filter((account) => account.status === 'active').length,
+    [accounts],
+  );
+  const explicitUploadAccount = accounts.find((account) => account.id === uploadTargetAccountId);
+  const effectiveUploadAccount =
+    uploadTargetAccountId === 'context'
+      ? selectedAccount
+      : uploadTargetAccountId === 'auto'
+        ? null
+        : explicitUploadAccount || null;
+  const explicitUploadProvider = uploadTargetAccountId.startsWith('provider:')
+    ? (uploadTargetAccountId.slice('provider:'.length) as CloudProvider)
+    : null;
+  const effectiveUploadProvider = effectiveUploadAccount
+    ? undefined
+    : explicitUploadProvider ||
+      (uploadTargetAccountId === 'context' && selectedProviderFilter !== 'all'
+        ? selectedProviderFilter
+        : undefined);
+  const uploadTargetLabel = effectiveUploadAccount
+    ? effectiveUploadAccount.email
+    : explicitUploadProvider
+      ? `Any ${getProviderName(explicitUploadProvider)}`
+      : uploadTargetAccountId === 'context' && selectedProviderFilter !== 'all'
+        ? `Smart · ${getProviderName(selectedProviderFilter)}`
+        : 'Smart allocation';
 
   useEffect(() => {
     if (selectedAccountFilter !== 'all' && !selectedAccount) {
       setSelectedAccountFilter('all');
     }
   }, [selectedAccount, selectedAccountFilter]);
+
+  useEffect(() => {
+    if (
+      uploadTargetAccountId !== 'context' &&
+      uploadTargetAccountId !== 'auto' &&
+      !uploadTargetAccountId.startsWith('provider:') &&
+      !explicitUploadAccount
+    ) {
+      setUploadTargetAccountId('context');
+    }
+  }, [explicitUploadAccount, uploadTargetAccountId]);
 
   // Filtered by provider and then by a specific connected account when selected.
   const providerFilteredFiles = useMemo(() => {
@@ -228,7 +296,7 @@ export default function CloudMyDriveView({
   // Breadcrumbs calculation
   const breadcrumbParts = useMemo(() => {
     const parts = currentPath.split('/').filter(Boolean);
-    const crumbs = [{ label: 'Cloud', path: '/' }];
+    const crumbs = [{ label: 'My Drive', path: '/' }];
     let acc = '/';
     for (const part of parts) {
       acc += `${part}/`;
@@ -385,7 +453,7 @@ export default function CloudMyDriveView({
   const submitCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFolderName.trim()) return;
-    await onCreateFolder(newFolderName.trim(), selectedAccount?.id);
+    await onCreateFolder(newFolderName.trim(), effectiveUploadAccount?.id, effectiveUploadProvider);
     setNewFolderName('');
     setIsNewFolderOpen(false);
   };
@@ -401,7 +469,7 @@ export default function CloudMyDriveView({
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploaded = Array.from(e.target.files || []);
     if (uploaded.length) {
-      onUploadFiles(uploaded, selectedAccount?.id);
+      onUploadFiles(uploaded, effectiveUploadAccount?.id, effectiveUploadProvider);
     }
     if (e.target) e.target.value = '';
   };
@@ -438,6 +506,13 @@ export default function CloudMyDriveView({
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onClick={() => setContextMenu(null)}
+      onDrop={(event) => {
+        event.preventDefault();
+        const dropped = Array.from(event.dataTransfer.files || []);
+        if (dropped.length) {
+          void onUploadFiles(dropped, effectiveUploadAccount?.id, effectiveUploadProvider);
+        }
+      }}
       className="relative flex flex-1 flex-col overflow-hidden bg-[#05080d] text-[11px] outline-none select-none"
     >
       {/* Hidden file inputs */}
@@ -483,6 +558,118 @@ export default function CloudMyDriveView({
           <span>Upload Folder</span>
         </button>
 
+        <div ref={uploadTargetRef} className="relative">
+          <button
+            onClick={() => {
+              setIsUploadTargetOpen((open) => !open);
+              setIsFilterDropdownOpen(false);
+              setExpandedProviderFilter(null);
+            }}
+            className="flex max-w-44 items-center gap-1 border border-white/[0.06] bg-white/[0.02] px-2 py-1 font-mono text-[8px] text-[#71889d] transition-colors hover:bg-white/[0.05] hover:text-[#d6e5f0]"
+            title={`Upload target: ${uploadTargetLabel}`}
+          >
+            <Database size={10} className="shrink-0 text-[#4aa3ff]" />
+            <span className="truncate">{uploadTargetLabel}</span>
+            <ChevronDown size={9} className="shrink-0 opacity-70" />
+          </button>
+
+          {isUploadTargetOpen && (
+            <div
+              className="absolute left-0 top-full z-[70] mt-1 w-72 border border-white/[0.08] bg-[#080d15] p-1 shadow-2xl backdrop-blur-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-2 py-1.5 font-mono text-[8px] uppercase tracking-[0.14em] text-[#557087]">
+                Upload destination
+              </div>
+              <button
+                onClick={() => {
+                  setUploadTargetAccountId('context');
+                  setIsUploadTargetOpen(false);
+                }}
+                className={`flex w-full items-center justify-between px-2 py-1.5 text-left text-[10px] ${
+                  uploadTargetAccountId === 'context'
+                    ? 'bg-[#4aa3ff]/15 text-[#a8d3ff]'
+                    : 'text-[#c0d0de] hover:bg-white/[0.05]'
+                }`}
+              >
+                <span>Follow current view</span>
+                <span className="font-mono text-[8px] text-[#557087]">Default</span>
+              </button>
+              <button
+                onClick={() => {
+                  setUploadTargetAccountId('auto');
+                  setIsUploadTargetOpen(false);
+                }}
+                className={`flex w-full items-center justify-between px-2 py-1.5 text-left text-[10px] ${
+                  uploadTargetAccountId === 'auto'
+                    ? 'bg-[#4aa3ff]/15 text-[#a8d3ff]'
+                    : 'text-[#c0d0de] hover:bg-white/[0.05]'
+                }`}
+              >
+                <span>Smart allocation</span>
+                <span className="font-mono text-[8px] text-[#557087]">Any provider</span>
+              </button>
+              <div className="my-1 border-t border-white/[0.04]" />
+              <div className="px-2 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#557087]">
+                Any account from provider
+              </div>
+              {[...new Set(accounts.map((account) => account.provider))].map((provider) => (
+                <button
+                  key={provider}
+                  onClick={() => {
+                    setUploadTargetAccountId(`provider:${provider}`);
+                    setIsUploadTargetOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-[10px] ${
+                    uploadTargetAccountId === `provider:${provider}`
+                      ? 'bg-[#4aa3ff]/15 text-[#a8d3ff]'
+                      : 'text-[#c0d0de] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: getProviderColor(provider) }}
+                  />
+                  <span className="flex-1">Any {getProviderName(provider)}</span>
+                  <span className="font-mono text-[8px] text-[#557087]">
+                    {accounts.filter((account) => account.provider === provider).length} IDs
+                  </span>
+                </button>
+              ))}
+              <div className="my-1 border-t border-white/[0.04]" />
+              <div className="px-2 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#557087]">
+                Specific provider ID
+              </div>
+              {accounts.map((account) => (
+                <button
+                  key={account.id}
+                  disabled={account.status !== 'active'}
+                  onClick={() => {
+                    setUploadTargetAccountId(account.id);
+                    setIsUploadTargetOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-[10px] disabled:cursor-not-allowed disabled:opacity-40 ${
+                    uploadTargetAccountId === account.id
+                      ? 'bg-[#4aa3ff]/15 text-[#a8d3ff]'
+                      : 'text-[#c0d0de] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: getProviderColor(account.provider) }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{account.email}</span>
+                    <span className="block truncate font-mono text-[8px] text-[#557087]">
+                      {getProviderName(account.provider)} · {account.id}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           onClick={onRefresh}
           className="grid h-6 w-6 place-items-center rounded border border-white/[0.06] text-[#71889d] hover:bg-white/[0.04] hover:text-[#bcd0df]"
@@ -491,31 +678,8 @@ export default function CloudMyDriveView({
           <RefreshCw size={10} />
         </button>
 
-        {/* Breadcrumb Path */}
-        <div className="ml-2 flex min-w-0 items-center font-mono text-[9px] text-[#557087]">
-          {breadcrumbParts.map((crumb, idx) => (
-            <div key={crumb.path} className="flex items-center">
-              {idx > 0 && <ChevronRight size={10} className="mx-0.5 text-[#3d5366]" />}
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSearchResults(null);
-                  onNavigatePath(crumb.path);
-                }}
-                className={`truncate hover:text-[#4aa3ff] transition-colors ${
-                  idx === breadcrumbParts.length - 1
-                    ? 'text-[#9ab3c7] font-medium'
-                    : 'text-[#557087]'
-                }`}
-              >
-                {crumb.label}
-              </button>
-            </div>
-          ))}
-        </div>
-
         {/* Provider-Wise Filter Dropdown */}
-        <div className="relative ml-auto">
+        <div ref={filterDropdownRef} className="relative ml-auto">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -562,14 +726,16 @@ export default function CloudMyDriveView({
                 }`}
               >
                 <span>All Providers</span>
-                <span className="font-mono text-[8px] opacity-60">{rawDisplayedFiles.length}</span>
+                <span className="font-mono text-[8px] opacity-60">
+                  {connectedProviderCount} provider{connectedProviderCount === 1 ? '' : 's'}
+                </span>
               </button>
 
               <div className="my-1 border-t border-white/[0.04]" />
 
               {ALL_PROVIDERS.map((prov) => {
                 const providerAccounts = accounts.filter((account) => account.provider === prov.id);
-                const count = rawDisplayedFiles.filter((f) => f.provider === prov.id).length;
+                const count = providerAccounts.length;
                 const isSelected =
                   selectedProviderFilter === prov.id && selectedAccountFilter === 'all';
                 const isExpanded = expandedProviderFilter === prov.id;
@@ -713,6 +879,33 @@ export default function CloudMyDriveView({
             <Grid2X2 size={12} />
           </button>
         </div>
+      </div>
+
+      {/* Dedicated Breadcrumb Path */}
+      <div className="flex h-7 shrink-0 items-center gap-2 border-b border-white/[0.06] bg-black/20 px-3">
+        <FolderOpen size={10} className="shrink-0 text-[#4aa3ff]" />
+        <div className="flex min-w-0 items-center font-mono text-[9px] text-[#557087]">
+          {breadcrumbParts.map((crumb, idx) => (
+            <div key={crumb.path} className="flex min-w-0 items-center">
+              {idx > 0 && <ChevronRight size={10} className="mx-0.5 shrink-0 text-[#3d5366]" />}
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSearchResults(null);
+                  onNavigatePath(crumb.path);
+                }}
+                className={`truncate transition-colors hover:text-[#4aa3ff] ${
+                  idx === breadcrumbParts.length - 1
+                    ? 'font-medium text-[#9ab3c7]'
+                    : 'text-[#557087]'
+                }`}
+              >
+                {crumb.label}
+              </button>
+            </div>
+          ))}
+        </div>
+        <span className="ml-auto truncate font-mono text-[8px] text-[#3f596d]">{currentPath}</span>
       </div>
 
       {/* Global Search / Provider Filter Header Banner */}
@@ -1027,6 +1220,9 @@ export default function CloudMyDriveView({
                 <div>PATH: {activeFile.virtual_path}</div>
                 <div>SIZE: {activeFile.is_folder ? '—' : formatBytes(activeFile.size)}</div>
                 <div>PROVIDER: {getProviderName(activeFile.provider)}</div>
+                <div className="break-all">PROVIDER ID: {activeFile.email || 'Primary'}</div>
+                <div className="break-all">ACCOUNT ID: {activeFile.cloud_account_id}</div>
+                <div className="break-all">REMOTE ID: {activeFile.remote_file_id}</div>
                 <div>MODIFIED: {formatDate(activeFile.updated_at)}</div>
               </div>
 
@@ -1168,9 +1364,7 @@ export default function CloudMyDriveView({
           {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
         </span>
         <span>
-          {searchResults !== null
-            ? `Global Search: "${searchQuery}"`
-            : `${currentPath} · Unified Virtual Namespace`}
+          {searchResults !== null ? `Global Search: "${searchQuery}"` : 'Unified Virtual Namespace'}
         </span>
       </div>
 
@@ -1188,6 +1382,9 @@ export default function CloudMyDriveView({
             <div className="font-medium text-[12px] text-white">Create New Folder</div>
             <p className="mt-1 font-mono text-[9px] text-[#557187]">
               Directory will be created in {currentPath}
+            </p>
+            <p className="mt-1 truncate font-mono text-[8px] text-[#3f596d]">
+              Target: {uploadTargetLabel}
             </p>
             <input
               autoFocus

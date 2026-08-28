@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
     const size = Number(body.size);
     const mimeType = String(body.mime_type || 'application/octet-stream');
     const requestedAccountId = body.account_id ? String(body.account_id) : null;
+    const requestedProvider = body.provider ? String(body.provider) : null;
 
     if (!Number.isSafeInteger(size) || size < 0 || size > MAX_UPLOAD_SIZE) {
       return NextResponse.json(
@@ -46,10 +47,16 @@ export async function POST(req: NextRequest) {
 
     const candidateAccounts = requestedAccountId
       ? accounts.filter((account) => account.id === requestedAccountId)
-      : accounts;
+      : requestedProvider
+        ? accounts.filter((account) => account.provider === requestedProvider)
+        : accounts;
     if (!candidateAccounts.length) {
       return NextResponse.json(
-        { error: 'The selected cloud account is not active or is no longer connected.' },
+        {
+          error: requestedAccountId
+            ? 'The selected cloud account is not active or is no longer connected.'
+            : `No active ${requestedProvider || 'cloud'} provider account is connected.`,
+        },
         { status: 409 },
       );
     }

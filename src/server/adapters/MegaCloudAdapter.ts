@@ -7,7 +7,9 @@ import {
   decodeAccountCredentials,
   guessMimeType,
   persistAccountCredentials,
+  sliceDownloadStream,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -235,10 +237,10 @@ export class MegaCloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
     const node = await this.node(file);
     if (node.directory) throw new Error('Folders cannot be downloaded directly from MEGA.');
-    return node.download({});
+    return sliceDownloadStream(node.download(options || {}), options, Boolean(options));
   }
 
   async rename(file: CloudFileRecord, newName: string): Promise<void> {

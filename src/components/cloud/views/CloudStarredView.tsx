@@ -46,8 +46,8 @@ export default function CloudStarredView({
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-[#05080d] p-3 text-[11px]">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="flex flex-1 flex-col overflow-hidden bg-[#05080d] text-[11px]">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.06] bg-white/[0.01] px-3">
         <div className="flex items-center gap-2">
           <Star size={14} className="text-amber-400" fill="currentColor" />
           <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#556f84]">
@@ -62,7 +62,7 @@ export default function CloudStarredView({
         />
       </div>
 
-      <div className="flex-1 overflow-auto rounded-lg border border-white/[0.06] bg-white/[0.01] os-scrollbar">
+      <div className="flex-1 overflow-auto os-scrollbar">
         <div className="grid grid-cols-[1fr_120px_100px_100px_80px_28px] border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] uppercase tracking-wider text-[#476077]">
           <span>Name</span>
           <span>Provider</span>
@@ -78,7 +78,7 @@ export default function CloudStarredView({
             return (
               <div
                 key={file.id}
-                onClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
+                onDoubleClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
                 className="grid w-full grid-cols-[1fr_120px_100px_100px_80px_28px] items-center px-3 py-2 text-left transition-colors hover:bg-white/[0.03] cursor-pointer"
               >
                 {/* 1. Direct Name with Icon */}
@@ -136,6 +136,10 @@ export default function CloudStarredView({
             </div>
           )}
         </div>
+      </div>
+      <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
+        <span>{filtered.length} starred resources</span>
+        <span>Double-click to preview</span>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
+import { Readable } from 'node:stream';
 import { describe, expect, it } from 'bun:test';
 
 import { createCloudAdapter, isImplementedCloudProvider } from '@/server/adapters/adapterFactory';
-import type { CloudAccountRecord } from '@/server/adapters/cloudAdapter';
+import { sliceDownloadStream, type CloudAccountRecord } from '@/server/adapters/cloudAdapter';
 import { createOAuthState, verifyOAuthState } from './oauthStateService';
 import { selectBestAccount, type SpaceAccount } from './spaceAllocator';
 import { decryptJson, encryptJson } from './cryptoUtils';
@@ -76,5 +77,26 @@ describe('multi-provider contracts', () => {
     expect(decryptJson<Record<string, unknown>>(legacy)).toEqual({
       password: 'legacy-secret',
     });
+  });
+
+  it('returns the exact requested bytes when a provider ignores range headers', async () => {
+    const stream = sliceDownloadStream(Readable.from(Buffer.from('0123456789')), {
+      start: 3,
+      end: 6,
+    });
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks).toString()).toBe('3456');
+  });
+
+  it('limits an upstream range response to the declared byte window', async () => {
+    const stream = sliceDownloadStream(
+      Readable.from(Buffer.from('3456789')),
+      { start: 3, end: 6 },
+      true,
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks).toString()).toBe('3456');
   });
 });

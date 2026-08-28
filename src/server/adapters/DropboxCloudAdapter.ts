@@ -6,7 +6,9 @@ import {
   decodeAccountCredentials,
   guessMimeType,
   persistAccountCredentials,
+  sliceDownloadStream,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -117,11 +119,13 @@ export class DropboxCloudAdapter extends BaseCloudAdapter {
     path: string,
     args: JsonObject,
     body?: Readable | Buffer,
+    extraHeaders?: Record<string, string>,
   ): Promise<Response> {
     return this.request(`https://content.dropboxapi.com/2${path}`, {
       method: 'POST',
       headers: {
         'Dropbox-API-Arg': JSON.stringify(args),
+        ...extraHeaders,
         ...(body
           ? {
               'Content-Type': 'application/octet-stream',
@@ -296,12 +300,20 @@ export class DropboxCloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
-    const response = await this.content('/files/download', {
-      path: file.remoteFileId || dropboxPath(file.virtualPath, file.fileName),
-    });
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
+    const response = await this.content(
+      '/files/download',
+      { path: file.remoteFileId || dropboxPath(file.virtualPath, file.fileName) },
+      undefined,
+      options?.start !== undefined
+        ? { Range: `bytes=${options.start}-${options.end ?? ''}` }
+        : undefined,
+    );
     if (!response.ok || !response.body) throw new Error('Dropbox download failed.');
-    return Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream);
+    const stream = Readable.fromWeb(
+      response.body as unknown as import('node:stream/web').ReadableStream,
+    );
+    return sliceDownloadStream(stream, options, response.status === 206);
   }
 
   async rename(file: CloudFileRecord, newName: string): Promise<void> {

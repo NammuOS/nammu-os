@@ -9,7 +9,9 @@ import {
 } from '@/server/services/googleDriveService';
 import {
   BaseCloudAdapter,
+  sliceDownloadStream,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -78,7 +80,7 @@ export class GoogleCloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
     const drive = await getGoogleDriveClient(this.account);
     const exportMimeType = GOOGLE_EXPORTS[file.mimeType || ''];
     const response = exportMimeType
@@ -88,9 +90,15 @@ export class GoogleCloudAdapter extends BaseCloudAdapter {
         )
       : await drive.files.get(
           { fileId: file.remoteFileId, alt: 'media' },
-          { responseType: 'arraybuffer' },
+          {
+            responseType: 'arraybuffer',
+            ...(options?.start !== undefined
+              ? { headers: { Range: `bytes=${options.start}-${options.end ?? ''}` } }
+              : {}),
+          },
         );
-    return Readable.from(Buffer.from(response.data as ArrayBuffer));
+    const stream = Readable.from(Buffer.from(response.data as ArrayBuffer));
+    return sliceDownloadStream(stream, options, Boolean(response.headers['content-range']));
   }
 
   async rename(file: CloudFileRecord, newName: string): Promise<void> {

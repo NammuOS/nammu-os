@@ -15,7 +15,9 @@ import {
   BaseCloudAdapter,
   decodeAccountCredentials,
   guessMimeType,
+  sliceDownloadStream,
   type CloudFileRecord,
+  type DownloadOptions,
   type RemoteCloudItem,
   type UploadedCloudItem,
   type UploadStreamInput,
@@ -175,14 +177,22 @@ export class S3CloudAdapter extends BaseCloudAdapter {
     };
   }
 
-  async download(file: CloudFileRecord): Promise<Readable> {
+  async download(file: CloudFileRecord, options?: DownloadOptions): Promise<Readable> {
     const { client, bucket } = this.client();
     const response = await client.send(
-      new GetObjectCommand({ Bucket: bucket, Key: file.remoteFileId }),
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: file.remoteFileId,
+        Range:
+          options?.start !== undefined ? `bytes=${options.start}-${options.end ?? ''}` : undefined,
+      }),
     );
     if (!response.Body) throw new Error('S3 returned an empty download body.');
-    if (response.Body instanceof Readable) return response.Body;
-    return Readable.fromWeb(response.Body as unknown as import('node:stream/web').ReadableStream);
+    const stream =
+      response.Body instanceof Readable
+        ? response.Body
+        : Readable.fromWeb(response.Body as unknown as import('node:stream/web').ReadableStream);
+    return sliceDownloadStream(stream, options, Boolean(response.ContentRange));
   }
 
   private async deleteKeys(keys: string[]): Promise<void> {
