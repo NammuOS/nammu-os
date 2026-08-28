@@ -57,7 +57,7 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
   {
     id: 'adblocker',
     name: 'Ad blocker',
-    description: 'Gecko tracking and request protection.',
+    description: 'Player-response pruning, request blocking and in-player ad suppression.',
     category: 'System',
     support: 'native',
   },
@@ -101,7 +101,7 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
     name: 'Authentication session',
     description: 'Isolated Gecko cookies and Google sign-in.',
     category: 'System',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'blur-nav-bar',
@@ -141,9 +141,9 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
   {
     id: 'custom-output-device',
     name: 'Output device',
-    description: 'Route playback to a selected browser audio device.',
+    description: 'Requires a desktop host with native audio-device routing.',
     category: 'Audio',
-    support: 'native',
+    support: 'host-only',
   },
   {
     id: 'disable-autoplay',
@@ -185,7 +185,7 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
     name: 'In-app menu',
     description: 'Nammu-native toolbar and extension manager.',
     category: 'Interface',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'lumiastream',
@@ -204,9 +204,9 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
   {
     id: 'navigation',
     name: 'Navigation',
-    description: 'Back, forward, Home, Explore and Library controls.',
+    description: 'YouTube Music provides Home, Explore, Library and history navigation.',
     category: 'Interface',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'no-google-login',
@@ -232,23 +232,23 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
   {
     id: 'picture-in-picture',
     name: 'Picture in Picture',
-    description: 'Open the current music video in a floating player.',
+    description: 'Uses YouTube Music video player controls where supported.',
     category: 'Playback',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'playback-speed',
     name: 'Playback speed',
-    description: 'Control playback from 0.25× to 2×.',
+    description: 'Uses YouTube Music playback-speed controls where available.',
     category: 'Playback',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'precise-volume',
     name: 'Precise volume',
-    description: 'Set exact music volume independently from master volume.',
+    description: 'YouTube Music owns local volume; Nammu master volume remains independent.',
     category: 'Audio',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'quality-changer',
@@ -267,9 +267,9 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
   {
     id: 'shortcuts',
     name: 'Media shortcuts',
-    description: 'Space, arrows, J/L and media-key controls.',
+    description: 'YouTube Music keyboard and media-key shortcuts.',
     category: 'System',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'skip-disliked-songs',
@@ -295,9 +295,9 @@ export const MUSIC_PLUGIN_CATALOG: MusicPluginDescriptor[] = [
   {
     id: 'synced-lyrics',
     name: 'Synced lyrics',
-    description: 'Fetch synchronized lyrics from LRCLIB.',
+    description: 'Uses the native YouTube Music lyrics view.',
     category: 'Services',
-    support: 'native',
+    support: 'youtube',
   },
   {
     id: 'taskbar-mediacontrol',

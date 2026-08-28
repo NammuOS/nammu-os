@@ -1,31 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  AudioLines,
-  ChevronDown,
-  Download,
-  Home,
-  Library,
-  ListMusic,
-  Loader2,
-  Maximize2,
-  Music2,
-  Pause,
-  Play,
-  RefreshCw,
-  Search,
-  Settings2,
-  SkipBack,
-  SkipForward,
-  SlidersHorizontal,
-  Sparkles,
-  Volume2,
-  VolumeX,
-  X,
-} from 'lucide-react';
+import { Loader2, Music2, Puzzle, RefreshCw, Search, X } from 'lucide-react';
 
 import {
   DEFAULT_NAMMU_MUSIC_PREFERENCES,
@@ -42,8 +18,78 @@ const MUSIC_URL = 'https://music.youtube.com/';
 const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
 const CONTENT_RESPONSE_CHANNEL = 'nammu-youtube-music-content-response';
 
+export const ADBLOCK_BOOTSTRAP_SOURCE = `data:application/javascript;charset=utf-8,${encodeURIComponent(`
+  (() => {
+    const prunePlayerResponse = (value, page) => {
+      if (page.__nammuAdblockEnabled === false || !value || typeof value !== 'object') return value;
+      try {
+        const object = Cu.waiveXrays(value);
+        delete object.playerAds;
+        delete object.adPlacements;
+        delete object.adSlots;
+        for (const key of ['playerResponse', 'ytInitialPlayerResponse']) {
+          const nested = object[key];
+          if (!nested || typeof nested !== 'object') continue;
+          const response = Cu.waiveXrays(nested);
+          delete response.playerAds;
+          delete response.adPlacements;
+          delete response.adSlots;
+        }
+      } catch {}
+      return value;
+    };
+
+    const install = (windowObject) => {
+      if (!windowObject) return;
+      const page = Cu.waiveXrays(windowObject);
+      if (page.__nammuAdblockPrunerInstalled) return;
+      page.__nammuAdblockPrunerInstalled = true;
+      if (typeof page.__nammuAdblockEnabled !== 'boolean') page.__nammuAdblockEnabled = true;
+
+      try {
+        const json = Cu.waiveXrays(page.JSON);
+        const originalParse = json.parse;
+        json.parse = Cu.exportFunction(function () {
+          return prunePlayerResponse(Reflect.apply(originalParse, json, arguments), page);
+        }, page);
+      } catch {}
+
+      try {
+        const responsePrototype = Cu.waiveXrays(page.Response.prototype);
+        const originalJson = responsePrototype.json;
+        const pruneResolved = Cu.exportFunction(
+          (value) => prunePlayerResponse(value, page),
+          page,
+        );
+        responsePrototype.json = Cu.exportFunction(function () {
+          return Reflect.apply(originalJson, this, arguments).then(pruneResolved);
+        }, page);
+      } catch {}
+
+      for (const key of ['ytInitialPlayerResponse', 'playerResponse']) {
+        try {
+          let stored = page[key];
+          Object.defineProperty(page, key, {
+            configurable: true,
+            enumerable: true,
+            get: Cu.exportFunction(() => stored, page),
+            set: Cu.exportFunction((value) => {
+              stored = prunePlayerResponse(value, page);
+            }, page),
+          });
+        } catch {}
+      }
+    };
+
+    addEventListener('DOMWindowCreated', (event) => {
+      try { install(event.target?.defaultView); } catch {}
+    }, true);
+    try { install(content); } catch {}
+  })();
+`)}`;
+
 type EngineState = 'starting' | 'ready' | 'error';
-type DrawerView = 'extensions' | 'audio' | 'lyrics';
+type DrawerView = 'extensions';
 
 type GeckoRuntimeWindow = Window & {
   geckoEvalChrome?: (script: string) => Promise<unknown>;
@@ -59,23 +105,6 @@ interface MediaState {
   title: string;
   videoId: string;
   volume: number;
-}
-
-interface AudioOutput {
-  deviceId: string;
-  label: string;
-}
-
-interface LyricLine {
-  time: number;
-  text: string;
-}
-
-interface LyricsResult {
-  instrumental?: boolean;
-  lines: LyricLine[];
-  plain: string;
-  source: string;
 }
 
 const EMPTY_MEDIA: MediaState = {
@@ -100,14 +129,6 @@ function runtimeUrl(attempt: number): string {
   return `${FIREFOX_RUNTIME_URL}?${params.toString()}`;
 }
 
-function safeMusicUrl(candidate: string): string {
-  try {
-    const url = new URL(candidate, MUSIC_URL);
-    if (url.protocol === 'https:' && url.hostname === 'music.youtube.com') return url.toString();
-  } catch {}
-  return MUSIC_URL;
-}
-
 function initializeMusicScript(): string {
   return `(()=>{
     const principal = Services.scriptSecurityManager.getSystemPrincipal();
@@ -120,8 +141,11 @@ function initializeMusicScript(): string {
     }
     Services.prefs.setIntPref('browser.link.open_newwindow', 1);
     Services.prefs.setIntPref('browser.link.open_newwindow.restriction', 0);
+    Services.prefs.setBoolPref('dom.disable_beforeunload', true);
     Services.prefs.setBoolPref('privacy.trackingprotection.enabled', true);
+    Services.prefs.setBoolPref('privacy.trackingprotection.pbmode.enabled', true);
     Services.prefs.setBoolPref('privacy.trackingprotection.socialtracking.enabled', true);
+    tab.linkedBrowser.messageManager.loadFrameScript(${JSON.stringify(ADBLOCK_BOOTSTRAP_SOURCE)}, true, false);
     openTrustedLinkIn(${JSON.stringify(MUSIC_URL)}, 'current');
     return 'music-session-ready';
   })()`;
@@ -241,6 +265,7 @@ function applyPreferencesCommand(
     ${plugins['ambient-mode'] ? 'body::before { content: ""; position: fixed; inset: -8%; background: var(--nammu-music-artwork) center/cover no-repeat; filter: blur(70px) saturate(1.25); opacity: .16; pointer-events: none; z-index: 0; } ytmusic-app { background: rgba(5,8,13,.78) !important; }' : ''}
     ${plugins['album-color-theme'] ? 'ytmusic-player-page { background-image: linear-gradient(180deg, rgba(5,8,13,.55), #05080d 72%), var(--nammu-music-artwork) !important; background-position: center !important; background-size: cover !important; }' : ''}
     ${plugins['performance-improvement'] ? 'ytmusic-app:not(:focus-within) #background, ytmusic-app:not(:focus-within) .animated-thumbnail { animation-play-state: paused !important; }' : ''}
+    ${plugins.adblocker ? '.ytp-ad-module, .ytp-ad-overlay-container, ytmusic-mealbar-promo-renderer, ytmusic-statement-banner-renderer, ytd-ad-slot-renderer, #masthead-ad { display: none !important; visibility: hidden !important; }' : ''}
     * { scrollbar-color: rgba(74,163,255,.45) rgba(255,255,255,.025) !important; }
     ::selection { background: rgba(74,163,255,.3) !important; }
   `;
@@ -256,6 +281,7 @@ function applyPreferencesCommand(
       (doc.head || doc.documentElement).appendChild(style);
     }
     const p = settings.plugins;
+    try { content.wrappedJSObject.__nammuAdblockEnabled = Boolean(p.adblocker); } catch {}
     style.textContent = ${JSON.stringify(runtimeStyles)};
     const runtime = globalThis.__nammuMusicAudioRuntime || (globalThis.__nammuMusicAudioRuntime = {});
     runtime.settings = settings;
@@ -270,7 +296,7 @@ function applyPreferencesCommand(
       doc.documentElement.style.removeProperty('--nammu-music-artwork');
     }
 
-    if (video && (p.equalizer || p.visualizer || p['skip-silences'])) {
+    if (video) {
       try {
         if (!runtime.context || runtime.audioVideo !== video) {
           const AudioContext = content.AudioContext || content.webkitAudioContext;
@@ -281,10 +307,11 @@ function applyPreferencesCommand(
           runtime.treble = runtime.context.createBiquadFilter();
           runtime.compressor = runtime.context.createDynamicsCompressor();
           runtime.analyser = runtime.context.createAnalyser();
+          runtime.masterGain = runtime.context.createGain();
           runtime.bass.type = 'lowshelf'; runtime.bass.frequency.value = 180;
           runtime.mid.type = 'peaking'; runtime.mid.frequency.value = 1000; runtime.mid.Q.value = .8;
           runtime.treble.type = 'highshelf'; runtime.treble.frequency.value = 5000;
-          runtime.source.connect(runtime.bass).connect(runtime.mid).connect(runtime.treble).connect(runtime.compressor).connect(runtime.analyser).connect(runtime.context.destination);
+          runtime.source.connect(runtime.bass).connect(runtime.mid).connect(runtime.treble).connect(runtime.compressor).connect(runtime.analyser).connect(runtime.masterGain).connect(runtime.context.destination);
           runtime.analyser.fftSize = 128;
           runtime.audioVideo = video;
         }
@@ -303,10 +330,7 @@ function applyPreferencesCommand(
         const currentVideo = currentDoc?.querySelector('video');
         if (!currentSettings || !currentVideo) return;
         const currentPlugins = currentSettings.plugins;
-        const linearVolume = Math.min(1, Math.max(0, Number(currentSettings.volume) || 0));
         const masterVolume = Math.min(1, Math.max(0, Number(currentSettings.masterVolume) || 0));
-        const localVolume = currentPlugins['exponential-volume'] ? linearVolume * linearVolume : linearVolume;
-        const baseVolume = localVolume * masterVolume;
         let volumeFactor = 1;
         const trackKey = currentVideo.currentSrc || content.location.href;
         if (runtime.trackKey !== trackKey) {
@@ -326,7 +350,10 @@ function applyPreferencesCommand(
             }
           }
         }
-        currentVideo.volume = Math.min(1, Math.max(0, baseVolume * volumeFactor));
+        const volumeCurve = currentPlugins['exponential-volume'] ? currentVideo.volume : 1;
+        if (runtime.masterGain) {
+          runtime.masterGain.gain.value = Math.min(1, Math.max(0, masterVolume * volumeCurve * volumeFactor));
+        }
         currentVideo.preservesPitch = true;
 
         let targetRate = Number(currentSettings.playbackRate) || 1;
@@ -362,13 +389,35 @@ function applyPreferencesCommand(
           }
         }
         if (currentPlugins.adblocker) {
-          const adSurface = currentDoc.querySelector('.ad-showing, ytmusic-player-page[is-advertisement]');
-          if (adSurface) {
-            currentDoc.querySelector('.ytp-ad-skip-button, .ytp-skip-ad-button, [id*="skip-button"] button')?.click();
-            if (Number.isFinite(currentVideo.duration) && currentVideo.duration > 0) {
-              currentVideo.currentTime = currentVideo.duration;
+          const player = currentDoc.querySelector('#movie_player');
+          const adShowing = Boolean(
+            player?.classList.contains('ad-showing') ||
+            player?.classList.contains('ad-interrupting') ||
+            currentDoc.querySelector('ytmusic-player-page[is-advertisement]')
+          );
+          if (adShowing) {
+            if (!runtime.adWasShowing) {
+              runtime.adWasShowing = true;
+              runtime.preAdMuted = currentVideo.muted;
+              runtime.preAdRate = currentVideo.playbackRate;
             }
+            currentVideo.muted = true;
+            currentVideo.playbackRate = 16;
+            currentDoc.querySelector('button.ytp-ad-skip-button-modern, .ytp-ad-skip-button, .ytp-skip-ad-button, [id*="skip-button"] button')?.click();
+            try {
+              if (currentVideo.seekable?.length) {
+                const end = currentVideo.seekable.end(currentVideo.seekable.length - 1);
+                if (Number.isFinite(end) && end > currentVideo.currentTime) currentVideo.currentTime = Math.max(currentVideo.currentTime, end - .05);
+              }
+            } catch {}
+          } else if (runtime.adWasShowing) {
+            runtime.adWasShowing = false;
+            currentVideo.muted = Boolean(runtime.preAdMuted);
+            currentVideo.playbackRate = Number(currentSettings.playbackRate) || runtime.preAdRate || 1;
           }
+        } else if (runtime.adWasShowing) {
+          runtime.adWasShowing = false;
+          currentVideo.muted = Boolean(runtime.preAdMuted);
         }
       }, 150);
     }
@@ -415,25 +464,6 @@ function applyPreferencesCommand(
   `;
 }
 
-function formatTime(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return '0:00';
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.floor(value % 60);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function parseLyrics(value: string): LyricLine[] {
-  return value
-    .split(/\r?\n/)
-    .flatMap((line) => {
-      const match = /^\[(\d{1,3}):(\d{2}(?:\.\d{1,3})?)\](.*)$/.exec(line.trim());
-      if (!match) return [];
-      return [{ time: Number(match[1]) * 60 + Number(match[2]), text: match[3].trim() }];
-    })
-    .filter((line) => line.text)
-    .sort((a, b) => a.time - b.time);
-}
-
 export default function YouTubeMusicApp() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const engineReadyRef = useRef(false);
@@ -446,15 +476,10 @@ export default function YouTubeMusicApp() {
   const [engineAttempt, setEngineAttempt] = useState(1);
   const [preferences, setPreferences] = useState(DEFAULT_NAMMU_MUSIC_PREFERENCES);
   const [media, setMedia] = useState<MediaState>(EMPTY_MEDIA);
-  const [query, setQuery] = useState('');
+
   const [drawer, setDrawer] = useState<DrawerView | null>(null);
   const [pluginQuery, setPluginQuery] = useState('');
   const [pluginCategory, setPluginCategory] = useState<MusicPluginCategory | 'All'>('All');
-  const [lyrics, setLyrics] = useState<LyricsResult | null>(null);
-  const [lyricsLoading, setLyricsLoading] = useState(false);
-  const [audioOutputs, setAudioOutputs] = useState<AudioOutput[]>([]);
-  const [selectedOutput, setSelectedOutput] = useState('');
-  const [bridgeAvailable, setBridgeAvailable] = useState(true);
 
   useEffect(() => setPreferences(getStoredNammuMusicPreferences()), []);
 
@@ -494,13 +519,10 @@ export default function YouTubeMusicApp() {
         if (typeof raw !== 'string') return null;
         const envelope = JSON.parse(raw) as { ok?: boolean; value?: string; error?: string };
         if (!envelope.ok) {
-          setBridgeAvailable(false);
           return null;
         }
-        setBridgeAvailable(true);
         return JSON.parse(envelope.value || 'null') as T;
       } catch {
-        setBridgeAvailable(false);
         return null;
       }
     },
@@ -518,8 +540,39 @@ export default function YouTubeMusicApp() {
   const applyPreferences = useCallback(() => {
     void runContent<boolean>(applyPreferencesCommand(preferences, masterVolume));
     void evaluateInRuntime(`(()=>{
-      Services.prefs.setBoolPref('privacy.trackingprotection.enabled', ${preferences.plugins.adblocker});
-      Services.prefs.setBoolPref('privacy.trackingprotection.socialtracking.enabled', ${preferences.plugins.adblocker});
+      const enabled = ${preferences.plugins.adblocker};
+      Services.prefs.setBoolPref('dom.disable_beforeunload', true);
+      Services.prefs.setBoolPref('privacy.trackingprotection.enabled', enabled);
+      Services.prefs.setBoolPref('privacy.trackingprotection.pbmode.enabled', enabled);
+      Services.prefs.setBoolPref('privacy.trackingprotection.socialtracking.enabled', enabled);
+      Services.prefs.setStringPref('browser.contentblocking.category', enabled ? 'strict' : 'standard');
+      if (enabled && !globalThis.__nammuMusicAdObserver) {
+        const blockedFragments = [
+          'doubleclick.net',
+          'googlesyndication.com',
+          'googleadservices.com',
+          '/api/stats/ads',
+          '/pagead/',
+          '/get_midroll_info',
+          '/ptracking'
+        ];
+        const observer = {
+          observe(subject) {
+            try {
+              const channel = subject.QueryInterface(Ci.nsIHttpChannel);
+              const address = String(channel.URI?.spec || '').toLowerCase();
+              if (blockedFragments.some((fragment) => address.includes(fragment))) {
+                channel.cancel(Cr.NS_BINDING_ABORTED);
+              }
+            } catch {}
+          }
+        };
+        Services.obs.addObserver(observer, 'http-on-modify-request');
+        globalThis.__nammuMusicAdObserver = observer;
+      } else if (!enabled && globalThis.__nammuMusicAdObserver) {
+        try { Services.obs.removeObserver(globalThis.__nammuMusicAdObserver, 'http-on-modify-request'); } catch {}
+        delete globalThis.__nammuMusicAdObserver;
+      }
       return 'preferences-applied';
     })()`);
   }, [evaluateInRuntime, masterVolume, preferences, runContent]);
@@ -609,44 +662,6 @@ export default function YouTubeMusicApp() {
   }, [engineState, preferences.plugins.notifications, runContent]);
 
   useEffect(() => {
-    if (!preferences.plugins['synced-lyrics'] || !media.title || media.title === 'YouTube Music') {
-      setLyrics(null);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      setLyricsLoading(true);
-      try {
-        const params = new URLSearchParams({
-          track: media.title,
-          artist: media.artist,
-          duration: String(Math.round(media.duration || 0)),
-        });
-        const response = await fetch(`/api/music/lyrics?${params}`, { signal: controller.signal });
-        const payload = (await response.json()) as {
-          data?: { plain?: string; synced?: string; instrumental?: boolean; source?: string };
-        };
-        const plain = payload.data?.plain || '';
-        const synced = payload.data?.synced || '';
-        setLyrics({
-          plain,
-          lines: parseLyrics(synced),
-          instrumental: payload.data?.instrumental,
-          source: payload.data?.source || 'LRCLIB',
-        });
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) setLyrics(null);
-      } finally {
-        if (!controller.signal.aborted) setLyricsLoading(false);
-      }
-    }, 500);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [media.artist, media.duration, media.title, preferences.plugins]);
-
-  useEffect(() => {
     if (!preferences.plugins.sponsorblock || !media.videoId || engineState !== 'ready') return;
     const controller = new AbortController();
     let timer = 0;
@@ -674,12 +689,6 @@ export default function YouTubeMusicApp() {
     };
   }, [engineState, media.videoId, preferences.plugins.sponsorblock, runContent]);
 
-  const navigate = (url: string) => {
-    void runChrome(
-      `openTrustedLinkIn(${JSON.stringify(safeMusicUrl(url))}, 'current'); return 'ok';`,
-    );
-  };
-
   const playPause = useCallback(() => {
     void runContent(
       `const video = content.document.querySelector('video'); if (!video) return false; if (video.paused) await video.play(); else video.pause(); return !video.paused;`,
@@ -698,7 +707,7 @@ export default function YouTubeMusicApp() {
   );
 
   useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
+    if (!preferences.plugins['taskbar-mediacontrol'] || !('mediaSession' in navigator)) return;
     if ('MediaMetadata' in window && media.title && media.title !== 'YouTube Music') {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: media.title,
@@ -734,40 +743,32 @@ export default function YouTubeMusicApp() {
         } catch {}
       }
     };
-  }, [media.artist, media.paused, media.thumbnail, media.title, playPause, runContent, skip]);
-
-  const updatePreference = <Key extends keyof NammuMusicPreferences>(
-    key: Key,
-    value: NammuMusicPreferences[Key],
-  ) => setPreferences((current) => ({ ...current, [key]: value }));
+  }, [
+    media.artist,
+    media.paused,
+    media.thumbnail,
+    media.title,
+    playPause,
+    preferences.plugins,
+    runContent,
+    skip,
+  ]);
 
   const togglePlugin = (id: NammuMusicPluginId) => {
     const plugin = MUSIC_PLUGIN_CATALOG.find((item) => item.id === id);
     if (!plugin || plugin.support !== 'native') return;
+    const enabling = !preferences.plugins[id];
+    if (id === 'notifications' && enabling && 'Notification' in window) {
+      if (Notification.permission === 'default') void Notification.requestPermission();
+    }
     setPreferences((current) => ({
       ...current,
+      ...(id === 'equalizer' && enabling && !current.bass && !current.mid && !current.treble
+        ? { bass: 4, mid: 1, treble: 3 }
+        : {}),
       plugins: { ...current.plugins, [id]: !current.plugins[id] },
     }));
   };
-
-  const requestNotifications = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
-  };
-
-  const loadAudioOutputs = useCallback(async () => {
-    const outputs = await runContent<AudioOutput[]>(`
-      if (!content.navigator.mediaDevices?.enumerateDevices) return [];
-      const devices = await content.navigator.mediaDevices.enumerateDevices();
-      return devices.filter((device) => device.kind === 'audiooutput').map((device, index) => ({ deviceId: device.deviceId, label: device.label || 'Output ' + (index + 1) }));
-    `);
-    setAudioOutputs(outputs || []);
-  }, [runContent]);
-
-  useEffect(() => {
-    if (drawer === 'audio' && engineState === 'ready') void loadAudioOutputs();
-  }, [drawer, engineState, loadAudioOutputs]);
 
   const filteredPlugins = useMemo(() => {
     const normalized = pluginQuery.trim().toLowerCase();
@@ -778,127 +779,25 @@ export default function YouTubeMusicApp() {
     );
   }, [pluginCategory, pluginQuery]);
 
-  const activeLyric = useMemo(() => {
-    if (!lyrics?.lines.length) return -1;
-    let index = -1;
-    for (let cursor = 0; cursor < lyrics.lines.length; cursor += 1) {
-      if (lyrics.lines[cursor].time <= media.currentTime + 0.15) index = cursor;
-      else break;
-    }
-    return index;
-  }, [lyrics, media.currentTime]);
-
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#05080d] text-[#c7d6e2]">
-      <header className="flex h-9 shrink-0 items-center gap-1 border-b border-white/[0.06] bg-[#070b12]/95 px-2">
-        <button
-          onClick={() => void runChrome("tab.linkedBrowser.goBack(); return 'ok';")}
-          disabled={engineState !== 'ready'}
-          className="grid h-6 w-6 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white disabled:opacity-35"
-          title="Back"
-        >
-          <ArrowLeft size={12} />
-        </button>
-        <button
-          onClick={() => void runChrome("tab.linkedBrowser.goForward(); return 'ok';")}
-          disabled={engineState !== 'ready'}
-          className="grid h-6 w-6 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white disabled:opacity-35"
-          title="Forward"
-        >
-          <ArrowRight size={12} />
-        </button>
-        <button
-          onClick={() => navigate(MUSIC_URL)}
-          className="grid h-6 w-6 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-          title="Home"
-        >
-          <Home size={12} />
-        </button>
-        <div className="mx-1 h-4 w-px bg-white/[0.06]" />
-        <button
-          onClick={() => navigate(`${MUSIC_URL}explore`)}
-          className="flex h-6 items-center gap-1 px-2 font-mono text-[8px] uppercase tracking-wider text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-        >
-          <Sparkles size={11} /> Explore
-        </button>
-        <button
-          onClick={() => navigate(`${MUSIC_URL}library`)}
-          className="flex h-6 items-center gap-1 px-2 font-mono text-[8px] uppercase tracking-wider text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-        >
-          <Library size={11} /> Library
-        </button>
-        <form
-          className="mx-auto flex h-6 min-w-36 max-w-md flex-1 items-center border border-white/[0.07] bg-black/25 px-2 focus-within:border-[#4aa3ff]/45"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (query.trim()) navigate(`${MUSIC_URL}search?q=${encodeURIComponent(query.trim())}`);
-          }}
-        >
-          <Search size={11} className="shrink-0 text-[#4aa3ff]" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search music, artists, albums"
-            className="min-w-0 flex-1 bg-transparent px-2 text-[10px] text-[#dce7f0] outline-none placeholder:text-[#40586c]"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              className="text-[#526a7e] hover:text-white"
-            >
-              <X size={10} />
-            </button>
-          )}
-        </form>
-        <button
-          onClick={() => void runChrome("tab.linkedBrowser.reload(); return 'ok';")}
-          className="grid h-6 w-6 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-          title="Reload"
-        >
-          <RefreshCw size={11} />
-        </button>
-        <button
-          onClick={() => {
-            void runContent(
-              `
-                const doc = content.document;
-                const video = doc.querySelector('video');
-                if (!video) return false;
-                if (video.requestPictureInPicture) {
-                  try { await video.requestPictureInPicture(); return true; } catch {}
-                }
-                const player = doc.querySelector('#player, ytmusic-player');
-                if (!player) return false;
-                const active = player.dataset.nammuPip === 'true';
-                player.dataset.nammuPip = active ? 'false' : 'true';
-                Object.assign(player.style, active
-                  ? { position: '', right: '', bottom: '', width: '', height: '', zIndex: '', boxShadow: '' }
-                  : { position: 'fixed', right: '18px', bottom: '92px', width: '360px', height: '203px', zIndex: '2147483200', boxShadow: '0 18px 60px rgba(0,0,0,.65)' });
-                return !active;
-              `,
-            );
-          }}
-          className="grid h-6 w-6 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-          title="Picture in Picture"
-        >
-          <Maximize2 size={11} />
-        </button>
-        <button
-          onClick={() => navigate(`${MUSIC_URL}library/downloads`)}
-          className="grid h-6 w-6 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-          title="Official offline downloads"
-        >
-          <Download size={11} />
-        </button>
+      <header className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-white/[0.06] bg-[#070b12]/95 px-2">
         <button
           onClick={() => setDrawer((current) => (current === 'extensions' ? null : 'extensions'))}
-          className={`flex h-6 items-center gap-1 border px-2 font-mono text-[8px] uppercase tracking-wider ${drawer ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/12 text-[#acd5ff]' : 'border-white/[0.06] text-[#71889d] hover:bg-white/[0.05] hover:text-white'}`}
+          className={`flex h-6 items-center gap-1 border px-2 font-mono text-[8px] uppercase tracking-wider ${drawer === 'extensions' ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/12 text-[#acd5ff]' : 'border-white/[0.06] text-[#71889d] hover:bg-white/[0.05] hover:text-white'}`}
+          aria-expanded={drawer === 'extensions'}
         >
-          <Settings2 size={11} /> Extensions
+          <Puzzle size={11} /> Extensions
+        </button>
+        <button
+          onClick={() => void runChrome("tab.linkedBrowser.reload(); return 'ok';")}
+          disabled={engineState !== 'ready'}
+          className="flex h-6 items-center gap-1 border border-white/[0.06] px-2 font-mono text-[8px] uppercase tracking-wider text-[#71889d] hover:bg-white/[0.05] hover:text-white disabled:opacity-35"
+          title="Reload YouTube Music"
+        >
+          <RefreshCw size={11} /> Reload
         </button>
       </header>
-
       <div className="relative min-h-0 flex-1 bg-[#05080d]">
         {engineState !== 'ready' && (
           <div className="absolute inset-0 z-30 grid place-items-center bg-[#05080d] p-6">
@@ -944,25 +843,20 @@ export default function YouTubeMusicApp() {
           src={runtimeUrl(engineAttempt)}
           title="Nammu YouTube Music runtime"
           className="h-full w-full border-0 bg-[#05080d]"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-pointer-lock allow-orientation-lock"
           allow="cross-origin-isolated; autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture; encrypted-media"
         />
 
-        {drawer && (
+        {drawer === 'extensions' && (
           <aside className="absolute bottom-0 right-0 top-0 z-20 flex w-[330px] flex-col border-l border-white/[0.07] bg-[#070b12]/98 shadow-[-20px_0_60px_rgba(0,0,0,.5)] backdrop-blur-xl">
-            <div className="flex h-9 shrink-0 items-center border-b border-white/[0.06] px-2">
-              {(['extensions', 'audio', 'lyrics'] as DrawerView[]).map((view) => (
-                <button
-                  key={view}
-                  onClick={() => setDrawer(view)}
-                  className={`h-9 border-b px-2 font-mono text-[8px] uppercase tracking-wider ${drawer === view ? 'border-[#4aa3ff] text-[#b9dcff]' : 'border-transparent text-[#526b80] hover:text-[#a8bdcf]'}`}
-                >
-                  {view}
-                </button>
-              ))}
+            <div className="flex h-9 shrink-0 items-center border-b border-white/[0.06] px-3">
+              <span className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#7fa2bd]">
+                Extensions
+              </span>
               <button
                 onClick={() => setDrawer(null)}
                 className="ml-auto grid h-6 w-6 place-items-center text-[#60778b] hover:bg-white/[0.05] hover:text-white"
+                aria-label="Close extensions"
               >
                 <X size={12} />
               </button>
@@ -997,7 +891,9 @@ export default function YouTubeMusicApp() {
                 <div className="min-h-0 flex-1 overflow-auto p-2 os-scrollbar">
                   <div className="space-y-1.5">
                     {filteredPlugins.map((plugin) => {
-                      const enabled = preferences.plugins[plugin.id];
+                      const enabled =
+                        plugin.support === 'youtube' ||
+                        (plugin.support === 'native' && preferences.plugins[plugin.id]);
                       return (
                         <button
                           key={plugin.id}
@@ -1047,324 +943,9 @@ export default function YouTubeMusicApp() {
                 </div>
               </div>
             )}
-
-            {drawer === 'audio' && (
-              <div className="min-h-0 flex-1 overflow-auto p-3 os-scrollbar">
-                <div className="font-mono text-[8px] uppercase tracking-[0.18em] text-[#526b80]">
-                  Audio engine
-                </div>
-                <div className="mt-3 space-y-4">
-                  <label className="block">
-                    <span className="flex justify-between text-[9px] text-[#91a8bb]">
-                      <span>Music volume</span>
-                      <span className="font-mono text-[#4aa3ff]">
-                        {Math.round(preferences.volume * 100)}%
-                      </span>
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={preferences.volume}
-                      onChange={(event) => updatePreference('volume', Number(event.target.value))}
-                      className="os-range mt-2 w-full"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="flex justify-between text-[9px] text-[#91a8bb]">
-                      <span>Playback speed</span>
-                      <span className="font-mono text-[#4aa3ff]">
-                        {preferences.playbackRate.toFixed(2)}×
-                      </span>
-                    </span>
-                    <input
-                      type="range"
-                      min="0.25"
-                      max="2"
-                      step="0.05"
-                      value={preferences.playbackRate}
-                      onChange={(event) =>
-                        updatePreference('playbackRate', Number(event.target.value))
-                      }
-                      className="os-range mt-2 w-full"
-                    />
-                  </label>
-                  <div className="border-t border-white/[0.05] pt-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-[9px] text-[#91a8bb]">Three-band equalizer</span>
-                      <button
-                        onClick={() => togglePlugin('equalizer')}
-                        className={`font-mono text-[8px] ${preferences.plugins.equalizer ? 'text-[#2ee6a6]' : 'text-[#526b80]'}`}
-                      >
-                        {preferences.plugins.equalizer ? 'ENABLED' : 'DISABLED'}
-                      </button>
-                    </div>
-                    {(
-                      [
-                        ['bass', 'Bass'],
-                        ['mid', 'Mid'],
-                        ['treble', 'Treble'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <label key={key} className="mb-3 block">
-                        <span className="flex justify-between font-mono text-[8px] text-[#60798d]">
-                          <span>{label}</span>
-                          <span>
-                            {preferences[key] > 0 ? '+' : ''}
-                            {preferences[key]} dB
-                          </span>
-                        </span>
-                        <input
-                          type="range"
-                          min="-12"
-                          max="12"
-                          step="1"
-                          value={preferences[key]}
-                          onChange={(event) => updatePreference(key, Number(event.target.value))}
-                          className="os-range mt-1.5 w-full"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  <label className="block border-t border-white/[0.05] pt-3">
-                    <span className="flex justify-between text-[9px] text-[#91a8bb]">
-                      <span>Crossfade</span>
-                      <span className="font-mono text-[#4aa3ff]">
-                        {preferences.crossfadeSeconds}s
-                      </span>
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="12"
-                      step="1"
-                      value={preferences.crossfadeSeconds}
-                      onChange={(event) => {
-                        updatePreference('crossfadeSeconds', Number(event.target.value));
-                        if (!preferences.plugins.crossfade) togglePlugin('crossfade');
-                      }}
-                      className="os-range mt-2 w-full"
-                    />
-                  </label>
-                  <label className="block border-t border-white/[0.05] pt-3">
-                    <span className="mb-2 block text-[9px] text-[#91a8bb]">Output device</span>
-                    <div className="relative">
-                      <select
-                        value={selectedOutput}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setSelectedOutput(value);
-                          void runContent(
-                            `const video = content.document.querySelector('video'); if (!video?.setSinkId) return false; await video.setSinkId(${JSON.stringify(value)}); return true;`,
-                          );
-                        }}
-                        className="h-7 w-full appearance-none border border-white/[0.07] bg-[#080d15] px-2 pr-7 text-[9px] text-[#adc0d0] outline-none"
-                      >
-                        <option value="">System default</option>
-                        {audioOutputs.map((output) => (
-                          <option key={output.deviceId} value={output.deviceId}>
-                            {output.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={10}
-                        className="pointer-events-none absolute right-2 top-2 text-[#526b80]"
-                      />
-                    </div>
-                  </label>
-                  <button
-                    onClick={() => {
-                      togglePlugin('notifications');
-                      void requestNotifications();
-                    }}
-                    className="flex w-full items-center justify-between border-t border-white/[0.05] pt-3 text-left"
-                  >
-                    <span>
-                      <span className="block text-[9px] text-[#91a8bb]">Track notifications</span>
-                      <span className="mt-0.5 block text-[8px] text-[#526b80]">
-                        Notify when the playing track changes
-                      </span>
-                    </span>
-                    <span
-                      className={`font-mono text-[8px] ${preferences.plugins.notifications ? 'text-[#2ee6a6]' : 'text-[#526b80]'}`}
-                    >
-                      {preferences.plugins.notifications ? 'ON' : 'OFF'}
-                    </span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {drawer === 'lyrics' && (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="border-b border-white/[0.05] p-3">
-                  <div className="truncate text-[11px] text-[#d9e5ee]">{media.title}</div>
-                  <div className="mt-0.5 truncate text-[8px] text-[#60798d]">
-                    {media.artist || 'Waiting for track metadata'}
-                  </div>
-                </div>
-                <div className="min-h-0 flex-1 overflow-auto p-4 os-scrollbar">
-                  {lyricsLoading ? (
-                    <div className="flex items-center gap-2 font-mono text-[8px] text-[#60798d]">
-                      <Loader2 size={12} className="animate-spin text-[#4aa3ff]" /> Finding
-                      synchronized lyrics…
-                    </div>
-                  ) : lyrics?.instrumental ? (
-                    <div className="grid h-40 place-items-center text-center">
-                      <div>
-                        <AudioLines size={24} className="mx-auto text-[#4aa3ff]" />
-                        <div className="mt-2 text-[10px] text-[#91a8bb]">Instrumental track</div>
-                      </div>
-                    </div>
-                  ) : lyrics?.lines.length ? (
-                    <div className="space-y-3">
-                      {lyrics.lines.map((line, index) => (
-                        <button
-                          key={`${line.time}-${index}`}
-                          onClick={() =>
-                            void runContent(
-                              `const video = content.document.querySelector('video'); if (video) video.currentTime = ${line.time}; return true;`,
-                            )
-                          }
-                          className={`block w-full text-left text-[11px] leading-relaxed transition-all ${index === activeLyric ? 'translate-x-1 text-[#dff7ff]' : index < activeLyric ? 'text-[#40596d]' : 'text-[#829aae]'}`}
-                        >
-                          {line.text}
-                        </button>
-                      ))}
-                    </div>
-                  ) : lyrics?.plain ? (
-                    <div className="whitespace-pre-wrap text-[10px] leading-6 text-[#91a8bb]">
-                      {lyrics.plain}
-                    </div>
-                  ) : (
-                    <div className="grid h-40 place-items-center text-center text-[9px] leading-relaxed text-[#526b80]">
-                      No lyrics were found for this track.
-                    </div>
-                  )}
-                </div>
-                {lyrics && (
-                  <div className="border-t border-white/[0.05] px-3 py-2 font-mono text-[7px] uppercase tracking-wider text-[#40586c]">
-                    Lyrics · {lyrics.source}
-                  </div>
-                )}
-              </div>
-            )}
           </aside>
         )}
       </div>
-
-      <footer className="flex h-[58px] shrink-0 items-center gap-3 border-t border-white/[0.07] bg-[#070b12] px-3">
-        <div className="flex min-w-0 w-48 items-center gap-2">
-          {media.thumbnail ? (
-            <img src={media.thumbnail} alt="" className="h-10 w-10 shrink-0 object-cover" />
-          ) : (
-            <div className="grid h-10 w-10 shrink-0 place-items-center border border-white/[0.06] bg-white/[0.02]">
-              <Music2 size={16} className="text-[#4aa3ff]" />
-            </div>
-          )}
-          <div className="min-w-0">
-            <div className="truncate text-[10px] text-[#d9e5ee]">{media.title}</div>
-            <div className="mt-0.5 truncate text-[8px] text-[#60798d]">
-              {media.artist || (engineState === 'ready' ? 'Ready' : 'Starting engine')}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => skip('previous')}
-            className="grid h-7 w-7 place-items-center text-[#7a92a6] hover:text-white"
-            title="Previous"
-          >
-            <SkipBack size={14} />
-          </button>
-          <button
-            onClick={playPause}
-            className="grid h-8 w-8 place-items-center border border-[#4aa3ff]/40 bg-[#4aa3ff]/12 text-[#b9dcff] hover:bg-[#4aa3ff]/20"
-            title={media.paused ? 'Play' : 'Pause'}
-          >
-            {media.paused ? (
-              <Play size={14} fill="currentColor" />
-            ) : (
-              <Pause size={14} fill="currentColor" />
-            )}
-          </button>
-          <button
-            onClick={() => skip('next')}
-            className="grid h-7 w-7 place-items-center text-[#7a92a6] hover:text-white"
-            title="Next"
-          >
-            <SkipForward size={14} />
-          </button>
-        </div>
-        <span className="w-9 text-right font-mono text-[7px] text-[#526b80]">
-          {formatTime(media.currentTime)}
-        </span>
-        <input
-          type="range"
-          min="0"
-          max={Math.max(1, media.duration)}
-          step="0.1"
-          value={Math.min(media.currentTime, Math.max(1, media.duration))}
-          onChange={(event) => {
-            const value = Number(event.target.value);
-            setMedia((current) => ({ ...current, currentTime: value }));
-            void runContent(
-              `const video = content.document.querySelector('video'); if (video) video.currentTime = ${value}; return true;`,
-            );
-          }}
-          className="os-range min-w-20 flex-1"
-          aria-label="Seek"
-        />
-        <span className="w-9 font-mono text-[7px] text-[#526b80]">
-          {formatTime(media.duration)}
-        </span>
-        <button
-          onClick={() =>
-            void runContent(
-              `const video = content.document.querySelector('video'); if (!video) return false; video.muted = !video.muted; return video.muted;`,
-            )
-          }
-          className="grid h-7 w-7 place-items-center text-[#71889d] hover:text-white"
-          title={media.muted ? 'Unmute' : 'Mute'}
-        >
-          {media.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
-        </button>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={preferences.volume}
-          onChange={(event) => updatePreference('volume', Number(event.target.value))}
-          className="os-range w-20"
-          aria-label="Music volume"
-        />
-        <button
-          onClick={() => setDrawer((current) => (current === 'audio' ? null : 'audio'))}
-          className="grid h-7 w-7 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white"
-          title="Audio settings"
-        >
-          <SlidersHorizontal size={12} />
-        </button>
-        <button
-          onClick={() => setDrawer((current) => (current === 'lyrics' ? null : 'lyrics'))}
-          disabled={!preferences.plugins['synced-lyrics']}
-          className="grid h-7 w-7 place-items-center text-[#71889d] hover:bg-white/[0.05] hover:text-white disabled:opacity-30"
-          title="Lyrics"
-        >
-          <ListMusic size={12} />
-        </button>
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${engineState === 'ready' && bridgeAvailable ? 'bg-[#2ee6a6]' : engineState === 'error' ? 'bg-red-400' : 'bg-amber-300'}`}
-          title={
-            bridgeAvailable
-              ? 'Media bridge ready'
-              : 'Official site is available; native controls are reconnecting'
-          }
-        />
-      </footer>
     </div>
   );
 }
