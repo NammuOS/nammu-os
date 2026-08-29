@@ -9,6 +9,7 @@ import {
   KeyRound,
   ListRestart,
   Minus,
+  Network,
   Plus,
   Printer,
   Puzzle,
@@ -39,6 +40,7 @@ interface BrowserMenuProps {
   onShowSettings: () => void;
   onShowFirefoxSettings: () => void;
   onShowDevTools: () => void;
+  onShowProxyManager: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
   onZoomIn: () => void;
@@ -67,6 +69,7 @@ export default function BrowserMenu({
   onShowSettings,
   onShowFirefoxSettings,
   onShowDevTools,
+  onShowProxyManager,
   onZoomOut,
   onResetZoom,
   onZoomIn,
@@ -217,6 +220,13 @@ export default function BrowserMenu({
             <ShieldCheck size={11} className="text-[#2ee6a6]" />
             Privacy Protections
           </span>
+        </button>
+        <button type="button" onClick={run(onShowProxyManager)} className={menuButtonClass}>
+          <span className="flex items-center gap-2">
+            <Network size={11} className="text-[#4aa3ff]" />
+            Public Proxy Manager
+          </span>
+          <span className="text-[8px] text-[#557087]">UNTRUSTED</span>
         </button>
         <button type="button" onClick={run(onShowDevTools)} className={menuButtonClass}>
           <span className="flex items-center gap-2">

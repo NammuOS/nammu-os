@@ -40,6 +40,7 @@ import {
   BookOpen,
   Printer,
   FileDown,
+  Network,
 } from 'lucide-react';
 import {
   BrowserTab,
@@ -59,6 +60,13 @@ import {
   type BrowserPreferences,
 } from './services/browserEngine';
 import BrowserMenu from './BrowserMenu';
+import ProxyManagerPanel from './ProxyManagerPanel';
+import {
+  buildConfigureGeckoProxyScript,
+  type PublicProxyConnection,
+  type PublicProxyEndpoint,
+  type PublicProxyHealth,
+} from './services/publicProxy';
 
 const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
 const RUNTIME_HOME_URL = 'about:blank';
@@ -81,6 +89,7 @@ type GeckoRuntimeWindow = Window & {
 
 interface GeckoPageState {
   url: string;
+  documentUrl: string;
   title: string;
   canGoBack: boolean;
   canGoForward: boolean;
@@ -207,9 +216,34 @@ function buildRunOnGeckoTabScript(tabId: string, command: string) {
   return `(()=>{
     const tab = globalThis.__nammuBrowserTabs?.[${JSON.stringify(tabId)}];
     if (!tab || tab.closing) return 'tab-unavailable';
-    gBrowser.selectedTab = tab;
     ${command}
   })()`;
+}
+
+function dispatchRuntimeCommand(command: Promise<unknown>) {
+  // Routine UI commands can legitimately time out while Gecko is busy with a
+  // heavy page. They must never become unhandled browser/Next.js rejections.
+  void command.catch(() => undefined);
+}
+
+function getGeckoProxyRouting(
+  browserConnection: PublicProxyConnection | null,
+  tabConnections: Record<string, PublicProxyConnection>,
+) {
+  const connectionRoute = (connection: PublicProxyConnection): PublicProxyEndpoint[] => [
+    connection.primary,
+    ...connection.failovers,
+  ];
+
+  return {
+    browser: browserConnection ? connectionRoute(browserConnection) : null,
+    tabs: Object.fromEntries(
+      Object.entries(tabConnections).map(([tabId, connection]) => [
+        tabId,
+        connectionRoute(connection),
+      ]),
+    ),
+  };
 }
 
 function createBrowserTabId() {
@@ -271,8 +305,13 @@ export default function BrowserApp() {
   const [history, setHistory] = useState<HistoryEntry[]>(getStoredHistory);
   const showBookmarksBar = preferences.showBookmarksBar;
   const [sidePanel, setSidePanel] = useState<
-    'none' | 'history' | 'bookmarks' | 'devtools' | 'settings'
+    'none' | 'history' | 'bookmarks' | 'devtools' | 'settings' | 'proxy'
   >('none');
+  const [browserProxyConnection, setBrowserProxyConnection] =
+    useState<PublicProxyConnection | null>(null);
+  const [tabProxyConnections, setTabProxyConnections] = useState<
+    Record<string, PublicProxyConnection>
+  >({});
 
   // DevTools & Viewport State
   const [devLogs, setDevLogs] = useState<
@@ -305,6 +344,12 @@ export default function BrowserApp() {
   const activeTabIdRef = useRef(activeTabId);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const engineReadyRef = useRef(false);
+  const browserProxyConnectionRef = useRef<PublicProxyConnection | null>(null);
+  const tabProxyConnectionsRef = useRef<Record<string, PublicProxyConnection>>({});
+  const proxyRecoveryRef = useRef<
+    Record<string, { targetUrl: string; attemptedProxyIds: string[]; lastAttemptAt: number }>
+  >({});
+  const proxyControlRevisionRef = useRef(0);
   const runtimeCommandQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lastObservedUrls = useRef<Record<string, string>>({});
   const omniboxRef = useRef<HTMLInputElement>(null);
@@ -319,6 +364,14 @@ export default function BrowserApp() {
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+
+  useEffect(() => {
+    browserProxyConnectionRef.current = browserProxyConnection;
+  }, [browserProxyConnection]);
+
+  useEffect(() => {
+    tabProxyConnectionsRef.current = tabProxyConnections;
+  }, [tabProxyConnections]);
 
   // Sync address bar input when active tab changes
   useEffect(() => {
@@ -338,8 +391,8 @@ export default function BrowserApp() {
     setPreferences((current) => ({ ...current, [key]: value }));
   };
 
-  const evaluateInRuntime = useCallback((script: string): Promise<unknown> => {
-    const execute = async () => {
+  const evaluateInRuntimeNow = useCallback(
+    async (script: string, timeoutMs = 15_000): Promise<unknown> => {
       const runtimeWindow = iframeRef.current?.contentWindow as GeckoRuntimeWindow | null;
       if (!runtimeWindow?.geckoEvalChrome) return null;
 
@@ -350,29 +403,237 @@ export default function BrowserApp() {
           new Promise<never>((_, reject) => {
             timeoutId = window.setTimeout(
               () => reject(new Error('Gecko did not answer the browser command in time.')),
-              15_000,
+              timeoutMs,
             );
           }),
         ]);
       } finally {
         window.clearTimeout(timeoutId);
       }
-    };
+    },
+    [],
+  );
 
-    const result = runtimeCommandQueueRef.current.then(execute, execute);
-    runtimeCommandQueueRef.current = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }, []);
+  const evaluateInRuntime = useCallback(
+    (script: string): Promise<unknown> => {
+      const execute = () => evaluateInRuntimeNow(script);
+      const result = runtimeCommandQueueRef.current.then(execute, execute);
+      runtimeCommandQueueRef.current = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+    [evaluateInRuntimeNow],
+  );
 
   const runOnGeckoTab = useCallback(
     (tabId: string, command: string) => {
       if (!engineReadyRef.current) return Promise.resolve(null);
-      return evaluateInRuntime(buildRunOnGeckoTabScript(tabId, command));
+      return evaluateInRuntimeNow(buildRunOnGeckoTabScript(tabId, command), 5_000).catch(
+        () => null,
+      );
     },
-    [evaluateInRuntime],
+    [evaluateInRuntimeNow],
+  );
+
+  const restartGeckoRuntime = useCallback(() => {
+    engineReadyRef.current = false;
+    runtimeCommandQueueRef.current = Promise.resolve();
+    setEngineError('');
+    setEngineState('starting');
+    setEngineAttempt((attempt) => attempt + 1);
+  }, []);
+
+  const reloadProxyScope = useCallback(
+    async (scope: 'browser' | 'tab', tabId: string) => {
+      if (scope === 'tab') {
+        await evaluateInRuntimeNow(
+          buildRunOnGeckoTabScript(
+            tabId,
+            `tab.linkedBrowser.reload(); return 'proxied-tab-reloaded';`,
+          ),
+          5_000,
+        );
+        return;
+      }
+
+      await evaluateInRuntimeNow(
+        `(()=>{
+          const registry = globalThis.__nammuBrowserTabs || Object.create(null);
+          for (const tab of Object.values(registry)) {
+            if (tab && !tab.closing) tab.linkedBrowser.reload();
+          }
+          return 'proxied-browser-reloaded';
+        })()`,
+        5_000,
+      );
+    },
+    [evaluateInRuntimeNow],
+  );
+
+  const handleProxyConnect = useCallback(
+    async (
+      scope: 'browser' | 'tab',
+      primary: PublicProxyHealth,
+      failovers: PublicProxyHealth[],
+    ) => {
+      if (!engineReadyRef.current)
+        throw new Error('Wait for the browser engine to finish loading.');
+
+      const tabId = activeTabIdRef.current;
+      const controlRevision = ++proxyControlRevisionRef.current;
+      const connection: PublicProxyConnection = {
+        scope,
+        ...(scope === 'tab' ? { tabId } : {}),
+        primary,
+        failovers,
+        connectedAt: new Date().toISOString(),
+      };
+      const nextBrowser = scope === 'browser' ? connection : browserProxyConnectionRef.current;
+      const nextTabs =
+        scope === 'tab'
+          ? { ...tabProxyConnectionsRef.current, [tabId]: connection }
+          : tabProxyConnectionsRef.current;
+
+      await evaluateInRuntimeNow(
+        buildConfigureGeckoProxyScript(getGeckoProxyRouting(nextBrowser, nextTabs)),
+      );
+      if (controlRevision !== proxyControlRevisionRef.current) {
+        await evaluateInRuntimeNow(
+          buildConfigureGeckoProxyScript(
+            getGeckoProxyRouting(browserProxyConnectionRef.current, tabProxyConnectionsRef.current),
+          ),
+          4_000,
+        );
+        return;
+      }
+      browserProxyConnectionRef.current = nextBrowser;
+      tabProxyConnectionsRef.current = nextTabs;
+      if (scope === 'browser') proxyRecoveryRef.current = {};
+      else delete proxyRecoveryRef.current[tabId];
+      setBrowserProxyConnection(nextBrowser);
+      setTabProxyConnections(nextTabs);
+      await reloadProxyScope(scope, tabId);
+    },
+    [evaluateInRuntimeNow, reloadProxyScope],
+  );
+
+  const handleProxyDisconnect = useCallback(
+    async (scope: 'browser' | 'tab') => {
+      proxyControlRevisionRef.current += 1;
+      const tabId = activeTabIdRef.current;
+      const nextBrowser = scope === 'browser' ? null : browserProxyConnectionRef.current;
+      const nextTabs = { ...tabProxyConnectionsRef.current };
+      if (scope === 'tab') delete nextTabs[tabId];
+
+      // Clear UI state first. Disconnect must never wait behind a stalled page.
+      browserProxyConnectionRef.current = nextBrowser;
+      tabProxyConnectionsRef.current = nextTabs;
+      if (scope === 'browser') proxyRecoveryRef.current = {};
+      else delete proxyRecoveryRef.current[tabId];
+      setBrowserProxyConnection(nextBrowser);
+      setTabProxyConnections(nextTabs);
+
+      if (!engineReadyRef.current) return;
+      try {
+        await evaluateInRuntimeNow(
+          buildConfigureGeckoProxyScript(getGeckoProxyRouting(nextBrowser, nextTabs)),
+          4_000,
+        );
+        await reloadProxyScope(scope, tabId);
+      } catch {
+        // Recreating Gecko guarantees the in-memory channel filter and every
+        // socket owned by the failed proxy are gone.
+        restartGeckoRuntime();
+      }
+    },
+    [evaluateInRuntimeNow, reloadProxyScope, restartGeckoRuntime],
+  );
+
+  const handleProxyDisconnectAll = useCallback(async () => {
+    proxyControlRevisionRef.current += 1;
+    const tabId = activeTabIdRef.current;
+    browserProxyConnectionRef.current = null;
+    tabProxyConnectionsRef.current = {};
+    proxyRecoveryRef.current = {};
+    setBrowserProxyConnection(null);
+    setTabProxyConnections({});
+
+    if (!engineReadyRef.current) return;
+    try {
+      await evaluateInRuntimeNow(
+        buildConfigureGeckoProxyScript(getGeckoProxyRouting(null, {})),
+        4_000,
+      );
+      await reloadProxyScope('browser', tabId);
+    } catch {
+      restartGeckoRuntime();
+    }
+  }, [evaluateInRuntimeNow, reloadProxyScope, restartGeckoRuntime]);
+
+  const recoverFromProxyError = useCallback(
+    async (tabId: string, targetUrl: string) => {
+      const controlRevision = proxyControlRevisionRef.current;
+      const connection = tabProxyConnectionsRef.current[tabId] || browserProxyConnectionRef.current;
+      if (!connection || connection.failovers.length === 0) return false;
+
+      const now = Date.now();
+      const previous = proxyRecoveryRef.current[tabId];
+      const recovery =
+        previous?.targetUrl === targetUrl
+          ? previous
+          : { targetUrl, attemptedProxyIds: [], lastAttemptAt: 0 };
+      if (
+        now - recovery.lastAttemptAt < 2_500 ||
+        recovery.attemptedProxyIds.includes(connection.primary.id)
+      ) {
+        return false;
+      }
+
+      const [nextPrimary, ...remainingFailovers] = connection.failovers;
+      const nextConnection: PublicProxyConnection = {
+        ...connection,
+        primary: nextPrimary,
+        failovers: remainingFailovers,
+        connectedAt: new Date().toISOString(),
+      };
+      const nextBrowser =
+        connection.scope === 'browser' ? nextConnection : browserProxyConnectionRef.current;
+      const nextTabs =
+        connection.scope === 'tab'
+          ? { ...tabProxyConnectionsRef.current, [tabId]: nextConnection }
+          : tabProxyConnectionsRef.current;
+
+      recovery.attemptedProxyIds = [...recovery.attemptedProxyIds, connection.primary.id];
+      recovery.lastAttemptAt = now;
+      proxyRecoveryRef.current[tabId] = recovery;
+
+      await evaluateInRuntimeNow(
+        buildConfigureGeckoProxyScript(getGeckoProxyRouting(nextBrowser, nextTabs)),
+      );
+      if (controlRevision !== proxyControlRevisionRef.current) return false;
+      browserProxyConnectionRef.current = nextBrowser;
+      tabProxyConnectionsRef.current = nextTabs;
+      setBrowserProxyConnection(nextBrowser);
+      setTabProxyConnections(nextTabs);
+      await evaluateInRuntimeNow(
+        buildRunOnGeckoTabScript(
+          tabId,
+          `tab.linkedBrowser.reload(); return 'proxy-failover-reloaded';`,
+        ),
+      );
+      setDevLogs((current) => [
+        {
+          type: 'warn',
+          msg: `Proxy route failed; switched to ${nextPrimary.host}:${nextPrimary.port}`,
+          time: new Date().toLocaleTimeString(),
+        },
+        ...current.slice(0, 50),
+      ]);
+      return true;
+    },
+    [evaluateInRuntimeNow],
   );
 
   // Close context menu on outside click or escape
@@ -517,6 +778,15 @@ export default function BrowserApp() {
             return 'preferences-applied';
           })()`);
 
+          await evaluateInRuntime(
+            buildConfigureGeckoProxyScript(
+              getGeckoProxyRouting(
+                browserProxyConnectionRef.current,
+                tabProxyConnectionsRef.current,
+              ),
+            ),
+          );
+
           engineReadyRef.current = true;
           setEngineState('ready');
           setEngineError('');
@@ -544,11 +814,13 @@ export default function BrowserApp() {
 
   useEffect(() => {
     if (engineState !== 'ready') return;
-    void evaluateInRuntime(`(()=>{
-      Services.prefs.setBoolPref('privacy.trackingprotection.enabled', ${preferences.trackingProtection});
-      Services.prefs.setIntPref('media.autoplay.default', ${preferences.blockAutoplay ? 1 : 0});
-      return 'preferences-applied';
-    })()`);
+    dispatchRuntimeCommand(
+      evaluateInRuntime(`(()=>{
+        Services.prefs.setBoolPref('privacy.trackingprotection.enabled', ${preferences.trackingProtection});
+        Services.prefs.setIntPref('media.autoplay.default', ${preferences.blockAutoplay ? 1 : 0});
+        return 'preferences-applied';
+      })()`),
+    );
   }, [engineState, evaluateInRuntime, preferences.blockAutoplay, preferences.trackingProtection]);
 
   useEffect(() => {
@@ -568,13 +840,17 @@ export default function BrowserApp() {
     }
 
     let cancelled = false;
+    let syncInFlight = false;
     const syncPageState = async () => {
+      if (cancelled || syncInFlight) return;
+      syncInFlight = true;
       try {
         const raw = await runOnGeckoTab(
           activeTabId,
           `const browser = tab.linkedBrowser;
           return JSON.stringify({
             url: browser.currentURI?.spec || '',
+            documentUrl: browser.browsingContext?.currentWindowGlobal?.documentURI?.spec || '',
             title: browser.contentTitle || browser.currentURI?.spec || '',
             canGoBack: Boolean(browser.canGoBack),
             canGoForward: Boolean(browser.canGoForward),
@@ -585,6 +861,16 @@ export default function BrowserApp() {
 
         const page = JSON.parse(raw) as GeckoPageState;
         if (!page.url) return;
+
+        const isProxyErrorDocument = /^about:(?:neterror|certerror)(?:\?|$)/i.test(
+          page.documentUrl,
+        );
+        if (isProxyErrorDocument && !page.isLoading) {
+          const recovered = await recoverFromProxyError(activeTabId, page.url);
+          if (recovered) return;
+        } else if (!page.isLoading) {
+          delete proxyRecoveryRef.current[activeTabId];
+        }
 
         const observedUrl = page.url === RUNTIME_HOME_URL ? 'about:home' : page.url;
 
@@ -671,6 +957,8 @@ export default function BrowserApp() {
             ...current.slice(0, 50),
           ]);
         }
+      } finally {
+        syncInFlight = false;
       }
     };
 
@@ -680,7 +968,7 @@ export default function BrowserApp() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeTab, activeTabId, engineState, runOnGeckoTab]);
+  }, [activeTab, activeTabId, engineState, recoverFromProxyError, runOnGeckoTab]);
 
   useEffect(() => {
     if (engineState !== 'ready' || activeTab?.url === 'about:home') return;
@@ -757,7 +1045,8 @@ export default function BrowserApp() {
         const runtimeUrl = normalized === 'about:home' ? RUNTIME_HOME_URL : normalized;
         void runOnGeckoTab(
           activeTabId,
-          `openTrustedLinkIn(${JSON.stringify(runtimeUrl)}, 'current'); return 'ok';`,
+          `gBrowser.selectedTab = tab;
+          openTrustedLinkIn(${JSON.stringify(runtimeUrl)}, 'current'); return 'ok';`,
         );
       }
 
@@ -852,7 +1141,9 @@ export default function BrowserApp() {
     });
     activeTabIdRef.current = newId;
     setActiveTabId(newId);
-    if (engineReadyRef.current) void evaluateInRuntime(buildCreateGeckoTabScript(newTab));
+    if (engineReadyRef.current) {
+      dispatchRuntimeCommand(evaluateInRuntimeNow(buildCreateGeckoTabScript(newTab), 5_000));
+    }
   };
 
   const handleNewPrivateTab = () => {
@@ -872,7 +1163,9 @@ export default function BrowserApp() {
     });
     activeTabIdRef.current = restoredId;
     setActiveTabId(restoredId);
-    if (engineReadyRef.current) void evaluateInRuntime(buildCreateGeckoTabScript(restored));
+    if (engineReadyRef.current) {
+      dispatchRuntimeCommand(evaluateInRuntimeNow(buildCreateGeckoTabScript(restored), 5_000));
+    }
   };
 
   const handleDuplicateTab = (tabId: string) => {
@@ -890,7 +1183,9 @@ export default function BrowserApp() {
     setTabs(updated);
     activeTabIdRef.current = newId;
     setActiveTabId(newId);
-    if (engineReadyRef.current) void evaluateInRuntime(buildCreateGeckoTabScript(cloned));
+    if (engineReadyRef.current) {
+      dispatchRuntimeCommand(evaluateInRuntimeNow(buildCreateGeckoTabScript(cloned), 5_000));
+    }
   };
 
   const handleTogglePinTab = (tabId: string) => {
@@ -907,7 +1202,9 @@ export default function BrowserApp() {
     tabsRef.current = reorderedTabs;
     setTabs(reorderedTabs);
     if (engineReadyRef.current) {
-      void evaluateInRuntime(buildToggleGeckoPinnedTabScript(tabId, isPinned));
+      dispatchRuntimeCommand(
+        evaluateInRuntimeNow(buildToggleGeckoPinnedTabScript(tabId, isPinned), 5_000),
+      );
     }
   };
 
@@ -919,7 +1216,9 @@ export default function BrowserApp() {
   const handleActivateTab = (tabId: string) => {
     activeTabIdRef.current = tabId;
     setActiveTabId(tabId);
-    if (engineReadyRef.current) void evaluateInRuntime(buildSelectGeckoTabScript(tabId));
+    if (engineReadyRef.current) {
+      dispatchRuntimeCommand(evaluateInRuntimeNow(buildSelectGeckoTabScript(tabId), 5_000));
+    }
   };
 
   const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
@@ -951,7 +1250,9 @@ export default function BrowserApp() {
       activeTabIdRef.current = replacementTabId;
       setActiveTabId(replacementTabId);
       if (engineReadyRef.current) {
-        void evaluateInRuntime(buildReplaceLastGeckoTabScript(tabId, replacementTabId));
+        dispatchRuntimeCommand(
+          evaluateInRuntimeNow(buildReplaceLastGeckoTabScript(tabId, replacementTabId), 5_000),
+        );
       }
       delete lastObservedUrls.current[tabId];
       return;
@@ -971,7 +1272,9 @@ export default function BrowserApp() {
       setActiveTabId(nextActiveTabId);
     }
     if (engineReadyRef.current) {
-      void evaluateInRuntime(buildRemoveGeckoTabsScript([tabId], nextActiveTabId));
+      dispatchRuntimeCommand(
+        evaluateInRuntimeNow(buildRemoveGeckoTabsScript([tabId], nextActiveTabId), 5_000),
+      );
     }
   };
 
@@ -983,7 +1286,9 @@ export default function BrowserApp() {
     activeTabIdRef.current = tabId;
     setActiveTabId(tabId);
     if (engineReadyRef.current) {
-      void evaluateInRuntime(buildRemoveGeckoTabsScript(removedIds, tabId));
+      dispatchRuntimeCommand(
+        evaluateInRuntimeNow(buildRemoveGeckoTabsScript(removedIds, tabId), 5_000),
+      );
     }
   };
 
@@ -1000,7 +1305,9 @@ export default function BrowserApp() {
       setActiveTabId(nextActiveTabId);
     }
     if (engineReadyRef.current) {
-      void evaluateInRuntime(buildRemoveGeckoTabsScript(removedIds, nextActiveTabId));
+      dispatchRuntimeCommand(
+        evaluateInRuntimeNow(buildRemoveGeckoTabsScript(removedIds, nextActiveTabId), 5_000),
+      );
     }
   };
 
@@ -1021,13 +1328,13 @@ export default function BrowserApp() {
   const handleReload = () => {
     if (activeTab && activeTab.url !== 'about:home') {
       setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, isLoading: true } : t)));
-      void runOnGeckoTab(activeTabId, "gBrowser.reload(); return 'ok';");
+      void runOnGeckoTab(activeTabId, "tab.linkedBrowser.reload(); return 'ok';");
     }
   };
 
   const handleStopLoading = () => {
     if (!activeTab || activeTab.url === 'about:home') return;
-    void runOnGeckoTab(activeTabId, "gBrowser.stop(); return 'stopped';");
+    void runOnGeckoTab(activeTabId, "tab.linkedBrowser.stop(); return 'stopped';");
     setTabs((current) =>
       current.map((tab) => (tab.id === activeTabId ? { ...tab, isLoading: false } : tab)),
     );
@@ -1092,13 +1399,7 @@ export default function BrowserApp() {
     });
   };
 
-  const handleRetryEngine = () => {
-    engineReadyRef.current = false;
-    runtimeCommandQueueRef.current = Promise.resolve();
-    setEngineError('');
-    setEngineState('starting');
-    setEngineAttempt((attempt) => attempt + 1);
-  };
+  const handleRetryEngine = restartGeckoRuntime;
 
   const handleClearBrowsingData = () => {
     if (
@@ -1110,8 +1411,10 @@ export default function BrowserApp() {
     }
 
     if (engineReadyRef.current) {
-      void evaluateInRuntime(
-        "Services.clearData.deleteData(Services.clearData.CLEAR_ALL, () => {}); 'clear-started'",
+      dispatchRuntimeCommand(
+        evaluateInRuntime(
+          "Services.clearData.deleteData(Services.clearData.CLEAR_ALL, () => {}); 'clear-started'",
+        ),
       );
     }
     setHistory([]);
@@ -1120,6 +1423,7 @@ export default function BrowserApp() {
   };
 
   const isSecure = activeTab?.url.startsWith('https://');
+  const effectiveProxyConnection = tabProxyConnections[activeTabId] || browserProxyConnection;
 
   return (
     <div
@@ -1324,6 +1628,28 @@ export default function BrowserApp() {
         </button>
 
         <button
+          onClick={() => setSidePanel((prev) => (prev === 'proxy' ? 'none' : 'proxy'))}
+          className={`relative grid h-6 w-6 place-items-center border transition-colors ${
+            sidePanel === 'proxy'
+              ? 'border-electric/50 bg-electric/15 text-[#a0d2ff]'
+              : effectiveProxyConnection
+                ? 'border-[#2ee6a6]/45 bg-[#2ee6a6]/10 text-[#61e8b8]'
+                : 'border-white/6 text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
+          }`}
+          title={
+            effectiveProxyConnection
+              ? `Public proxy active for ${tabProxyConnections[activeTabId] ? 'this tab' : 'the whole browser'}`
+              : 'Public Proxy Manager'
+          }
+          aria-label="Open Public Proxy Manager"
+        >
+          <Network size={11} />
+          {effectiveProxyConnection && (
+            <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-[#2ee6a6] shadow-[0_0_5px_#2ee6a6]" />
+          )}
+        </button>
+
+        <button
           onClick={() => setSidePanel((prev) => (prev === 'history' ? 'none' : 'history'))}
           className={`grid h-6 w-6 place-items-center border border-white/6 transition-colors ${
             sidePanel === 'history'
@@ -1382,6 +1708,7 @@ export default function BrowserApp() {
           onShowSettings={() => setSidePanel('settings')}
           onShowFirefoxSettings={() => handleNewTab('about:preferences')}
           onShowDevTools={() => setSidePanel('devtools')}
+          onShowProxyManager={() => setSidePanel('proxy')}
           onZoomOut={() => setZoomLevel((level) => Math.max(50, level - 10))}
           onResetZoom={() => setZoomLevel(100)}
           onZoomIn={() => setZoomLevel((level) => Math.min(200, level + 10))}
@@ -1609,9 +1936,22 @@ export default function BrowserApp() {
           </div>
         </div>
 
-        {/* 5. Side Panels (DevTools, History, Bookmarks) */}
+        {/* 5. Side Panels (Proxy Manager, DevTools, History, Bookmarks) */}
         {sidePanel !== 'none' && (
           <aside className="w-80 shrink-0 border-l border-white/8 bg-[#070b14] p-3 flex flex-col justify-between overflow-y-auto os-scrollbar">
+            {sidePanel === 'proxy' && (
+              <ProxyManagerPanel
+                activeTabUrl={activeTab?.url || ''}
+                engineReady={engineState === 'ready'}
+                browserConnection={browserProxyConnection}
+                tabConnection={tabProxyConnections[activeTabId] || null}
+                onClose={() => setSidePanel('none')}
+                onConnect={handleProxyConnect}
+                onDisconnect={handleProxyDisconnect}
+                onDisconnectAll={handleProxyDisconnectAll}
+              />
+            )}
+
             {/* DevTools Inspector Panel */}
             {sidePanel === 'devtools' && (
               <div className="space-y-3 flex-1 flex flex-col min-h-0">
