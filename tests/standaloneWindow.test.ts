@@ -8,6 +8,7 @@ describe('standalone window URLs', () => {
 
   test('opens system apps through the app route', () => {
     expect(getStandaloneWindowUrl('system:whatsapp')).toBe('/apps/whatsapp');
+    expect(getStandaloneWindowUrl('system:telegram')).toBe('/apps/telegram');
   });
 
   test('opens tools through the tool route', () => {

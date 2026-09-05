@@ -7,7 +7,11 @@ node_modules/
 .next/
 out/
 dist/
+dist-desktop/
 build/
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/resources/local-server/
 
 # Testing & Coverage
 coverage/

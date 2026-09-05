@@ -8,6 +8,7 @@ describe('standalone app hydration boundary', () => {
     ['calendar', 'Calendar'],
     ['notes', 'Notes'],
     ['whatsapp', 'WhatsApp'],
+    ['telegram', 'Telegram'],
     ['youtube-music', 'YouTube Music'],
   ])('renders a deterministic shell for %s before browser state is available', (id, title) => {
     const markup = renderToString(<StandaloneWindowContent kind="app" id={id} />);

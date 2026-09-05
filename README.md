@@ -13,6 +13,7 @@ Nammu OS turns a web page into a coherent personal workstation: movable applicat
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.3-FBF0DF?logo=bun&logoColor=14151A)](https://bun.sh/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)
 
   <br />
   <img src="./docs/screenshots/desktop.jpg" alt="Nammu OS desktop with its workspace, taskbar, rail, and music player" width="100%" />
@@ -31,7 +32,7 @@ Nammu OS is built around one idea: tools should feel like parts of the same envi
 ## Built to feel like one product
 
 - **Desktop shell** — draggable and resizable windows, predictable default geometry, minimize/maximize, snapping, focus management, standalone app routes, a reorderable start menu, draggable taskbar and rail icons, and middle-click close.
-- **Browser and WhatsApp runtimes** — each app prepares one long-lived Gecko WebAssembly engine per application session instead of repeatedly starting an engine for every tab.
+- **Runtime-aware web apps** — Browser, WhatsApp, Telegram, and YouTube Music use Gecko/WASM with Wisp on the Web and isolated native WebView2 surfaces on Windows Desktop.
 - **Unified appearance** — Cyber Glow, Obsidian Dark, Midnight Navy, and macOS themes, with system-wide light/dark appearance, accent colors, CRT scanlines, icon controls, and motion preferences.
 - **Living wallpapers** — configurable Synth Rain and Chaos Flow Matrix effects with color, speed, and size controls.
 - **Audio workspace** — persistent music player, queue, playback modes, playback speed, transparency controls, visualization, and local volume combined with the OS master volume.
@@ -155,38 +156,55 @@ Examples include image conversion and compression, video and audio processing, P
 
 ```mermaid
 flowchart TB
-  User[Desktop / standalone app / standalone tool] --> Shell[Nammu OS client shell]
+  User[User] --> Web[Web runtime: Next.js]
+  User --> Desktop[Desktop runtime: Tauri 2]
+  Web --> Shell[Shared Nammu React application]
+  Desktop --> Bundle[Bundled Vite entry]
+  Bundle --> Shell
   Shell --> Windows[Window manager + taskbar + launcher]
   Shell --> Apps[15 system apps]
   Shell --> Tools[127 native tools]
+  Web --> WebServer[Custom Node/Next server]
+  WebServer --> Postgres[PostgreSQL]
+  WebServer --> Redis[Optional Redis / Upstash]
+  Desktop --> LocalServer[Supervised packaged Node/Next server]
+  LocalServer --> SQLite[SQLite + encrypted credential envelopes]
+  LocalServer --> Memory[Memory-only TTL cache]
   Apps --> Gecko[Gecko WebAssembly runtime]
-  Apps --> Cloud[Cloud provider adapters]
-  Apps --> Local[Local-first preferences and workspace state]
-  Cloud --> Routes[Next.js route handlers + tRPC]
-  Routes --> Data[Drizzle + SQLite/PostgreSQL]
-  Routes --> Cache[Redis / Upstash]
-  Routes --> Providers[Drive / OneDrive / Dropbox / MEGA / pCloud / Yandex / S3]
+  Gecko --> Wisp[Runtime-specific Wisp transport]
+  Wisp --> WebServer
+  Wisp --> LocalServer
+  WebServer --> Providers[User cloud providers]
+  LocalServer -. provider routes pending OAuth review .-> Providers
 ```
 
-| Layer          | Technology                                                                             |
-| -------------- | -------------------------------------------------------------------------------------- |
-| Application    | Next.js 16.3 App Router, React 19.2, TypeScript 5.9                                    |
-| Interface      | Tailwind CSS 4, Framer Motion, Lucide icons, custom OS design tokens                   |
-| Runtime        | Bun 1.3, Node-compatible custom Express server, WebSockets                             |
-| APIs           | Next.js route handlers, tRPC 11, TanStack Query, Zod                                   |
-| Data           | Drizzle ORM, SQLite for local development, PostgreSQL/Supabase, Redis/Upstash          |
-| Browser engine | Firefox/Gecko compiled to WebAssembly with Wisp transport                              |
-| Infrastructure | Docker, Docker Compose, Kubernetes manifests, Cloudflare configuration, GitHub Actions |
+| Layer               | Technology                                                                    |
+| ------------------- | ----------------------------------------------------------------------------- |
+| Application         | Next.js 16.3 App Router, React 19.2, TypeScript 5.9                           |
+| Interface           | Tailwind CSS 4, Framer Motion, Lucide icons, custom OS design tokens          |
+| Runtime             | Bun 1.3 workflow, custom Node/Next server, WebSockets                         |
+| APIs                | Next.js route handlers, tRPC 11, TanStack Query, Zod                          |
+| Data                | PostgreSQL + optional Redis on Web; SQLite WAL + memory cache on Desktop      |
+| Web browser engine  | Firefox/Gecko compiled to WebAssembly with Wisp transport                     |
+| Desktop remote apps | Isolated WebView2 surfaces for Browser, WhatsApp, Telegram, and YouTube Music |
+| Desktop host        | Tauri 2, WebView2, bundled Node runtime, and the shared React application     |
+| Infrastructure      | Docker for the web stack; Tauri/NSIS for the Windows desktop edition          |
+
+The browser deployment remains a normal Next.js application. The Windows edition bundles the same React application inside one Tauri WebView2 window and supervises a loopback-only Node/Next service on an OS-selected port. Tauri does not replace Nammu's React window manager: Files, Browser, Cloud, Tools, Settings, Music, and other internal windows remain React-managed inside that single native window. Remote websites use Gecko/WASM with Wisp in the Web edition and managed WebView2 child surfaces in the Desktop edition.
+
+Environment-dependent operations cross a small `PlatformCapabilities` boundary. The web provider uses browser APIs and returns explicit unsupported results when browsers cannot perform an operation. The desktop provider uses official Tauri APIs for user-selected files, external URLs, clipboard text, notifications, and the containing native window. File paths remain inside the provider and are never returned to React.
 
 ## Run it locally
 
 ### Requirements
 
 - [Bun](https://bun.sh/) 1.3 or newer
+- [Node.js](https://nodejs.org/) 22 or newer
 - A Chromium-compatible browser; Microsoft Edge is used by the screenshot automation on Windows
 - Optional PostgreSQL and Redis services for the full backend stack
+- Windows desktop development additionally requires the Rust stable MSVC toolchain, Microsoft C++ Build Tools, and WebView2
 
-### Development
+### Web development
 
 ```bash
 git clone https://github.com/nammu-os/nammu-os.git
@@ -200,6 +218,50 @@ bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Windows desktop development
+
+The desktop runtime uses a separate Vite entry only as a bundler. It imports the existing `DesktopApp` and shared registries, components, and state rather than maintaining a second UI implementation. In development, Rust supervises the repository's custom Node/Next server on numeric `127.0.0.1` with an ephemeral port and a local SQLite database.
+
+```bash
+bun run desktop:dev
+```
+
+### Windows desktop build
+
+```bash
+bun run desktop:check
+bun run desktop:rust:check
+bun run desktop:build
+bun run desktop:release:verify
+```
+
+`desktop:build` first creates the normal Next.js production build, stages a known Node/Next/SQLite/Wisp runtime, runs its lifecycle smoke test, builds the local React bundle, produces both release artifacts, and verifies the packaged dependency allowlist and secret boundary:
+
+- `src-tauri/target/release/nammu-os.exe`
+- `src-tauri/target/release/bundle/nsis/Nammu OS_<version>_x64-setup.exe`
+
+The NSIS installer is explicitly current-user scoped and does not require administrator access. Upgrades preserve the stable `com.nammu.os` application identity. Uninstall removes the installed application but intentionally retains `%LOCALAPPDATA%\com.nammu.os`, including user settings, SQLite data, and the DPAPI-protected credential vault; data removal must remain a separate explicit user action.
+
+**Release distribution limitation — unsigned Windows binary:** no signing certificate or Trusted Signing account is configured, so the EXE and installer are currently unsigned. The release configuration can accept signing later without changing the application architecture. An auto-updater is intentionally absent until a signed, authenticated release channel exists; Nammu does not introduce a hosted backend merely to support updates.
+
+### Desktop platform and service boundaries
+
+Runtime detection is centralized in `src/platform/runtime.ts`. It is safe during SSR and checks for a functional Tauri IPC bridge rather than using browser user-agent detection. Tauri imports are lazy, so the web and server builds do not evaluate native APIs.
+
+Native permissions are deliberately narrow:
+
+- Native open/save dialogs plus read or write access only to the path selected by that dialog
+- HTTP, HTTPS, `mailto`, and `tel` URLs through the system application
+- Clipboard text read/write only
+- Permission checks, permission requests, and basic notifications only
+- Minimize, toggle-maximize, and close for the single containing Tauri window
+
+There is no shell/process access, directory-wide filesystem scope, arbitrary HTTP plugin access, global Tauri object, updater, tray, global shortcut, general-purpose secure-storage plugin, or remote-origin capability grant. Provider credentials use the Rust-owned Windows DPAPI/AES-GCM vault and are never exposed as an arbitrary React storage API.
+
+Desktop has no production Nammu backend URL. Tauri starts a packaged local Node service, React discovers it through `PlatformServices`, and Rust authorizes each exact API method/path with a short-lived proof. Host and Origin checks, a deny-by-default route policy, separate API/Wisp capabilities, SQLite repositories, a memory-only cache, graceful shutdown, and Windows Job Object cleanup protect the local boundary. The arbitrary browser proxy and unreviewed cloud/tRPC routes remain disabled.
+
+See [the Phase 1C-LOCAL checkpoint report](./docs/phase-1c-local-report.md), [desktop-local architecture](./docs/desktop-service-origins.md), [credential-vault design](./docs/desktop-credential-vault.md), and [OAuth/provider status](./docs/desktop-oauth-status.md).
 
 ### Full Docker stack
 
@@ -242,16 +304,22 @@ src/
 |   |-- browser/            Nammu Browser UI and Gecko session orchestration
 |   |-- cloud/              Multi-cloud workspace, provider views, uploads, previews
 |   |-- maps/               Map interface and map-specific styling
-|   `-- whatsapp/           Focused WhatsApp runtime and session store
+|   |-- whatsapp/           Focused WhatsApp runtime and session store
+|   |-- telegram/           Multi-account Telegram runtime and session store
+|   `-- web-surfaces/       Shared Desktop native remote-surface adapter
 |-- lib/                    Registries, preferences, ordering, geometry, runtime helpers
+|-- platform/               Shared capability contracts and web/Tauri implementations
 |-- server/                 tRPC routers, cloud adapters, allocation, crypto, MIME services
 `-- tools/                  Image, video, audio, PDF, developer, and utility tools
 
 docs/screenshots/           Reproducible product gallery used by this README
+desktop/                    Local Vite entry for the shared Tauri desktop application
 drizzle/                    Database migrations and snapshots
 k8s/                        Deployment, service, ingress, autoscaling, and configuration
 scripts/                    Runtime patching and documentation automation
+src-tauri/                  Thin Rust host, minimum capability permissions, and native metadata
 tests/                      Unit and regression coverage
+vite.desktop.config.ts      Desktop-only client bundler configuration
 ```
 
 ## Credits

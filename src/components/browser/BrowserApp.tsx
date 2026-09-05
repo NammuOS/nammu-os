@@ -14,7 +14,6 @@ import {
   Terminal,
   History as HistoryIcon,
   ExternalLink,
-  Cpu,
   Smartphone,
   Tablet,
   Laptop,
@@ -67,8 +66,13 @@ import {
   type PublicProxyEndpoint,
   type PublicProxyHealth,
 } from './services/publicProxy';
+import { getPlatformCapabilities, type WebSurfaceSnapshot } from '../../platform';
+import { getBrowserRuntimeUrl } from './services/geckoRuntimeUrl';
+import { useWindowRuntime } from '../os/WindowRuntimeContext';
+import NativeWebSurface, {
+  type NativeWebSurfaceHandle,
+} from '../web-surfaces/NativeWebSurface';
 
-const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
 const RUNTIME_HOME_URL = 'about:blank';
 const INTERNAL_PAGE_TITLES: Record<string, string> = {
   'about:addons': 'Extensions & Themes',
@@ -84,6 +88,7 @@ const INTERNAL_PAGE_TITLES: Record<string, string> = {
 type GeckoEngineState = 'starting' | 'ready' | 'error';
 
 type GeckoRuntimeWindow = Window & {
+  geckoDispose?: () => void;
   geckoEvalChrome?: (script: string) => Promise<unknown>;
 };
 
@@ -101,16 +106,6 @@ interface GeckoTabDescriptor {
   url: string;
   isPrivate: boolean;
   isPinned: boolean;
-}
-
-function getBrowserRuntimeUrl(attempt: number) {
-  const params = new URLSearchParams({
-    app: '1',
-    autostart: '1',
-    url: RUNTIME_HOME_URL,
-    session: String(attempt),
-  });
-  return `${FIREFOX_RUNTIME_URL}?${params.toString()}`;
 }
 
 function getGeckoTabDescriptors(tabs: BrowserTab[]): GeckoTabDescriptor[] {
@@ -268,6 +263,9 @@ interface ContextMenuState {
 }
 
 export default function BrowserApp() {
+  const windowRuntime = useWindowRuntime();
+  const platform = getPlatformCapabilities();
+  const nativeSurfaceEnabled = platform.runtime === 'tauri';
   // Tabs State
   const [tabs, setTabs] = useState<BrowserTab[]>([
     {
@@ -343,6 +341,12 @@ export default function BrowserApp() {
   const tabsRef = useRef(tabs);
   const activeTabIdRef = useRef(activeTabId);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const nativeSurfaceRefs = useRef(new Map<string, NativeWebSurfaceHandle>());
+  const nativeSurfaceRefCallbacks = useRef(
+    new Map<string, (surface: NativeWebSurfaceHandle | null) => void>(),
+  );
+  const nativeReadyTabsRef = useRef(new Set<string>());
+  const geckoRuntimeRef = useRef<GeckoRuntimeWindow | null>(null);
   const engineReadyRef = useRef(false);
   const browserProxyConnectionRef = useRef<PublicProxyConnection | null>(null);
   const tabProxyConnectionsRef = useRef<Record<string, PublicProxyConnection>>({});
@@ -356,6 +360,47 @@ export default function BrowserApp() {
   const [engineState, setEngineState] = useState<GeckoEngineState>('starting');
   const [engineError, setEngineError] = useState('');
   const [engineAttempt, setEngineAttempt] = useState(1);
+  const [nativeSurfaceAttempt, setNativeSurfaceAttempt] = useState(1);
+  const [runtimeWispUrl, setRuntimeWispUrl] = useState('');
+
+  const getNativeSurfaceRef = useCallback((tabId: string) => {
+    const existing = nativeSurfaceRefCallbacks.current.get(tabId);
+    if (existing) return existing;
+    const callback = (surface: NativeWebSurfaceHandle | null) => {
+      if (surface) nativeSurfaceRefs.current.set(tabId, surface);
+      else nativeSurfaceRefs.current.delete(tabId);
+    };
+    nativeSurfaceRefCallbacks.current.set(tabId, callback);
+    return callback;
+  }, []);
+
+  const getActiveNativeSurface = useCallback(
+    () => nativeSurfaceRefs.current.get(activeTabIdRef.current),
+    [],
+  );
+
+  useEffect(() => {
+    if (nativeSurfaceEnabled) {
+      setRuntimeWispUrl('');
+      return;
+    }
+    let cancelled = false;
+    setRuntimeWispUrl('');
+    void getPlatformCapabilities()
+      .services.wispUrl()
+      .then((url) => {
+        if (!cancelled) setRuntimeWispUrl(url);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        engineReadyRef.current = false;
+        setEngineState('error');
+        setEngineError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [engineAttempt, nativeSurfaceEnabled]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -379,6 +424,19 @@ export default function BrowserApp() {
       setOmniboxInput(activeTab.url === 'about:home' ? '' : activeTab.url);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!nativeSurfaceEnabled || !activeTab) return;
+    const isWebsite = /^https?:\/\//i.test(activeTab.url);
+    const ready = isWebsite && nativeReadyTabsRef.current.has(activeTab.id);
+    engineReadyRef.current = ready;
+    if (!isWebsite) {
+      setEngineError('');
+      return;
+    }
+    setEngineState(ready ? 'ready' : 'starting');
+    if (ready) setEngineError('');
+  }, [activeTab, nativeSurfaceEnabled]);
 
   useEffect(() => {
     saveStoredBrowserPreferences(preferences);
@@ -429,20 +487,58 @@ export default function BrowserApp() {
 
   const runOnGeckoTab = useCallback(
     (tabId: string, command: string) => {
-      if (!engineReadyRef.current) return Promise.resolve(null);
+      if (nativeSurfaceEnabled || !engineReadyRef.current) return Promise.resolve(null);
       return evaluateInRuntimeNow(buildRunOnGeckoTabScript(tabId, command), 5_000).catch(
         () => null,
       );
     },
-    [evaluateInRuntimeNow],
+    [evaluateInRuntimeNow, nativeSurfaceEnabled],
   );
 
   const restartGeckoRuntime = useCallback(() => {
+    if (nativeSurfaceEnabled) return;
+    try {
+      geckoRuntimeRef.current?.geckoDispose?.();
+    } catch {}
+    geckoRuntimeRef.current = null;
     engineReadyRef.current = false;
     runtimeCommandQueueRef.current = Promise.resolve();
     setEngineError('');
     setEngineState('starting');
+    setRuntimeWispUrl('');
     setEngineAttempt((attempt) => attempt + 1);
+  }, [nativeSurfaceEnabled]);
+
+  const handleNativeSurfaceFailure = useCallback(
+    (tabId: string, reason: string) => {
+      if (!nativeSurfaceEnabled) return;
+      nativeReadyTabsRef.current.delete(tabId);
+      if (activeTabIdRef.current === tabId) engineReadyRef.current = false;
+      setDevLogs((current) => [
+        {
+          type: 'error',
+          msg: `Native website surface unavailable: ${reason}`,
+          time: new Date().toLocaleTimeString(),
+        },
+        ...current.slice(0, 50),
+      ]);
+      if (activeTabIdRef.current === tabId) {
+        setEngineState('error');
+        setEngineError(reason || 'The Windows website surface could not be started.');
+      }
+    },
+    [nativeSurfaceEnabled],
+  );
+
+  const handleNativeSurfaceDiagnostic = useCallback((reason: string) => {
+    setDevLogs((current) => [
+      {
+        type: 'warn',
+        msg: `Native website surface: ${reason}`,
+        time: new Date().toLocaleTimeString(),
+      },
+      ...current.slice(0, 50),
+    ]);
   }, []);
 
   const reloadProxyScope = useCallback(
@@ -478,6 +574,9 @@ export default function BrowserApp() {
       primary: PublicProxyHealth,
       failovers: PublicProxyHealth[],
     ) => {
+      if (nativeSurfaceEnabled) {
+        throw new Error('Public proxy routing is unavailable in the native Windows browser.');
+      }
       if (!engineReadyRef.current)
         throw new Error('Wait for the browser engine to finish loading.');
 
@@ -516,7 +615,7 @@ export default function BrowserApp() {
       setTabProxyConnections(nextTabs);
       await reloadProxyScope(scope, tabId);
     },
-    [evaluateInRuntimeNow, reloadProxyScope],
+    [evaluateInRuntimeNow, nativeSurfaceEnabled, reloadProxyScope],
   );
 
   const handleProxyDisconnect = useCallback(
@@ -535,6 +634,7 @@ export default function BrowserApp() {
       setBrowserProxyConnection(nextBrowser);
       setTabProxyConnections(nextTabs);
 
+      if (nativeSurfaceEnabled) return;
       if (!engineReadyRef.current) return;
       try {
         await evaluateInRuntimeNow(
@@ -548,7 +648,7 @@ export default function BrowserApp() {
         restartGeckoRuntime();
       }
     },
-    [evaluateInRuntimeNow, reloadProxyScope, restartGeckoRuntime],
+    [evaluateInRuntimeNow, nativeSurfaceEnabled, reloadProxyScope, restartGeckoRuntime],
   );
 
   const handleProxyDisconnectAll = useCallback(async () => {
@@ -560,6 +660,7 @@ export default function BrowserApp() {
     setBrowserProxyConnection(null);
     setTabProxyConnections({});
 
+    if (nativeSurfaceEnabled) return;
     if (!engineReadyRef.current) return;
     try {
       await evaluateInRuntimeNow(
@@ -570,7 +671,7 @@ export default function BrowserApp() {
     } catch {
       restartGeckoRuntime();
     }
-  }, [evaluateInRuntimeNow, reloadProxyScope, restartGeckoRuntime]);
+  }, [evaluateInRuntimeNow, nativeSurfaceEnabled, reloadProxyScope, restartGeckoRuntime]);
 
   const recoverFromProxyError = useCallback(
     async (tabId: string, targetUrl: string) => {
@@ -732,6 +833,7 @@ export default function BrowserApp() {
   // Start one Gecko session for the Browser window, then map every Nammu tab to
   // a native tab inside that session. The WASM engine is never duplicated per tab.
   useEffect(() => {
+    if (nativeSurfaceEnabled) return;
     const handleRuntimeMessage = (event: MessageEvent) => {
       if (
         event.origin !== window.location.origin ||
@@ -752,6 +854,7 @@ export default function BrowserApp() {
       }
 
       if (event.data?.type !== 'NAMMU_GECKO_READY') return;
+      geckoRuntimeRef.current = event.source as GeckoRuntimeWindow;
 
       const initializeSession = async () => {
         try {
@@ -810,10 +913,15 @@ export default function BrowserApp() {
 
     window.addEventListener('message', handleRuntimeMessage);
     return () => window.removeEventListener('message', handleRuntimeMessage);
-  }, [evaluateInRuntime, preferences.blockAutoplay, preferences.trackingProtection]);
+  }, [
+    evaluateInRuntime,
+    nativeSurfaceEnabled,
+    preferences.blockAutoplay,
+    preferences.trackingProtection,
+  ]);
 
   useEffect(() => {
-    if (engineState !== 'ready') return;
+    if (nativeSurfaceEnabled || engineState !== 'ready') return;
     dispatchRuntimeCommand(
       evaluateInRuntime(`(()=>{
         Services.prefs.setBoolPref('privacy.trackingprotection.enabled', ${preferences.trackingProtection});
@@ -821,21 +929,33 @@ export default function BrowserApp() {
         return 'preferences-applied';
       })()`),
     );
-  }, [engineState, evaluateInRuntime, preferences.blockAutoplay, preferences.trackingProtection]);
+  }, [
+    engineState,
+    evaluateInRuntime,
+    nativeSurfaceEnabled,
+    preferences.blockAutoplay,
+    preferences.trackingProtection,
+  ]);
 
   useEffect(() => {
-    if (engineState !== 'starting') return;
+    if (nativeSurfaceEnabled || engineState !== 'starting') return;
     const timeout = window.setTimeout(() => {
       if (engineReadyRef.current) return;
       setEngineState('error');
       setEngineError('The Gecko engine did not become ready within two minutes.');
     }, 120_000);
     return () => window.clearTimeout(timeout);
-  }, [engineAttempt, engineState]);
+  }, [engineAttempt, engineState, nativeSurfaceEnabled]);
 
   // Mirror real page state back into Nammu's tabs and omnibox.
   useEffect(() => {
-    if (!activeTab || activeTab.url === 'about:home' || engineState !== 'ready') {
+    if (
+      !activeTab ||
+      activeTab.url === 'about:home' ||
+      nativeSurfaceEnabled ||
+      engineState !== 'ready' ||
+      windowRuntime.isMinimized
+    ) {
       return;
     }
 
@@ -963,17 +1083,62 @@ export default function BrowserApp() {
     };
 
     void syncPageState();
-    const timer = window.setInterval(syncPageState, 750);
+    const timer = window.setInterval(syncPageState, windowRuntime.isActive ? 750 : 1_500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeTab, activeTabId, engineState, recoverFromProxyError, runOnGeckoTab]);
+  }, [
+    activeTab,
+    activeTabId,
+    engineState,
+    nativeSurfaceEnabled,
+    recoverFromProxyError,
+    runOnGeckoTab,
+    windowRuntime.isActive,
+    windowRuntime.isMinimized,
+  ]);
 
   useEffect(() => {
-    if (engineState !== 'ready' || activeTab?.url === 'about:home') return;
+    if (nativeSurfaceEnabled || engineState !== 'ready') return;
+    dispatchRuntimeCommand(
+      evaluateInRuntime(`(()=>{
+        const tab = globalThis.__nammuBrowserTabs?.[${JSON.stringify(activeTabId)}];
+        const browser = tab?.linkedBrowser;
+        if (!browser) return 'tab-unavailable';
+        try { browser.docShellIsActive = ${!windowRuntime.isMinimized}; } catch {}
+        try { if (browser.docShell) browser.docShell.isActive = ${!windowRuntime.isMinimized}; } catch {}
+        return ${JSON.stringify(windowRuntime.phase)};
+      })()`),
+    );
+  }, [
+    activeTabId,
+    engineState,
+    evaluateInRuntime,
+    nativeSurfaceEnabled,
+    windowRuntime.isMinimized,
+    windowRuntime.phase,
+  ]);
+
+  useEffect(
+    () => () => {
+      engineReadyRef.current = false;
+      const frame = iframeRef.current;
+      try {
+        geckoRuntimeRef.current?.geckoDispose?.();
+      } catch {}
+      geckoRuntimeRef.current = null;
+      try {
+        frame?.setAttribute('src', 'about:blank');
+      } catch {}
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (nativeSurfaceEnabled || engineState !== 'ready' || activeTab?.url === 'about:home') return;
     void runOnGeckoTab(activeTabId, `ZoomManager.zoom = ${zoomLevel / 100}; return 'ok';`);
-  }, [activeTab?.url, activeTabId, engineState, runOnGeckoTab, zoomLevel]);
+  }, [activeTab?.url, activeTabId, engineState, nativeSurfaceEnabled, runOnGeckoTab, zoomLevel]);
 
   // Fetch search suggestions
   useEffect(() => {
@@ -989,7 +1154,8 @@ export default function BrowserApp() {
     }
 
     const timer = setTimeout(() => {
-      fetch(`/api/browser/search?q=${encodeURIComponent(omniboxInput.trim())}`)
+      getPlatformCapabilities()
+        .services.request(`/api/browser/search?q=${encodeURIComponent(omniboxInput.trim())}`)
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data) && data.length > 0) {
@@ -1209,7 +1375,17 @@ export default function BrowserApp() {
   };
 
   const handleToggleMuteTab = (tabId: string) => {
-    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
+    const nextMuted = !tabs.find((tab) => tab.id === tabId)?.isMuted;
+    setTabs((prev) =>
+      prev.map((tab) => (tab.id === tabId ? { ...tab, isMuted: nextMuted } : tab)),
+    );
+    if (nativeSurfaceEnabled && tabId === activeTabId) {
+      void nativeSurfaceRefs.current
+        .get(tabId)
+        ?.setMuted(nextMuted)
+        .catch((error) => handleNativeSurfaceDiagnostic(String(error)));
+      return;
+    }
     void runOnGeckoTab(tabId, "tab.toggleMuteAudio('nammu'); return 'ok';");
   };
 
@@ -1314,11 +1490,23 @@ export default function BrowserApp() {
   // History navigation (Back / Forward)
   const handleGoBack = () => {
     if (!activeTab || !activeTab.canGoBack) return;
+    if (nativeSurfaceEnabled) {
+      void getActiveNativeSurface()
+        ?.goBack()
+        .catch((error) => handleNativeSurfaceDiagnostic(String(error)));
+      return;
+    }
     void runOnGeckoTab(activeTabId, "tab.linkedBrowser.goBack(); return 'history-back-requested';");
   };
 
   const handleGoForward = () => {
     if (!activeTab || !activeTab.canGoForward) return;
+    if (nativeSurfaceEnabled) {
+      void getActiveNativeSurface()
+        ?.goForward()
+        .catch((error) => handleNativeSurfaceDiagnostic(String(error)));
+      return;
+    }
     void runOnGeckoTab(
       activeTabId,
       "tab.linkedBrowser.goForward(); return 'history-forward-requested';",
@@ -1328,13 +1516,25 @@ export default function BrowserApp() {
   const handleReload = () => {
     if (activeTab && activeTab.url !== 'about:home') {
       setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, isLoading: true } : t)));
+      if (nativeSurfaceEnabled) {
+        void getActiveNativeSurface()
+          ?.reload()
+          .catch((error) => handleNativeSurfaceDiagnostic(String(error)));
+        return;
+      }
       void runOnGeckoTab(activeTabId, "tab.linkedBrowser.reload(); return 'ok';");
     }
   };
 
   const handleStopLoading = () => {
     if (!activeTab || activeTab.url === 'about:home') return;
-    void runOnGeckoTab(activeTabId, "tab.linkedBrowser.stop(); return 'stopped';");
+    if (nativeSurfaceEnabled) {
+      void getActiveNativeSurface()
+        ?.stop()
+        .catch((error) => handleNativeSurfaceDiagnostic(String(error)));
+    } else {
+      void runOnGeckoTab(activeTabId, "tab.linkedBrowser.stop(); return 'stopped';");
+    }
     setTabs((current) =>
       current.map((tab) => (tab.id === activeTabId ? { ...tab, isLoading: false } : tab)),
     );
@@ -1399,7 +1599,17 @@ export default function BrowserApp() {
     });
   };
 
-  const handleRetryEngine = restartGeckoRuntime;
+  const handleRetryEngine = () => {
+    if (!nativeSurfaceEnabled) {
+      restartGeckoRuntime();
+      return;
+    }
+    engineReadyRef.current = false;
+    nativeReadyTabsRef.current.clear();
+    setEngineError('');
+    setEngineState('starting');
+    setNativeSurfaceAttempt((attempt) => attempt + 1);
+  };
 
   const handleClearBrowsingData = () => {
     if (
@@ -1422,8 +1632,100 @@ export default function BrowserApp() {
     saveStoredHistory([]);
   };
 
+  const handleNativeSurfaceReady = useCallback((tabId: string) => {
+    nativeReadyTabsRef.current.add(tabId);
+    if (activeTabIdRef.current === tabId) {
+      engineReadyRef.current = true;
+      setEngineState('ready');
+      setEngineError('');
+    }
+    setDevLogs((current) => [
+      {
+        type: 'log',
+        msg: 'Desktop native website surface ready',
+        time: new Date().toLocaleTimeString(),
+      },
+      ...current.slice(0, 50),
+    ]);
+  }, []);
+
+  const handleNativeSurfaceState = useCallback((tabId: string, snapshot: WebSurfaceSnapshot) => {
+    const observedUrl = snapshot.url;
+    const previousObservedUrl = lastObservedUrls.current[tabId];
+    lastObservedUrls.current[tabId] = observedUrl;
+    const favicon = getDomainFavicon(observedUrl);
+
+    setTabs((current) => {
+      let changed = false;
+      const updated = current.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        const urlChanged = tab.url !== observedUrl;
+        const historyPosition = urlChanged
+          ? reconcileBrowserHistoryPosition(tab.history, tab.historyIndex, observedUrl)
+          : { history: tab.history, historyIndex: tab.historyIndex };
+        const title = snapshot.title || getBrowserTabTitle(observedUrl, tab.isPrivate);
+        if (
+          !urlChanged &&
+          tab.title === title &&
+          tab.favicon === favicon &&
+          tab.isLoading === snapshot.isLoading &&
+          tab.canGoBack === snapshot.canGoBack &&
+          tab.canGoForward === snapshot.canGoForward &&
+          Boolean(tab.isMuted) === snapshot.isMuted &&
+          Boolean(tab.isAudioPlaying) === snapshot.isAudioPlaying
+        ) {
+          return tab;
+        }
+        changed = true;
+        return {
+          ...tab,
+          url: observedUrl,
+          title,
+          favicon,
+          isLoading: snapshot.isLoading,
+          canGoBack: snapshot.canGoBack,
+          canGoForward: snapshot.canGoForward,
+          isMuted: snapshot.isMuted,
+          isAudioPlaying: snapshot.isAudioPlaying,
+          history: historyPosition.history,
+          historyIndex: historyPosition.historyIndex,
+        };
+      });
+      tabsRef.current = changed ? updated : current;
+      return changed ? updated : current;
+    });
+
+    const activeModel = tabsRef.current.find((tab) => tab.id === tabId);
+    if (
+      observedUrl !== previousObservedUrl &&
+      !observedUrl.startsWith('about:') &&
+      !activeModel?.isPrivate
+    ) {
+      const entry: HistoryEntry = {
+        id: `${Date.now()}-${tabId}`,
+        title: snapshot.title || observedUrl,
+        url: observedUrl,
+        timestamp: Date.now(),
+        favicon,
+      };
+      setHistory((current) => {
+        const updated = [entry, ...current.filter((item) => item.url !== observedUrl)].slice(
+          0,
+          100,
+        );
+        saveStoredHistory(updated);
+        return updated;
+      });
+    }
+  }, []);
+
   const isSecure = activeTab?.url.startsWith('https://');
   const effectiveProxyConnection = tabProxyConnections[activeTabId] || browserProxyConnection;
+  const nativeInternalPage =
+    nativeSurfaceEnabled &&
+    activeTab?.url.startsWith('about:') &&
+    activeTab.url !== 'about:home';
+  const browserOverlayActive = menuOpen || findOpen || showSuggestions || contextMenu.isOpen;
 
   return (
     <div
@@ -1482,12 +1784,21 @@ export default function BrowserApp() {
                 {tab.isMuted && !tab.isPinned && (
                   <VolumeX size={10} className="text-[#f43f5e] shrink-0 ml-1" />
                 )}
+                {!tab.isMuted && tab.isAudioPlaying && !tab.isPinned && (
+                  <Volume2 size={10} className="ml-1 shrink-0 text-emerald" />
+                )}
               </div>
 
               {tab.isMuted && tab.isPinned && (
                 <VolumeX
                   size={7}
                   className="pointer-events-none absolute bottom-0.5 right-0.5 text-[#f43f5e]"
+                />
+              )}
+              {!tab.isMuted && tab.isAudioPlaying && tab.isPinned && (
+                <Volume2
+                  size={7}
+                  className="pointer-events-none absolute bottom-0.5 right-0.5 text-emerald"
                 />
               )}
 
@@ -1809,7 +2120,9 @@ export default function BrowserApp() {
                   </div>
                   <h1 className="text-xl font-bold text-white tracking-tight">Nammu Browser</h1>
                   <p className="font-mono text-[9.5px] text-[#69849b]">
-                    Full Gecko WebAssembly Engine
+                    {nativeSurfaceEnabled
+                      ? 'Native Windows Web Engine'
+                      : 'Full Gecko WebAssembly Engine'}
                   </p>
                 </div>
 
@@ -1868,71 +2181,93 @@ export default function BrowserApp() {
             }`}
             aria-hidden={activeTab?.url === 'about:home'}
           >
-            {engineState !== 'ready' && (
+            {!nativeInternalPage && engineState === 'error' && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#05080d]">
-                {engineState === 'starting' ? (
-                  <>
-                    <div className="flex items-center gap-2 text-[#a855f7]">
-                      <Cpu size={24} className="animate-pulse" />
-                      <RotateCw size={14} className="animate-spin text-electric" />
+                <>
+                  <AlertTriangle size={24} className="text-amber-400" />
+                  <div className="max-w-sm text-center">
+                    <div className="text-[12px] font-medium text-white">
+                      Browser engine could not start
                     </div>
-                    <div className="max-w-sm text-center">
-                      <div className="text-[12px] font-medium text-white">
-                        Starting Nammu Browser
-                      </div>
-                      <div className="mt-1 font-mono text-[9px] leading-relaxed text-[#69849b]">
-                        Loading one shared Gecko engine for this browser session. Your tab will open
-                        automatically when it is ready.
-                      </div>
+                    <div className="mt-1 font-mono text-[9px] leading-relaxed text-[#8fa5b8]">
+                      {engineError}
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle size={24} className="text-amber-400" />
-                    <div className="max-w-sm text-center">
-                      <div className="text-[12px] font-medium text-white">
-                        Browser engine could not start
-                      </div>
-                      <div className="mt-1 font-mono text-[9px] leading-relaxed text-[#8fa5b8]">
-                        {engineError}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRetryEngine}
-                      className="border border-electric/50 bg-electric/10 px-3 py-1.5 font-mono text-[9px] text-[#a0d2ff] hover:bg-electric/20"
-                    >
-                      Retry engine
-                    </button>
-                  </>
-                )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRetryEngine}
+                    className="border border-electric/50 bg-electric/10 px-3 py-1.5 font-mono text-[9px] text-[#a0d2ff] hover:bg-electric/20"
+                  >
+                    Retry engine
+                  </button>
+                </>
               </div>
             )}
-            <iframe
-              key={engineAttempt}
-              ref={iframeRef}
-              src={getBrowserRuntimeUrl(engineAttempt)}
-              className="border-0 bg-white"
-              style={{
-                width:
-                  viewportMode === 'mobile'
-                    ? '390px'
-                    : viewportMode === 'tablet'
-                      ? '768px'
-                      : viewportMode === 'desktop'
-                        ? '1280px'
+            {nativeInternalPage && (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#05080d] p-6">
+                <div className="w-full max-w-md border border-white/10 bg-[#08101a] p-5 shadow-2xl">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-electric">
+                    Nammu Browser
+                  </div>
+                  <h2 className="mt-2 text-[15px] font-medium text-[#e0ecf7]">
+                    {INTERNAL_PAGE_TITLES[activeTab.url] || 'Internal browser page'}
+                  </h2>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#7890a4]">
+                    This Gecko-specific internal page is not exposed to Internet content in the
+                    native Windows browser. Use Nammu Browser's own toolbar and side panels for the
+                    equivalent controls.
+                  </p>
+                </div>
+              </div>
+            )}
+            {nativeSurfaceEnabled &&
+              tabs
+                .filter((tab) => /^https?:\/\//i.test(tab.url))
+                .map((tab) => (
+                  <NativeWebSurface
+                    key={`${nativeSurfaceAttempt}:${tab.id}`}
+                    ref={getNativeSurfaceRef(tab.id)}
+                    enabled
+                    active={tab.id === activeTabId}
+                    privateSession={tab.isPrivate === true}
+                    url={tab.url}
+                    zoom={zoomLevel}
+                    muted={Boolean(tab.isMuted)}
+                    browserOverlayActive={browserOverlayActive}
+                    onState={(snapshot) => handleNativeSurfaceState(tab.id, snapshot)}
+                    onReady={() => handleNativeSurfaceReady(tab.id)}
+                    onFailure={(reason) => handleNativeSurfaceFailure(tab.id, reason)}
+                    onDiagnostic={handleNativeSurfaceDiagnostic}
+                    onOpenRequest={(url) => handleNewTab(url)}
+                  />
+                ))}
+            {!nativeSurfaceEnabled && runtimeWispUrl && (
+              <iframe
+                key={engineAttempt}
+                ref={iframeRef}
+                src={getBrowserRuntimeUrl(engineAttempt, runtimeWispUrl)}
+                className="border-0 bg-white"
+                style={{
+                  width:
+                    viewportMode === 'mobile'
+                      ? '390px'
+                      : viewportMode === 'tablet'
+                        ? '768px'
+                        : viewportMode === 'desktop'
+                          ? '1280px'
+                          : '100%',
+                  height:
+                    viewportMode === 'mobile'
+                      ? '844px'
+                      : viewportMode === 'tablet'
+                        ? '1024px'
                         : '100%',
-                height:
-                  viewportMode === 'mobile'
-                    ? '844px'
-                    : viewportMode === 'tablet'
-                      ? '1024px'
-                      : '100%',
-              }}
-              title="Nammu Browser Gecko engine"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
-              allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
-            />
+                }}
+                title="Nammu Browser Gecko engine"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-orientation-lock"
+                allow="cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; display-capture; fullscreen"
+              />
+            )}
           </div>
         </div>
 

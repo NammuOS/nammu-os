@@ -11,6 +11,7 @@ export const DEFAULT_START_MENU_ORDER: SystemAppId[] = [
   'cloud',
   'projects',
   'whatsapp',
+  'telegram',
   'notes',
   'maps',
   'mail',

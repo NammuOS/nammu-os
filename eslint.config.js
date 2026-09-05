@@ -9,12 +9,14 @@ export default defineConfig([
   globalIgnores([
     '.next/**',
     'dist/**',
+    'dist-desktop/**',
     'node_modules/**',
+    'src-tauri/resources/**',
+    'src-tauri/target/**',
     'drizzle/**',
     'coverage/**',
     'public/**',
     'firefox-wasm/**',
-    'youtube-music-3.11.0/**',
   ]),
   {
     files: ['**/*.{ts,tsx,js,mjs}'],

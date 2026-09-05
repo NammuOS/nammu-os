@@ -7,6 +7,7 @@ import {
   type PortfolioProject,
   type ProjectCategory,
 } from '../../lib/portfolioProjects';
+import { getPlatformCapabilities } from '../../platform';
 
 function ProjectPreview({ project }: { project: PortfolioProject }) {
   if (project.preview) {
@@ -59,16 +60,20 @@ export function ProjectsApp() {
   );
 
   const copyProjectLink = async (project: PortfolioProject) => {
-    try {
-      await navigator.clipboard.writeText(project.url);
+    const result = await getPlatformCapabilities().clipboard.writeText(project.url);
+    if (result.status === 'success') {
       setCopiedId(project.id);
       window.setTimeout(
         () => setCopiedId((current) => (current === project.id ? null : current)),
         1600,
       );
-    } catch {
+    } else {
       setCopiedId(null);
     }
+  };
+
+  const openProject = async (project: PortfolioProject) => {
+    await getPlatformCapabilities().external.openUrl(project.url);
   };
 
   return (
@@ -190,16 +195,15 @@ export function ProjectsApp() {
                         <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-mono text-[9px] text-os-text-dim">
                           <Globe2 size={11} className="shrink-0" /> {project.domain}
                         </span>
-                        <a
-                          href={project.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={`Open ${project.title} in a new tab`}
-                          aria-label={`Open ${project.title} in a new tab`}
+                        <button
+                          type="button"
+                          onClick={() => void openProject(project)}
+                          title={`Open ${project.title}`}
+                          aria-label={`Open ${project.title}`}
                           className="grid h-8 w-8 shrink-0 place-items-center rounded-sm border border-os-text/10 bg-os-text/5 text-os-text-muted transition-colors hover:border-os-accent/35 hover:bg-os-accent/12 hover:text-os-accent"
                         >
                           <ExternalLink size={14} />
-                        </a>
+                        </button>
                         <button
                           type="button"
                           onClick={() => void copyProjectLink(project)}

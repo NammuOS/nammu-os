@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-web-surface-state"
+description = "Enables the get_web_surface_state command without any pre-configured scope."
+commands.allow = ["get_web_surface_state"]
+
+[[permission]]
+identifier = "deny-get-web-surface-state"
+description = "Denies the get_web_surface_state command without any pre-configured scope."
+commands.deny = ["get_web_surface_state"]

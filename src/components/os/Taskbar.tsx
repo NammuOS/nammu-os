@@ -43,6 +43,7 @@ interface TaskbarProps {
   musicOpen: boolean;
   onToggleMusic: () => void;
   onPowerOff: () => void;
+  onFlyoutVisibilityChange?: (visible: boolean) => void;
 }
 
 function resolvePinnedItem(pinnedId: string) {
@@ -88,6 +89,7 @@ export default function Taskbar({
   musicOpen,
   onToggleMusic,
   onPowerOff,
+  onFlyoutVisibilityChange,
 }: TaskbarProps) {
   const [time, setTime] = useState(new Date());
   const { volume, setVolume: updateVolume } = useMasterVolume();
@@ -105,6 +107,10 @@ export default function Taskbar({
     { id: 2, text: 'All systems nominal', time: 'Just now', read: true },
   ]);
   const contextMenu = useContextMenu();
+
+  useEffect(() => {
+    onFlyoutVisibilityChange?.(showVolume || showNotifications || showClock || showPower);
+  }, [onFlyoutVisibilityChange, showClock, showNotifications, showPower, showVolume]);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);

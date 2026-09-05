@@ -15,6 +15,18 @@ export interface UploadTicket {
 const TICKET_VERSION = 'v1';
 const TICKET_LIFETIME_MS = 15 * 60 * 1000;
 
+function decodeCanonicalBase64Url(value: string): Buffer {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error('Malformed upload ticket encoding.');
+  }
+
+  const decoded = Buffer.from(value, 'base64url');
+  if (decoded.toString('base64url') !== value) {
+    throw new Error('Non-canonical upload ticket encoding.');
+  }
+  return decoded;
+}
+
 function getEncryptionKey(): Buffer {
   const secret = process.env.UPLOAD_SESSION_SECRET || env.AUTH_SECRET;
   return crypto.createHash('sha256').update(secret).digest();
@@ -50,16 +62,18 @@ export function readUploadTicket(token: string, now = Date.now()): UploadTicket 
   }
 
   try {
-    const decipher = crypto.createDecipheriv(
-      'aes-256-gcm',
-      getEncryptionKey(),
-      Buffer.from(encodedIv, 'base64url'),
+    const iv = decodeCanonicalBase64Url(encodedIv);
+    const authTag = decodeCanonicalBase64Url(encodedAuthTag);
+    const encryptedPayload = decodeCanonicalBase64Url(encodedPayload);
+    if (iv.byteLength !== 12 || authTag.byteLength !== 16 || encryptedPayload.byteLength === 0) {
+      throw new Error('Malformed upload ticket cryptography parameters.');
+    }
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv);
+    decipher.setAuthTag(authTag);
+    const decrypted = Buffer.concat([decipher.update(encryptedPayload), decipher.final()]).toString(
+      'utf8',
     );
-    decipher.setAuthTag(Buffer.from(encodedAuthTag, 'base64url'));
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(encodedPayload, 'base64url')),
-      decipher.final(),
-    ]).toString('utf8');
     const payload = JSON.parse(decrypted) as UploadTicket;
 
     if (

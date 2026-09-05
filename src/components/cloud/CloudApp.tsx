@@ -10,6 +10,7 @@ import type {
   UploadTask,
 } from './types/cloudTypes';
 import { cloudApi } from './services/cloudClient';
+import { getPlatformCapabilities } from '../../platform';
 
 import CloudSidebar from './CloudSidebar';
 import CloudHomeView from './views/CloudHomeView';
@@ -191,14 +192,29 @@ export default function CloudApp() {
         );
       });
 
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = file.file_name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+      const platform = getPlatformCapabilities();
+      if (platform.runtime === 'tauri') {
+        const saved = await platform.files.save({
+          suggestedName: file.file_name,
+          contents: new Uint8Array(await blob.arrayBuffer()),
+          mimeType: blob.type || file.mime_type,
+        });
+        if (saved.status === 'cancelled') {
+          throw new DOMException('Download cancelled.', 'AbortError');
+        }
+        if (saved.status !== 'success') {
+          throw new Error('Nammu could not save the downloaded file.');
+        }
+      } else {
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = file.file_name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+      }
 
       setTasks((prev) =>
         prev.map((t) =>
@@ -207,7 +223,15 @@ export default function CloudApp() {
       );
     } catch (err: any) {
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: 'failed', error: err?.message } : t)),
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                status: err?.name === 'AbortError' ? 'cancelled' : 'failed',
+                error: err?.name === 'AbortError' ? undefined : err?.message,
+              }
+            : t,
+        ),
       );
     }
   };
@@ -282,9 +306,65 @@ export default function CloudApp() {
     };
   }, [currentPath, loadData, loadPathFiles]);
 
-  const handleConnectProvider = async (provider: CloudProvider, data: any) => {
+  const handleConnectProvider = async (
+    provider: CloudProvider,
+    data: any,
+    signal?: AbortSignal,
+  ) => {
     const isOAuth = ['google_drive', 'onedrive', 'dropbox', 'yandex'].includes(provider);
     if (isOAuth) {
+      const platform = getPlatformCapabilities();
+      const service = await platform.services.ready();
+      if (service.runtime === 'desktop-local') {
+        if (provider !== 'google_drive') {
+          throw new Error('Only Google Drive desktop authorization is available right now.');
+        }
+        const attempt = await cloudApi.startDesktopOAuth('google_drive', data?.label);
+        const opened = await platform.external.openUrl(attempt.authorizationUrl);
+        if (opened.status !== 'success') {
+          await cloudApi.cancelDesktopOAuth(attempt.attemptId).catch(() => undefined);
+          throw new Error(
+            opened.status === 'cancelled'
+              ? 'Google Drive authorization was cancelled.'
+              : 'Nammu could not open the system browser for Google authorization.',
+          );
+        }
+
+        const poll = async () => {
+          while (!signal?.aborted) {
+            const status = await cloudApi.getDesktopOAuthStatus(attempt.attemptId);
+            if (status.status === 'completed') return status;
+            if (['cancelled', 'expired', 'failed'].includes(status.status)) {
+              throw new Error(status.error?.message || 'Google Drive was not connected.');
+            }
+            await new Promise<void>((resolve, reject) => {
+              const timer = window.setTimeout(resolve, 700);
+              signal?.addEventListener(
+                'abort',
+                () => {
+                  window.clearTimeout(timer);
+                  reject(new DOMException('Authorization cancelled.', 'AbortError'));
+                },
+                { once: true },
+              );
+            });
+          }
+          throw new DOMException('Authorization cancelled.', 'AbortError');
+        };
+
+        try {
+          await poll();
+        } catch (error) {
+          if (signal?.aborted) {
+            await cloudApi.cancelDesktopOAuth(attempt.attemptId).catch(() => undefined);
+          }
+          throw error;
+        }
+        await loadData();
+        await loadPathFiles(currentPath);
+        return;
+      }
+
       const width = 560;
       const height = 680;
       const left = window.screenX + (window.outerWidth - width) / 2;
@@ -422,11 +502,9 @@ export default function CloudApp() {
         {section === 'shared-with-me' && (
           <CloudSharedView
             files={sharedFiles}
-            onOpenFile={(file) => {
-              setCurrentPath(`${file.virtual_path}${file.file_name}/`);
-              setSection('my-drive');
-            }}
+            onOpenFolder={(file) => cloudApi.listSharedFiles(file.id)}
             onPreviewFile={(f) => setPreviewFile(f)}
+            onDownloadFile={handleDownloadFile}
             onShowDetails={(f) => setDetailsFile(f)}
             onToggleStar={handleToggleStar}
           />
@@ -440,6 +518,8 @@ export default function CloudApp() {
               setSection('my-drive');
             }}
             onPreviewFile={(f) => setPreviewFile(f)}
+            onDownloadFile={handleDownloadFile}
+            onShowDetails={(f) => setDetailsFile(f)}
             onToggleStar={handleToggleStar}
           />
         )}
@@ -452,6 +532,8 @@ export default function CloudApp() {
               setSection('my-drive');
             }}
             onPreviewFile={(f) => setPreviewFile(f)}
+            onDownloadFile={handleDownloadFile}
+            onShowDetails={(f) => setDetailsFile(f)}
             onToggleStar={handleToggleStar}
           />
         )}
@@ -462,6 +544,7 @@ export default function CloudApp() {
             onRestore={handleRestoreFile}
             onDeletePermanently={handleDeletePermanently}
             onEmptyTrash={handleEmptyTrash}
+            onShowDetails={(f) => setDetailsFile(f)}
           />
         )}
       </main>

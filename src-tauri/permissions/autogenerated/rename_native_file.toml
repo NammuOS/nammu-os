@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rename-native-file"
+description = "Enables the rename_native_file command without any pre-configured scope."
+commands.allow = ["rename_native_file"]
+
+[[permission]]
+identifier = "deny-rename-native-file"
+description = "Denies the rename_native_file command without any pre-configured scope."
+commands.deny = ["rename_native_file"]

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 
 import { useWindowManager } from '../../hooks/useWindowManager';
 import Window from '../os/Window';
@@ -19,8 +19,10 @@ import { TOOL_COMPONENTS } from './toolComponents';
 import LockScreen from '../os/LockScreen';
 import { OS_LOCK_STATE_KEY, getStoredLockState, saveLockState } from '../../lib/osLock';
 import { applyIconSettings } from '../../lib/iconSettings';
+import { getPlatformCapabilities } from '../../platform';
 
 const DEFAULT_PINS = ['browser', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
+const platformServices = getPlatformCapabilities().services;
 
 function uniqueIds(values: unknown[], limit?: number): string[] {
   const unique = [...new Set(values.filter((value): value is string => typeof value === 'string'))];
@@ -75,6 +77,7 @@ export default function DesktopApp() {
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [startMenuOpen, setStartMenuOpen] = useState(false);
+  const [taskbarFlyoutOpen, setTaskbarFlyoutOpen] = useState(false);
   const [pinnedTools, setPinnedTools] = useState<string[]>(getPinned());
   const [recentTools, setRecentTools] = useState<string[]>(getRecent());
   const [suggestedTools, setSuggestedTools] = useState<string[]>([]);
@@ -97,11 +100,13 @@ export default function DesktopApp() {
         return updated;
       });
       // Record history
-      fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tool_id: toolId, tool_name: tool.name, category: tool.category }),
-      }).catch(() => {});
+      platformServices
+        .request('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_id: toolId, tool_name: tool.name, category: tool.category }),
+        })
+        .catch(() => {});
     },
     [musicOpen, openWindow],
   );
@@ -225,16 +230,19 @@ export default function DesktopApp() {
 
   // Save preferences to API when they change
   useEffect(() => {
-    fetch('/api/preferences', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pinned_tools: pinnedTools, settings: {} }),
-    }).catch(() => {});
+    platformServices
+      .request('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned_tools: pinnedTools, settings: {} }),
+      })
+      .catch(() => {});
   }, [pinnedTools]);
 
   // Load preferences from API on mount
   useEffect(() => {
-    fetch('/api/preferences')
+    platformServices
+      .request('/api/preferences')
       .then((r) => r.json())
       .then((data) => {
         if (
@@ -248,7 +256,8 @@ export default function DesktopApp() {
         }
       })
       .catch(() => {});
-    fetch('/api/history')
+    platformServices
+      .request('/api/history')
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -437,17 +446,26 @@ export default function DesktopApp() {
               onMove={moveWindow}
               onResize={resizeWindow}
               rightInset={musicOpen ? 292 : 0}
+              shellOverlayActive={launcherOpen || startMenuOpen || taskbarFlyoutOpen}
             >
               {systemApp ? (
                 <SystemAppContent appId={systemApp.id} />
               ) : Component ? (
-                <div
-                  className={
-                    tool?.id === 'subdomain-discovery' ? 'h-full overflow-hidden' : 'h-full p-3'
+                <Suspense
+                  fallback={
+                    <div className="grid h-full place-items-center text-[10px] text-os-text-dim">
+                      Loading tool…
+                    </div>
                   }
                 >
-                  <Component initialData={win.data} />
-                </div>
+                  <div
+                    className={
+                      tool?.id === 'subdomain-discovery' ? 'h-full overflow-hidden' : 'h-full p-3'
+                    }
+                  >
+                    <Component initialData={win.data} />
+                  </div>
+                </Suspense>
               ) : null}
             </Window>
           );
@@ -499,6 +517,7 @@ export default function DesktopApp() {
           musicOpen={musicOpen}
           onToggleMusic={() => setMusicOpen((current) => !current)}
           onPowerOff={powerOff}
+          onFlyoutVisibilityChange={setTaskbarFlyoutOpen}
         />
       </div>
       <ContextMenu />

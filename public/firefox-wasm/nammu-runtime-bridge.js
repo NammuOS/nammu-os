@@ -1,4 +1,76 @@
 (() => {
+  const removeLegacyPersistedWispCapability = () => {
+    try {
+      const preferenceKey = 'chrome-demo-opts';
+      const saved = JSON.parse(window.localStorage.getItem(preferenceKey) || '{}');
+      if (!saved || typeof saved !== 'object' || !Object.hasOwn(saved, 'wisp')) return;
+
+      delete saved.wisp;
+      window.localStorage.setItem(preferenceKey, JSON.stringify(saved));
+    } catch {
+      // Storage may be disabled or contain unrelated malformed legacy data.
+    }
+  };
+
+  const installWispEndpointBridge = () => {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const configuredEndpoint = fragment.get('nammu-wisp');
+    if (!configuredEndpoint) return;
+
+    let endpoint;
+    try {
+      endpoint = new URL(configuredEndpoint);
+      if (
+        (endpoint.protocol !== 'ws:' && endpoint.protocol !== 'wss:') ||
+        endpoint.username ||
+        endpoint.password ||
+        endpoint.search ||
+        endpoint.hash
+      ) {
+        throw new Error('invalid Wisp endpoint');
+      }
+    } catch {
+      return;
+    }
+
+    const endpointValue = endpoint.toString();
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const requestUrl = new URL(
+        typeof input === 'string' || input instanceof URL ? input : input.url,
+        window.location.href,
+      );
+      const method = String(
+        init?.method || (input instanceof Request ? input.method : 'GET'),
+      ).toUpperCase();
+      if (
+        method === 'GET' &&
+        requestUrl.origin === window.location.origin &&
+        requestUrl.pathname === '/api/browser/wisp-endpoint' &&
+        !requestUrl.search &&
+        !requestUrl.hash
+      ) {
+        return Promise.resolve(
+          new Response(`${endpointValue}\n`, {
+            status: 200,
+            headers: {
+              'Cache-Control': 'no-store',
+              'Content-Type': 'text/plain; charset=utf-8',
+            },
+          }),
+        );
+      }
+      return originalFetch(input, init);
+    };
+
+    // The capability remains in the bridge closure, but not in the iframe URL
+    // or browser history after initial bootstrap.
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+  };
+
+  removeLegacyPersistedWispCapability();
+  installWispEndpointBridge();
+
   const notifyParent = (message) => {
     if (window.parent === window || typeof window.geckoEvalChrome === 'function') return;
     window.parent.postMessage(

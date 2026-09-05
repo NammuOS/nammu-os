@@ -2,7 +2,7 @@ export type WebKitPresentMode = 'gpu-bitmap' | 'gpu-implicit' | 'raster-2d';
 
 export interface WebKitEngineOptions {
   canvas: HTMLCanvasElement;
-  wispUrl?: string;
+  wispUrl: string;
   presentMode?: WebKitPresentMode;
   gpu?: boolean;
   print?: (text: string) => void;

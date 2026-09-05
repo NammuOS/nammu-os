@@ -7,9 +7,11 @@ export class WispClient {
   private streamId = 1;
   private isConnected = false;
 
-  constructor(url?: string) {
-    const defaultUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/uploads`;
-    this.url = url || defaultUrl;
+  constructor(url: string) {
+    if (!url) {
+      throw new Error('A platform-provided Wisp endpoint is required.');
+    }
+    this.url = url;
   }
 
   public connect(): Promise<boolean> {

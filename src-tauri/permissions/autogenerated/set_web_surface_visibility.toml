@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-web-surface-visibility"
+description = "Enables the set_web_surface_visibility command without any pre-configured scope."
+commands.allow = ["set_web_surface_visibility"]
+
+[[permission]]
+identifier = "deny-set-web-surface-visibility"
+description = "Denies the set_web_surface_visibility command without any pre-configured scope."
+commands.deny = ["set_web_surface_visibility"]

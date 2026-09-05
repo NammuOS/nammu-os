@@ -8,11 +8,14 @@ import {
   getProviderColor,
   getProviderName,
 } from '../services/cloudClient';
+import CloudResourceInspector from '../components/CloudResourceInspector';
 
 interface RecentViewProps {
   files: CloudFile[];
   onOpenFile: (file: CloudFile) => void;
   onPreviewFile: (file: CloudFile) => void;
+  onDownloadFile: (file: CloudFile) => void;
+  onShowDetails: (file: CloudFile) => void;
   onToggleStar: (file: CloudFile) => void;
 }
 
@@ -20,13 +23,17 @@ export default function CloudRecentView({
   files,
   onOpenFile,
   onPreviewFile,
+  onDownloadFile,
+  onShowDetails,
   onToggleStar,
 }: RecentViewProps) {
   const [search, setSearch] = useState('');
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
 
   const filtered = files.filter((f) =>
     f.file_name.toLowerCase().includes(search.trim().toLowerCase()),
   );
+  const activeFile = filtered.find((file) => file.id === activeFileId) ?? null;
 
   const getFileIcon = (file: CloudFile) => {
     if (file.is_folder) return <Folder size={14} className="shrink-0 text-[#4aa3ff]" />;
@@ -62,88 +69,103 @@ export default function CloudRecentView({
         />
       </div>
 
-      <div className="flex-1 overflow-auto os-scrollbar">
-        <div className="grid grid-cols-[1fr_120px_100px_100px_80px_28px] border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] uppercase tracking-wider text-[#476077]">
-          <span>Name</span>
-          <span>Provider</span>
-          <span>Location</span>
-          <span>Last Synced</span>
-          <span className="text-right">Size</span>
-          <span />
-        </div>
-
-        <div className="divide-y divide-white/[0.02]">
-          {filtered.map((file) => {
-            const providerColor = getProviderColor(file.provider);
-            return (
-              <div
-                key={file.id}
-                onDoubleClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
-                className="grid w-full grid-cols-[1fr_120px_100px_100px_80px_28px] items-center px-3 py-2 text-left transition-colors hover:bg-white/[0.03] cursor-pointer"
-              >
-                {/* 1. Direct Name with Icon */}
-                <div className="flex min-w-0 items-center gap-2">
-                  {getFileIcon(file)}
-                  <span className="truncate text-[#c9d8e5]">{file.file_name}</span>
-                </div>
-
-                {/* 2. Provider */}
-                <div className="flex items-center gap-1.5 truncate">
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: providerColor }}
-                  />
-                  <span className="truncate font-mono text-[9px] text-[#6d859a]">
-                    {getProviderName(file.provider)}
-                  </span>
-                </div>
-
-                {/* 3. Location */}
-                <span className="truncate font-mono text-[8px] text-[#536a7d]">
-                  {file.virtual_path}
-                </span>
-
-                {/* 4. Synced */}
-                <span className="font-mono text-[8px] text-[#465c6f]">
-                  {formatDate(file.updated_at)}
-                </span>
-
-                {/* 5. Size */}
-                <span className="text-right font-mono text-[8px] text-[#465c6f]">
-                  {file.is_folder ? '—' : formatBytes(file.size)}
-                </span>
-
-                {/* 6. Star Toggle */}
-                <div className="flex items-center justify-end">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStar(file);
-                    }}
-                    className={`transition-colors ${
-                      file.is_starred
-                        ? 'text-amber-400 opacity-100'
-                        : 'text-[#3d5366] hover:text-white opacity-40 hover:opacity-100'
-                    }`}
-                    title={file.is_starred ? 'Starred' : 'Add to Starred'}
-                  >
-                    <Star size={11} fill={file.is_starred ? 'currentColor' : 'none'} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {!filtered.length && (
-            <div className="grid h-48 place-items-center font-mono text-[9px] text-[#43586b]">
-              No recent files found
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex-1 overflow-auto os-scrollbar">
+            <div className="grid grid-cols-[1fr_120px_100px_100px_80px_28px] border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] uppercase tracking-wider text-[#476077]">
+              <span>Name</span>
+              <span>Provider</span>
+              <span>Location</span>
+              <span>Last Synced</span>
+              <span className="text-right">Size</span>
+              <span />
             </div>
-          )}
+
+            <div className="divide-y divide-white/[0.02]">
+              {filtered.map((file) => {
+                const providerColor = getProviderColor(file.provider);
+                const isActive = activeFileId === file.id;
+                return (
+                  <div
+                    key={file.id}
+                    onClick={() => setActiveFileId(file.id)}
+                    onDoubleClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
+                    className={`grid w-full cursor-pointer grid-cols-[1fr_120px_100px_100px_80px_28px] items-center px-3 py-2 text-left transition-colors ${
+                      isActive ? 'bg-[#4aa3ff]/10' : 'hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    {/* 1. Direct Name with Icon */}
+                    <div className="flex min-w-0 items-center gap-2">
+                      {getFileIcon(file)}
+                      <span className="truncate text-[#c9d8e5]">{file.file_name}</span>
+                    </div>
+
+                    {/* 2. Provider */}
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: providerColor }}
+                      />
+                      <span className="truncate font-mono text-[9px] text-[#6d859a]">
+                        {getProviderName(file.provider)}
+                      </span>
+                    </div>
+
+                    {/* 3. Location */}
+                    <span className="truncate font-mono text-[8px] text-[#536a7d]">
+                      {file.virtual_path}
+                    </span>
+
+                    {/* 4. Synced */}
+                    <span className="font-mono text-[8px] text-[#465c6f]">
+                      {formatDate(file.updated_at)}
+                    </span>
+
+                    {/* 5. Size */}
+                    <span className="text-right font-mono text-[8px] text-[#465c6f]">
+                      {file.is_folder ? '—' : formatBytes(file.size)}
+                    </span>
+
+                    {/* 6. Star Toggle */}
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleStar(file);
+                        }}
+                        className={`transition-colors ${
+                          file.is_starred
+                            ? 'text-amber-400 opacity-100'
+                            : 'text-[#3d5366] hover:text-white opacity-40 hover:opacity-100'
+                        }`}
+                        title={file.is_starred ? 'Starred' : 'Add to Starred'}
+                      >
+                        <Star size={11} fill={file.is_starred ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!filtered.length && (
+                <div className="grid h-48 place-items-center font-mono text-[9px] text-[#43586b]">
+                  No recent files found
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
+            <span>{filtered.length} recent resources</span>
+            <span>Double-click to preview</span>
+          </div>
         </div>
-      </div>
-      <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
-        <span>{filtered.length} recent resources</span>
-        <span>Double-click to preview</span>
+        <CloudResourceInspector
+          file={activeFile}
+          onPreviewFile={onPreviewFile}
+          onDownloadFile={onDownloadFile}
+          onShowDetails={onShowDetails}
+          onToggleStar={onToggleStar}
+        />
       </div>
     </div>
   );

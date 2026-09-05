@@ -14,6 +14,7 @@ export interface BrowserTab {
   engineMode: BrowserEngineMode;
   isPinned?: boolean;
   isMuted?: boolean;
+  isAudioPlaying?: boolean;
   isPrivate?: boolean;
 }
 

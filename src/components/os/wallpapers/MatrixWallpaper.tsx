@@ -9,13 +9,15 @@ interface MatrixWallpaperProps {
 }
 
 interface RainColumn {
-  row: number;
+  y: number;
   speed: number;
   phase: number;
 }
 
 const SYNTH_CHARACTERS = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ<>[]{}+-*/';
 const CHAOS_CHARACTERS = '01アイウエオカキクケコサシスセソタチツテトナミムメモラリルレロ';
+const MAX_RENDER_WIDTH = 1_280;
+const MAX_RENDER_HEIGHT = 800;
 
 function colorChannels(hex: string) {
   return [
@@ -62,115 +64,169 @@ function shouldReduceMotion() {
 
 export default function MatrixWallpaper({ variant, settings }: MatrixWallpaperProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const context = canvas?.getContext('2d', { alpha: false });
+    const context = canvas?.getContext('2d', { alpha: false, desynchronized: true });
     if (!canvas || !context) return;
 
-    const fontSize = settings.size;
-    const speedScale = settings.speed / 100;
-    const baseHue = colorHue(settings.color);
     const characters = variant === 'synth-rain' ? SYNTH_CHARACTERS : CHAOS_CHARACTERS;
     let columns: RainColumn[] = [];
-    let cssWidth = 1;
-    let cssHeight = 1;
-    let frameId = 0;
-    let lastFrame = 0;
+    let renderWidth = 1;
+    let renderHeight = 1;
+    let renderScale = 1;
+    let renderedFontSize = 0;
+    let timer = 0;
+    let resizeFrame = 0;
+    let lastFrame = performance.now();
+    let lastWindowActivityCheck = 0;
+    let hasVisibleApplicationWindow = false;
+    let documentVisible = document.visibilityState === 'visible';
     let reducedMotion = shouldReduceMotion();
 
-    const resize = () => {
-      const bounds = canvas.getBoundingClientRect();
-      cssWidth = Math.max(1, Math.floor(bounds.width));
-      cssHeight = Math.max(1, Math.floor(bounds.height));
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-
-      canvas.width = Math.floor(cssWidth * pixelRatio);
-      canvas.height = Math.floor(cssHeight * pixelRatio);
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      context.fillStyle = '#020604';
-      context.fillRect(0, 0, cssWidth, cssHeight);
-
-      const columnCount = Math.ceil(cssWidth / fontSize) + 1;
+    const resetColumns = () => {
+      const fontSize = Math.max(6, settingsRef.current.size * renderScale);
+      renderedFontSize = settingsRef.current.size;
+      const columnCount = Math.ceil(renderWidth / fontSize) + 1;
       columns = Array.from({ length: columnCount }, (_, index) => ({
-        row: Math.random() * -(cssHeight / fontSize + 30),
+        y: Math.random() * -(renderHeight + fontSize * 30),
         speed: variant === 'synth-rain' ? 0.65 + Math.random() * 0.7 : 0.3 + Math.random() * 1.65,
         phase: index * 0.61 + Math.random() * Math.PI,
       }));
     };
 
-    const draw = (timestamp: number) => {
-      const frameInterval = reducedMotion ? 120 : variant === 'synth-rain' ? 48 : 38;
-      if (timestamp - lastFrame >= frameInterval) {
-        const time = timestamp / 1000;
-        context.globalAlpha = 1;
-        context.fillStyle =
-          variant === 'synth-rain' ? 'rgba(0, 5, 2, 0.085)' : 'rgba(2, 2, 8, 0.13)';
-        context.fillRect(0, 0, cssWidth, cssHeight);
-        context.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-        context.textBaseline = 'top';
+    const resize = () => {
+      const bounds = canvas.getBoundingClientRect();
+      const cssWidth = Math.max(1, Math.floor(bounds.width));
+      const cssHeight = Math.max(1, Math.floor(bounds.height));
+      // Matrix glyphs remain crisp when the browser scales a smaller backing
+      // canvas, while fill/fade cost is bounded on high-DPI and 4K displays.
+      renderScale = Math.min(1, MAX_RENDER_WIDTH / cssWidth, MAX_RENDER_HEIGHT / cssHeight);
+      renderWidth = Math.max(1, Math.floor(cssWidth * renderScale));
+      renderHeight = Math.max(1, Math.floor(cssHeight * renderScale));
+      if (canvas.width !== renderWidth) canvas.width = renderWidth;
+      if (canvas.height !== renderHeight) canvas.height = renderHeight;
+      context.fillStyle = '#020604';
+      context.fillRect(0, 0, renderWidth, renderHeight);
+      resetColumns();
+    };
 
-        columns.forEach((column, index) => {
-          const character = characters[Math.floor(Math.random() * characters.length)];
-          const baseX = index * fontSize;
-          const x =
-            variant === 'chaos-flow'
-              ? baseX + Math.sin(time * 2.1 + column.phase) * 6 + (Math.random() - 0.5) * 5
-              : baseX;
-          const y = column.row * fontSize;
+    const scheduleResize = () => {
+      if (resizeFrame) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = 0;
+        resize();
+      });
+    };
 
-          if (variant === 'chaos-flow') {
-            const hue =
-              (baseHue + Math.sin(time * 1.6 + column.phase) * 48 + index * 2.5 + 360) % 360;
-            context.fillStyle = `hsl(${hue} 100% 62%)`;
-            context.shadowColor = `hsl(${hue} 100% 52%)`;
-            context.shadowBlur = 7;
-            context.globalAlpha = 0.82;
-          } else {
-            const isHead = Math.random() > 0.92;
-            context.fillStyle = isHead ? lightenColor(settings.color, 0.78) : settings.color;
-            context.shadowColor = settings.color;
-            context.shadowBlur = isHead ? 8 : 3;
-            context.globalAlpha = isHead ? 0.98 : 0.78;
-          }
+    const schedule = (delay: number) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(draw, delay);
+    };
 
-          context.fillText(character, x, y);
-          column.row += column.speed * speedScale * (reducedMotion ? 0.45 : 1);
-
-          if (y > cssHeight + fontSize && Math.random() > 0.94) {
-            column.row = -(Math.random() * 28 + 2);
-            column.speed =
-              variant === 'synth-rain' ? 0.65 + Math.random() * 0.7 : 0.3 + Math.random() * 1.65;
-          }
-        });
-
-        context.shadowBlur = 0;
-        context.globalAlpha = 1;
-        lastFrame = timestamp;
+    const draw = () => {
+      if (!documentVisible) {
+        schedule(500);
+        return;
       }
 
-      frameId = window.requestAnimationFrame(draw);
+      const now = performance.now();
+      if (now - lastWindowActivityCheck >= 1_000) {
+        hasVisibleApplicationWindow = Boolean(
+          document.querySelector('.os-window-chrome:not([aria-hidden="true"])'),
+        );
+        lastWindowActivityCheck = now;
+      }
+
+      const frameInterval = reducedMotion
+        ? 250
+        : hasVisibleApplicationWindow
+          ? 125
+          : variant === 'synth-rain'
+            ? 50
+            : 42;
+      const elapsed = Math.min(250, Math.max(1, now - lastFrame));
+      const currentSettings = settingsRef.current;
+      if (renderedFontSize !== currentSettings.size) resetColumns();
+
+      const fontSize = Math.max(6, currentSettings.size * renderScale);
+      const speedScale = currentSettings.speed / 100;
+      const baseHue = colorHue(currentSettings.color);
+      const fadeBase = variant === 'synth-rain' ? 0.055 : 0.085;
+      const fadeAlpha = 1 - Math.pow(1 - fadeBase, elapsed / 50);
+
+      context.globalAlpha = 1;
+      context.fillStyle =
+        variant === 'synth-rain'
+          ? `rgba(0, 5, 2, ${fadeAlpha})`
+          : `rgba(2, 2, 8, ${fadeAlpha})`;
+      context.fillRect(0, 0, renderWidth, renderHeight);
+      context.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      context.textBaseline = 'top';
+
+      columns.forEach((column, index) => {
+        const character = characters[Math.floor(Math.random() * characters.length)];
+        const baseX = index * fontSize;
+        const x =
+          variant === 'chaos-flow'
+            ? baseX + Math.sin(now * 0.0021 + column.phase) * 4 * renderScale
+            : baseX;
+
+        if (variant === 'chaos-flow') {
+          const hue =
+            (baseHue + Math.sin(now * 0.0016 + column.phase) * 48 + index * 2.5 + 360) % 360;
+          context.fillStyle = `hsl(${hue} 100% 62%)`;
+          context.globalAlpha = 0.82;
+        } else {
+          const isHead = Math.random() > 0.92;
+          context.fillStyle = isHead ? lightenColor(currentSettings.color, 0.78) : currentSettings.color;
+          context.globalAlpha = isHead ? 0.98 : 0.78;
+        }
+
+        context.fillText(character, x, column.y);
+        column.y += column.speed * fontSize * speedScale * (elapsed / 1_000) * 8;
+
+        if (column.y > renderHeight + fontSize && Math.random() > 0.94) {
+          column.y = -(Math.random() * fontSize * 28 + fontSize * 2);
+          column.speed =
+            variant === 'synth-rain' ? 0.65 + Math.random() * 0.7 : 0.3 + Math.random() * 1.65;
+        }
+      });
+
+      context.globalAlpha = 1;
+      lastFrame = now;
+      schedule(frameInterval);
     };
 
     const syncMotionPreference = () => {
       reducedMotion = shouldReduceMotion();
     };
-    const resizeObserver = new ResizeObserver(resize);
+    const syncDocumentVisibility = () => {
+      documentVisible = document.visibilityState === 'visible';
+      lastFrame = performance.now();
+      if (documentVisible) schedule(0);
+    };
+    const resizeObserver = new ResizeObserver(scheduleResize);
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     resizeObserver.observe(canvas);
     motionPreference.addEventListener('change', syncMotionPreference);
+    document.addEventListener('visibilitychange', syncDocumentVisibility);
     window.addEventListener('nammu-theme-change', syncMotionPreference);
     resize();
-    frameId = window.requestAnimationFrame(draw);
+    schedule(0);
 
     return () => {
-      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timer);
+      window.cancelAnimationFrame(resizeFrame);
       resizeObserver.disconnect();
       motionPreference.removeEventListener('change', syncMotionPreference);
+      document.removeEventListener('visibilitychange', syncDocumentVisibility);
       window.removeEventListener('nammu-theme-change', syncMotionPreference);
     };
-  }, [settings, variant]);
+  }, [variant]);
 
   return <canvas ref={canvasRef} className="block h-full w-full bg-[#020604]" />;
 }

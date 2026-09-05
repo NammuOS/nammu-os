@@ -369,14 +369,8 @@ export default function CloudMyDriveView({
       onDownloadFile(file);
       return;
     }
-    const downloadUrl = cloudApi.getDownloadUrl(file.id);
     try {
-      const res = await fetch(downloadUrl, { credentials: 'include' });
-      if (!res.ok) {
-        window.open(downloadUrl, '_blank');
-        return;
-      }
-      const blob = await res.blob();
+      const blob = await cloudApi.downloadFileWithProgress(file, () => undefined);
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -385,9 +379,7 @@ export default function CloudMyDriveView({
       link.click();
       document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-    } catch {
-      window.open(downloadUrl, '_blank');
-    }
+    } catch {}
   };
 
   const handleBulkDownload = () => {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-native-copy"
+description = "Enables the start_native_copy command without any pre-configured scope."
+commands.allow = ["start_native_copy"]
+
+[[permission]]
+identifier = "deny-start-native-copy"
+description = "Denies the start_native_copy command without any pre-configured scope."
+commands.deny = ["start_native_copy"]

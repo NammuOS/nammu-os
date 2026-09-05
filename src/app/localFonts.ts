@@ -1,0 +1,12 @@
+import '@fontsource/outfit/latin-300.css';
+import '@fontsource/outfit/latin-400.css';
+import '@fontsource/outfit/latin-500.css';
+import '@fontsource/outfit/latin-600.css';
+import '@fontsource/outfit/latin-700.css';
+import '@fontsource/syne/latin-600.css';
+import '@fontsource/syne/latin-700.css';
+import '@fontsource/syne/latin-800.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-400-italic.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';

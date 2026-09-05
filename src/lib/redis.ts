@@ -1,13 +1,15 @@
 import { Redis as UpstashRedis } from '@upstash/redis';
 import IORedis from 'ioredis';
 
-class InMemoryCache {
+export class InMemoryCache {
   private store = new Map<string, { val: string; exp: number }>();
+
+  constructor(private readonly now: () => number = Date.now) {}
 
   async get(key: string): Promise<string | null> {
     const item = this.store.get(key);
     if (!item) return null;
-    if (Date.now() > item.exp) {
+    if (this.now() > item.exp) {
       this.store.delete(key);
       return null;
     }
@@ -15,7 +17,7 @@ class InMemoryCache {
   }
 
   async set(key: string, value: string, ttlSeconds = 300): Promise<'OK'> {
-    this.store.set(key, { val: value, exp: Date.now() + ttlSeconds * 1000 });
+    this.store.set(key, { val: value, exp: this.now() + ttlSeconds * 1000 });
     return 'OK';
   }
 
@@ -44,44 +46,58 @@ export interface CacheClient {
   incr?(key: string): Promise<number>;
 }
 
-let cacheClient: CacheClient;
+export type CacheBackend = 'memory' | 'upstash' | 'redis';
+type CacheEnvironment = Readonly<Record<string, string | undefined>>;
 
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  const upstash = new UpstashRedis({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  });
+export function selectCacheBackend(environment: CacheEnvironment): CacheBackend {
+  if (environment.NAMMU_RUNTIME === 'desktop-local') return 'memory';
+  if (environment.UPSTASH_REDIS_REST_URL && environment.UPSTASH_REDIS_REST_TOKEN) {
+    return 'upstash';
+  }
+  if (environment.REDIS_URL) return 'redis';
+  return 'memory';
+}
 
-  cacheClient = {
-    get: async (key: string) => {
-      const res = await upstash.get<string>(key);
-      return res ? (typeof res === 'string' ? res : JSON.stringify(res)) : null;
-    },
-    set: async (key: string, value: string, ttlSeconds = 300) => {
-      return (await upstash.set(key, value, { ex: ttlSeconds })) as any;
-    },
-    del: async (key: string) => {
-      return await upstash.del(key);
-    },
-    incr: async (key: string) => {
-      return await upstash.incr(key);
-    },
-  };
-} else if (process.env.REDIS_URL) {
-  const ioredis = new IORedis(process.env.REDIS_URL, {
+export function createCacheClient(environment: CacheEnvironment = process.env): CacheClient {
+  const backend = selectCacheBackend(environment);
+  if (backend === 'memory') return new InMemoryCache();
+
+  if (backend === 'upstash') {
+    const upstash = new UpstashRedis({
+      url: environment.UPSTASH_REDIS_REST_URL!,
+      token: environment.UPSTASH_REDIS_REST_TOKEN!,
+    });
+
+    return {
+      get: async (key: string) => {
+        const res = await upstash.get<string>(key);
+        return res ? (typeof res === 'string' ? res : JSON.stringify(res)) : null;
+      },
+      set: async (key: string, value: string, ttlSeconds = 300) => {
+        return (await upstash.set(key, value, { ex: ttlSeconds })) as any;
+      },
+      del: async (key: string) => {
+        return await upstash.del(key);
+      },
+      incr: async (key: string) => {
+        return await upstash.incr(key);
+      },
+    };
+  }
+
+  const ioredis = new IORedis(environment.REDIS_URL!, {
     maxRetriesPerRequest: 1,
     lazyConnect: true,
   });
 
-  cacheClient = {
+  return {
     get: (key: string) => ioredis.get(key),
     set: (key: string, value: string, ttlSeconds = 300) =>
       ioredis.set(key, value, 'EX', ttlSeconds),
     del: (key: string) => ioredis.del(key),
     incr: (key: string) => ioredis.incr(key),
   };
-} else {
-  cacheClient = new InMemoryCache();
 }
 
-export const redis = cacheClient;
+export const cacheBackend = selectCacheBackend(process.env);
+export const redis = createCacheClient(process.env);

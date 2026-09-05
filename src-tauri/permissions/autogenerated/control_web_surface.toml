@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-control-web-surface"
+description = "Enables the control_web_surface command without any pre-configured scope."
+commands.allow = ["control_web_surface"]
+
+[[permission]]
+identifier = "deny-control-web-surface"
+description = "Denies the control_web_surface command without any pre-configured scope."
+commands.deny = ["control_web_surface"]

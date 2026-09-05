@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-web-surface"
+description = "Enables the focus_web_surface command without any pre-configured scope."
+commands.allow = ["focus_web_surface"]
+
+[[permission]]
+identifier = "deny-focus-web-surface"
+description = "Denies the focus_web_surface command without any pre-configured scope."
+commands.deny = ["focus_web_surface"]

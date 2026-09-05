@@ -8,11 +8,14 @@ import {
   getProviderColor,
   getProviderName,
 } from '../services/cloudClient';
+import CloudResourceInspector from '../components/CloudResourceInspector';
 
 interface StarredViewProps {
   files: CloudFile[];
   onOpenFile: (file: CloudFile) => void;
   onPreviewFile: (file: CloudFile) => void;
+  onDownloadFile: (file: CloudFile) => void;
+  onShowDetails: (file: CloudFile) => void;
   onToggleStar: (file: CloudFile) => void;
 }
 
@@ -20,13 +23,17 @@ export default function CloudStarredView({
   files,
   onOpenFile,
   onPreviewFile,
+  onDownloadFile,
+  onShowDetails,
   onToggleStar,
 }: StarredViewProps) {
   const [search, setSearch] = useState('');
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
 
   const filtered = files.filter(
     (f) => Boolean(f.is_starred) && f.file_name.toLowerCase().includes(search.trim().toLowerCase()),
   );
+  const activeFile = filtered.find((file) => file.id === activeFileId) ?? null;
 
   const getFileIcon = (file: CloudFile) => {
     if (file.is_folder) return <Folder size={14} className="shrink-0 text-[#4aa3ff]" />;
@@ -62,84 +69,99 @@ export default function CloudStarredView({
         />
       </div>
 
-      <div className="flex-1 overflow-auto os-scrollbar">
-        <div className="grid grid-cols-[1fr_120px_100px_100px_80px_28px] border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] uppercase tracking-wider text-[#476077]">
-          <span>Name</span>
-          <span>Provider</span>
-          <span>Virtual Path</span>
-          <span>Modified</span>
-          <span className="text-right">Size</span>
-          <span />
-        </div>
-
-        <div className="divide-y divide-white/[0.02]">
-          {filtered.map((file) => {
-            const providerColor = getProviderColor(file.provider);
-            return (
-              <div
-                key={file.id}
-                onDoubleClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
-                className="grid w-full grid-cols-[1fr_120px_100px_100px_80px_28px] items-center px-3 py-2 text-left transition-colors hover:bg-white/[0.03] cursor-pointer"
-              >
-                {/* 1. Direct Name with Icon */}
-                <div className="flex min-w-0 items-center gap-2">
-                  {getFileIcon(file)}
-                  <span className="truncate text-[#c9d8e5]">{file.file_name}</span>
-                </div>
-
-                {/* 2. Provider */}
-                <div className="flex items-center gap-1.5 truncate">
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: providerColor }}
-                  />
-                  <span className="truncate font-mono text-[9px] text-[#6d859a]">
-                    {getProviderName(file.provider)}
-                  </span>
-                </div>
-
-                {/* 3. Virtual Path */}
-                <span className="truncate font-mono text-[8px] text-[#536a7d]">
-                  {file.virtual_path}
-                </span>
-
-                {/* 4. Modified */}
-                <span className="font-mono text-[8px] text-[#465c6f]">
-                  {formatDate(file.updated_at)}
-                </span>
-
-                {/* 5. Size */}
-                <span className="text-right font-mono text-[8px] text-[#465c6f]">
-                  {file.is_folder ? '—' : formatBytes(file.size)}
-                </span>
-
-                {/* 6. Star on the right */}
-                <div className="flex items-center justify-end">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStar(file);
-                    }}
-                    className="text-amber-400 hover:opacity-75"
-                    title="Unstar item"
-                  >
-                    <Star size={11} fill="currentColor" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {!filtered.length && (
-            <div className="grid h-48 place-items-center font-mono text-[9px] text-[#43586b]">
-              No starred items yet. Star any file from My Drive to bookmark it here.
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex-1 overflow-auto os-scrollbar">
+            <div className="grid grid-cols-[1fr_120px_100px_100px_80px_28px] border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] uppercase tracking-wider text-[#476077]">
+              <span>Name</span>
+              <span>Provider</span>
+              <span>Virtual Path</span>
+              <span>Modified</span>
+              <span className="text-right">Size</span>
+              <span />
             </div>
-          )}
+
+            <div className="divide-y divide-white/[0.02]">
+              {filtered.map((file) => {
+                const providerColor = getProviderColor(file.provider);
+                const isActive = activeFileId === file.id;
+                return (
+                  <div
+                    key={file.id}
+                    onClick={() => setActiveFileId(file.id)}
+                    onDoubleClick={() => (file.is_folder ? onOpenFile(file) : onPreviewFile(file))}
+                    className={`grid w-full cursor-pointer grid-cols-[1fr_120px_100px_100px_80px_28px] items-center px-3 py-2 text-left transition-colors ${
+                      isActive ? 'bg-[#4aa3ff]/10' : 'hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    {/* 1. Direct Name with Icon */}
+                    <div className="flex min-w-0 items-center gap-2">
+                      {getFileIcon(file)}
+                      <span className="truncate text-[#c9d8e5]">{file.file_name}</span>
+                    </div>
+
+                    {/* 2. Provider */}
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: providerColor }}
+                      />
+                      <span className="truncate font-mono text-[9px] text-[#6d859a]">
+                        {getProviderName(file.provider)}
+                      </span>
+                    </div>
+
+                    {/* 3. Virtual Path */}
+                    <span className="truncate font-mono text-[8px] text-[#536a7d]">
+                      {file.virtual_path}
+                    </span>
+
+                    {/* 4. Modified */}
+                    <span className="font-mono text-[8px] text-[#465c6f]">
+                      {formatDate(file.updated_at)}
+                    </span>
+
+                    {/* 5. Size */}
+                    <span className="text-right font-mono text-[8px] text-[#465c6f]">
+                      {file.is_folder ? '—' : formatBytes(file.size)}
+                    </span>
+
+                    {/* 6. Star on the right */}
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleStar(file);
+                        }}
+                        className="text-amber-400 hover:opacity-75"
+                        title="Unstar item"
+                      >
+                        <Star size={11} fill="currentColor" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!filtered.length && (
+                <div className="grid h-48 place-items-center font-mono text-[9px] text-[#43586b]">
+                  No starred items yet. Star any file from My Drive to bookmark it here.
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
+            <span>{filtered.length} starred resources</span>
+            <span>Double-click to preview</span>
+          </div>
         </div>
-      </div>
-      <div className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.05] bg-white/[0.01] px-3 font-mono text-[8px] text-[#465c6f]">
-        <span>{filtered.length} starred resources</span>
-        <span>Double-click to preview</span>
+        <CloudResourceInspector
+          file={activeFile}
+          onPreviewFile={onPreviewFile}
+          onDownloadFile={onDownloadFile}
+          onShowDetails={onShowDetails}
+          onToggleStar={onToggleStar}
+        />
       </div>
     </div>
   );

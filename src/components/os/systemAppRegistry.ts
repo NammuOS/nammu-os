@@ -15,12 +15,14 @@ import {
   Calculator,
   QrCode,
   Music2,
+  Send,
   type LucideIcon,
 } from 'lucide-react';
 
 export type SystemAppId =
   | 'browser'
   | 'whatsapp'
+  | 'telegram'
   | 'files'
   | 'cloud'
   | 'terminal'
@@ -81,6 +83,14 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     title: 'WhatsApp',
     icon: MessageCircle,
     keywords: ['whatsapp', 'chat', 'message', 'messaging', 'social', 'calls'],
+  },
+  {
+    id: 'telegram',
+    windowId: 'system:telegram',
+    title: 'Telegram',
+    icon: Send,
+    startMenu: true,
+    keywords: ['telegram', 'chat', 'message', 'messaging', 'social', 'calls', 'channels'],
   },
   {
     id: 'browser',

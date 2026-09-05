@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const isTrash = searchParams.get('trash') === '1';
     const isRecent = searchParams.get('recent') === '1';
     const isShared = searchParams.get('shared') === '1';
+    const sharedParentId = searchParams.get('shared_parent');
     const search = (searchParams.get('search') || '').trim().toLowerCase();
 
     const [list, accounts] = await Promise.all([
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
 
     // Shared-item metadata is not represented by the local filesystem schema yet.
     // Return an honest empty collection instead of leaking root files into Shared.
-    if (isShared) return NextResponse.json({ data: [] });
+    if (isShared || sharedParentId) return NextResponse.json({ data: [] });
 
     let filtered = list;
     if (isTrash) {

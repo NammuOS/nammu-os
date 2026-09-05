@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { memo, useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Columns2,
   Grid2X2,
@@ -16,6 +16,8 @@ import type { SnapEdge, WindowState } from '../../hooks/useWindowManager';
 import { getStandaloneWindowUrl } from '../../lib/standaloneWindow';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
+import { shouldKeepWindowRuntimeAlive } from '../../lib/appRuntimePolicy';
+import { WindowRuntimeProvider } from './WindowRuntimeContext';
 
 interface WindowProps {
   win: WindowState;
@@ -27,12 +29,13 @@ interface WindowProps {
   onMove: (id: string, x: number, y: number) => void;
   onResize: (id: string, width: number, height: number) => void;
   rightInset: number;
+  shellOverlayActive: boolean;
   children: React.ReactNode;
 }
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
-export default function Window({
+function Window({
   win,
   onClose,
   onFocus,
@@ -42,8 +45,12 @@ export default function Window({
   onMove,
   onResize,
   rightInset,
+  shellOverlayActive,
   children,
 }: WindowProps) {
+  const windowRef = useRef<HTMLDivElement | null>(null);
+  const dragFrameRef = useRef(0);
+  const resizeFrameRef = useRef(0);
   const standaloneUrl = getStandaloneWindowUrl(win.toolId);
   const dragRef = useRef<{
     startX: number;
@@ -53,6 +60,8 @@ export default function Window({
     wasMaximized: boolean;
     wasSnapped: boolean;
     restored: boolean;
+    currentX: number;
+    currentY: number;
   } | null>(null);
   const resizeRef = useRef<{
     startX: number;
@@ -62,12 +71,24 @@ export default function Window({
     width: number;
     height: number;
     direction: ResizeDirection;
+    nextX: number;
+    nextY: number;
+    nextWidth: number;
+    nextHeight: number;
   } | null>(null);
   const snapPreviewRef = useRef<SnapEdge | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [snapPreview, setSnapPreview] = useState<SnapEdge | null>(null);
   const contextMenu = useContextMenu();
+
+  useEffect(
+    () => () => {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      window.cancelAnimationFrame(resizeFrameRef.current);
+    },
+    [],
+  );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -88,7 +109,10 @@ export default function Window({
         wasMaximized: win.isMaximized,
         wasSnapped: Boolean(win.snap),
         restored: !wasDocked,
+        currentX: origX,
+        currentY: origY,
       };
+      if (windowRef.current) windowRef.current.style.willChange = 'transform';
       setIsDragging(true);
 
       const handleMouseMove = (ev: MouseEvent) => {
@@ -111,6 +135,8 @@ export default function Window({
             origX: restoredX,
             origY: 0,
             restored: true,
+            currentX: restoredX,
+            currentY: 0,
           };
           onMove(win.id, restoredX, 0);
           return;
@@ -119,11 +145,18 @@ export default function Window({
         const dy = ev.clientY - dragRef.current.startY;
         const maxX = Math.max(36, workspaceRight - win.width);
         const maxY = Math.max(0, window.innerHeight - 32 - 26);
-        onMove(
-          win.id,
-          Math.max(36, Math.min(maxX, dragRef.current.origX + dx)),
-          Math.max(0, Math.min(maxY, dragRef.current.origY + dy)),
-        );
+        const nextX = Math.max(36, Math.min(maxX, dragRef.current.origX + dx));
+        const nextY = Math.max(0, Math.min(maxY, dragRef.current.origY + dy));
+        dragRef.current.currentX = nextX;
+        dragRef.current.currentY = nextY;
+        if (!dragFrameRef.current) {
+          dragFrameRef.current = window.requestAnimationFrame(() => {
+            dragFrameRef.current = 0;
+            const state = dragRef.current;
+            if (!state || !windowRef.current) return;
+            windowRef.current.style.transform = `translate3d(${state.currentX - win.x}px, ${state.currentY - win.y}px, 0)`;
+          });
+        }
 
         const atLeft = ev.clientX <= 52;
         const atRight = ev.clientX >= workspaceRight - 16;
@@ -138,17 +171,34 @@ export default function Window({
         else if (atBottom) edge = 'bottom';
         else if (atLeft) edge = 'left';
         else if (atRight) edge = 'right';
-        snapPreviewRef.current = edge;
-        setSnapPreview(edge);
+        if (snapPreviewRef.current !== edge) {
+          snapPreviewRef.current = edge;
+          setSnapPreview(edge);
+        }
       };
 
       const handleMouseUp = () => {
         const edge = snapPreviewRef.current;
+        const finalPosition = dragRef.current
+          ? { x: dragRef.current.currentX, y: dragRef.current.currentY }
+          : null;
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = 0;
         dragRef.current = null;
         snapPreviewRef.current = null;
         setIsDragging(false);
         setSnapPreview(null);
-        if (edge) onSnap(win.id, edge);
+        if (edge) {
+          if (windowRef.current) windowRef.current.style.transform = '';
+          onSnap(win.id, edge);
+        } else if (finalPosition) {
+          onMove(win.id, finalPosition.x, finalPosition.y);
+          window.requestAnimationFrame(() => {
+            if (!windowRef.current) return;
+            windowRef.current.style.transform = '';
+            windowRef.current.style.willChange = '';
+          });
+        }
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
@@ -185,6 +235,10 @@ export default function Window({
         width: win.width,
         height: win.height,
         direction,
+        nextX: win.x,
+        nextY: win.y,
+        nextWidth: win.width,
+        nextHeight: win.height,
       };
       setIsResizing(true);
       const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -211,12 +265,50 @@ export default function Window({
           nextY = Math.max(0, Math.min(state.y + state.height - 200, state.y + dy));
           nextHeight = state.height + state.y - nextY;
         }
-        if (nextX !== state.x || nextY !== state.y) onMove(win.id, nextX, nextY);
-        onResize(win.id, nextWidth, nextHeight);
+        state.nextX = nextX;
+        state.nextY = nextY;
+        state.nextWidth = nextWidth;
+        state.nextHeight = nextHeight;
+        if (!resizeFrameRef.current) {
+          resizeFrameRef.current = window.requestAnimationFrame(() => {
+            resizeFrameRef.current = 0;
+            const current = resizeRef.current;
+            const element = windowRef.current;
+            if (!current || !element) return;
+            element.style.willChange = 'left, top, width, height';
+            element.style.left = `${current.nextX}px`;
+            element.style.top = `${current.nextY}px`;
+            element.style.width = `${current.nextWidth}px`;
+            element.style.height = `${current.nextHeight}px`;
+          });
+        }
       };
       const handleMouseUp = () => {
+        const finalBounds = resizeRef.current
+          ? {
+              x: resizeRef.current.nextX,
+              y: resizeRef.current.nextY,
+              width: resizeRef.current.nextWidth,
+              height: resizeRef.current.nextHeight,
+            }
+          : null;
+        window.cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = 0;
+        if (finalBounds && windowRef.current) {
+          windowRef.current.style.left = `${finalBounds.x}px`;
+          windowRef.current.style.top = `${finalBounds.y}px`;
+          windowRef.current.style.width = `${finalBounds.width}px`;
+          windowRef.current.style.height = `${finalBounds.height}px`;
+        }
         resizeRef.current = null;
         setIsResizing(false);
+        if (finalBounds) {
+          if (finalBounds.x !== win.x || finalBounds.y !== win.y) {
+            onMove(win.id, finalBounds.x, finalBounds.y);
+          }
+          onResize(win.id, finalBounds.width, finalBounds.height);
+        }
+        if (windowRef.current) windowRef.current.style.willChange = '';
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
@@ -238,7 +330,36 @@ export default function Window({
     ],
   );
 
-  if (win.isMinimized) return null;
+  const keepAliveWhenMinimized = shouldKeepWindowRuntimeAlive(win.toolId);
+  const runtimeState = useMemo(
+    () => ({
+      phase: win.isMinimized
+        ? ('minimized' as const)
+        : win.isFocused
+          ? ('active' as const)
+          : ('background' as const),
+      isActive: !win.isMinimized && win.isFocused,
+      isBackground: !win.isMinimized && !win.isFocused,
+      isMinimized: win.isMinimized,
+      isInteracting: isDragging || isResizing,
+      managedWindowId: win.id,
+      zIndex: win.zIndex,
+      shellOverlayActive,
+      requestFocus: () => onFocus(win.id),
+    }),
+    [
+      isDragging,
+      isResizing,
+      onFocus,
+      shellOverlayActive,
+      win.id,
+      win.isFocused,
+      win.isMinimized,
+      win.zIndex,
+    ],
+  );
+
+  if (win.isMinimized && !keepAliveWhenMinimized) return null;
 
   const fullWidth = `calc(100vw - ${36 + rightInset}px)`;
   const halfWidth = `calc(50vw - ${18 + rightInset / 2}px)`;
@@ -279,6 +400,11 @@ export default function Window({
           height: win.height,
           zIndex: win.zIndex,
         };
+
+  if (win.isMinimized) {
+    style.visibility = 'hidden';
+    style.pointerEvents = 'none';
+  }
 
   const previewOnRight =
     snapPreview === 'right' || snapPreview === 'top-right' || snapPreview === 'bottom-right';
@@ -389,6 +515,9 @@ export default function Window({
         />
       )}
       <div
+        ref={windowRef}
+        aria-hidden={win.isMinimized || undefined}
+        data-runtime-phase={runtimeState.phase}
         className={`os-window-chrome flex flex-col overflow-hidden ${win.isMaximized || win.snap ? 'os-window-docked rounded-none' : 'rounded-sm'} ${win.isFocused ? 'os-window-active' : ''}`}
         style={style}
         onMouseDown={() => onFocus(win.id)}
@@ -481,7 +610,7 @@ export default function Window({
         <div
           className={`window-content relative flex-1 ${win.toolId === 'subdomain-discovery' ? 'overflow-hidden' : 'overflow-auto os-scrollbar'}`}
         >
-          {children}
+          <WindowRuntimeProvider value={runtimeState}>{children}</WindowRuntimeProvider>
         </div>
         {!win.isMaximized && !win.snap && (
           <>
@@ -524,3 +653,18 @@ export default function Window({
     </>
   );
 }
+
+export default memo(
+  Window,
+  (previous, next) =>
+    previous.win === next.win &&
+    previous.rightInset === next.rightInset &&
+    previous.shellOverlayActive === next.shellOverlayActive &&
+    previous.onClose === next.onClose &&
+    previous.onFocus === next.onFocus &&
+    previous.onMinimize === next.onMinimize &&
+    previous.onMaximize === next.onMaximize &&
+    previous.onSnap === next.onSnap &&
+    previous.onMove === next.onMove &&
+    previous.onResize === next.onResize,
+);

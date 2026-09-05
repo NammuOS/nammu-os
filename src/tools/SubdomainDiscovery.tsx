@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import styles from './SubdomainDiscovery.module.css';
+import { getPlatformCapabilities } from '../platform';
 
 type SubdomainEntry = {
   name: string;
@@ -146,9 +147,10 @@ export default function SubdomainDiscovery() {
     setScope('all');
     setVisibleCount(PAGE_SIZE);
     try {
-      const response = await fetch(`/api/tools/subdomains?domain=${encodeURIComponent(domain)}`, {
-        cache: 'no-store',
-      });
+      const response = await getPlatformCapabilities().services.request(
+        `/api/tools/subdomains?domain=${encodeURIComponent(domain)}`,
+        { cache: 'no-store' },
+      );
       const payload = (await response.json()) as DiscoveryResponse;
       if (!response.ok) throw new Error(payload.error || 'Subdomain discovery failed.');
       setData(payload);

@@ -43,15 +43,13 @@ export default function CloudFilePreviewModal({
   const [mediaError, setMediaError] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState('');
 
   const previewType = file
     ? file.previewType || getFilePreviewType(file.mime_type, file.file_name)
     : 'other';
   const providerName = getProviderName(file?.provider);
   const providerColor = getProviderColor(file?.provider);
-  const previewUrl = file ? cloudApi.getPreviewUrl(file.id) : '';
-  const downloadUrl = file ? cloudApi.getDownloadUrl(file.id) : '';
-
   useEffect(() => {
     if (!isOpen || !file) return;
     setMediaError(false);
@@ -59,28 +57,34 @@ export default function CloudFilePreviewModal({
     setDocContent('');
     setDocTruncated(false);
     setPreviewError(null);
-    setDocLoading(false);
-    if (previewType === 'document') {
-      const controller = new AbortController();
-      setDocLoading(true);
-      fetch(previewUrl, { credentials: 'include', signal: controller.signal })
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          setDocTruncated(res.headers.get('X-Nammu-Preview-Truncated') === 'true');
-          return res.text();
-        })
-        .then((text) => {
-          setDocContent(text);
-          setDocLoading(false);
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === 'AbortError') return;
-          setPreviewError(error instanceof Error ? error.message : 'Document preview failed.');
-          setDocLoading(false);
-        });
-      return () => controller.abort();
-    }
-  }, [file, isOpen, previewType, previewUrl, providerName]);
+    setPreviewObjectUrl('');
+    if (previewType === 'other') return;
+
+    const controller = new AbortController();
+    let objectUrl = '';
+    setDocLoading(true);
+    void cloudApi
+      .fetchPreview(file.id, controller.signal)
+      .then(async (response) => {
+        setDocTruncated(response.headers.get('X-Nammu-Preview-Truncated') === 'true');
+        if (previewType === 'document') {
+          setDocContent(await response.text());
+          return;
+        }
+        objectUrl = URL.createObjectURL(await response.blob());
+        setPreviewObjectUrl(objectUrl);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setPreviewError(error instanceof Error ? error.message : 'File preview failed.');
+      })
+      .finally(() => setDocLoading(false));
+
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [file, isOpen, previewType, providerName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -101,12 +105,7 @@ export default function CloudFilePreviewModal({
     setDownloading(true);
     setDownloadError(null);
     try {
-      const res = await fetch(downloadUrl, { credentials: 'include' });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        throw new Error(payload.error || `Download failed: HTTP ${res.status}`);
-      }
-      const blob = await res.blob();
+      const blob = await cloudApi.downloadFileWithProgress(file, () => undefined);
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -118,8 +117,6 @@ export default function CloudFilePreviewModal({
     } catch (err: any) {
       console.error('Download error:', err);
       setDownloadError(err.message || 'Download failed');
-      // fallback
-      window.open(downloadUrl, '_blank');
     } finally {
       setDownloading(false);
     }
@@ -196,11 +193,24 @@ export default function CloudFilePreviewModal({
 
         {/* Content Viewer Area */}
         <div className="relative flex min-h-[380px] max-h-[68vh] flex-1 items-center justify-center overflow-auto bg-[#040609] p-4 os-scrollbar">
-          {previewType === 'image' && !mediaError ? (
+          {docLoading ? (
+            <div className="flex h-64 items-center justify-center gap-2 font-mono text-[10px] text-[#6d8599]">
+              <Loader2 size={16} className="animate-spin text-[#4aa3ff]" />
+              Loading authenticated preview...
+            </div>
+          ) : previewError ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
+              <AlertCircle size={22} className="text-amber-300" />
+              <div className="font-mono text-[10px] text-amber-200">
+                This file could not be previewed.
+              </div>
+              <div className="max-w-md font-mono text-[9px] text-[#6f879a]">{previewError}</div>
+            </div>
+          ) : previewType === 'image' && !mediaError ? (
             <div className="relative flex max-h-[60vh] max-w-full items-center justify-center">
               <img
                 key={file.id}
-                src={previewUrl}
+                src={previewObjectUrl}
                 alt={file.file_name}
                 className="max-h-[58vh] max-w-full rounded-lg object-contain shadow-2xl transition-all"
                 onError={() => setMediaError(true)}
@@ -210,7 +220,7 @@ export default function CloudFilePreviewModal({
             <div className="flex max-h-[60vh] w-full max-w-2xl flex-col items-center justify-center">
               <video
                 key={file.id}
-                src={previewUrl}
+                src={previewObjectUrl}
                 controls
                 autoPlay
                 preload="metadata"
@@ -233,7 +243,7 @@ export default function CloudFilePreviewModal({
               </div>
               <audio
                 key={file.id}
-                src={previewUrl}
+                src={previewObjectUrl}
                 controls
                 autoPlay
                 preload="metadata"
@@ -244,7 +254,7 @@ export default function CloudFilePreviewModal({
           ) : previewType === 'pdf' ? (
             <object
               key={file.id}
-              data={previewUrl}
+              data={previewObjectUrl}
               type="application/pdf"
               aria-label={file.file_name}
               className="h-[60vh] w-full border border-white/[0.06] bg-white"
@@ -255,48 +265,26 @@ export default function CloudFilePreviewModal({
             </object>
           ) : previewType === 'document' ? (
             <div className="relative h-full w-full">
-              {docLoading ? (
-                <div className="flex h-64 items-center justify-center gap-2 font-mono text-[10px] text-[#6d8599]">
-                  <Loader2 size={16} className="animate-spin text-[#4aa3ff]" />
-                  Loading document stream...
-                </div>
-              ) : previewError ? (
-                <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-                  <AlertCircle size={22} className="text-amber-300" />
-                  <div className="font-mono text-[10px] text-amber-200">
-                    This document could not be previewed.
-                  </div>
-                  <div className="max-w-md font-mono text-[9px] text-[#6f879a]">{previewError}</div>
+              <>
+                <div className="absolute right-3 top-3 z-10">
                   <button
-                    onClick={handleDownload}
-                    className="flex items-center gap-1.5 border border-[#4aa3ff]/30 bg-[#4aa3ff]/15 px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[#a5d2ff] hover:bg-[#4aa3ff]/25"
+                    onClick={handleCopyText}
+                    className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.05] px-2 py-1 font-mono text-[8px] text-[#a0bad0] backdrop-blur hover:bg-white/10"
                   >
-                    <Download size={11} />
-                    Download File
+                    {copied ? <Check size={10} className="text-[#2ee6a6]" /> : <Copy size={10} />}
+                    <span>{copied ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
-              ) : (
-                <>
-                  <div className="absolute right-3 top-3 z-10">
-                    <button
-                      onClick={handleCopyText}
-                      className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.05] px-2 py-1 font-mono text-[8px] text-[#a0bad0] backdrop-blur hover:bg-white/10"
-                    >
-                      {copied ? <Check size={10} className="text-[#2ee6a6]" /> : <Copy size={10} />}
-                      <span>{copied ? 'Copied' : 'Copy'}</span>
-                    </button>
+                <pre className="h-full max-h-[58vh] w-full overflow-auto rounded border border-white/[0.06] bg-black/50 p-4 font-mono text-[11px] leading-relaxed text-[#a8c6df] os-scrollbar">
+                  {docContent}
+                </pre>
+                {docTruncated && (
+                  <div className="mt-2 font-mono text-[8px] text-amber-300/80">
+                    Showing the first 2 MB for a responsive preview. Download the file to view all
+                    content.
                   </div>
-                  <pre className="h-full max-h-[58vh] w-full overflow-auto rounded border border-white/[0.06] bg-black/50 p-4 font-mono text-[11px] leading-relaxed text-[#a8c6df] os-scrollbar">
-                    {docContent}
-                  </pre>
-                  {docTruncated && (
-                    <div className="mt-2 font-mono text-[8px] text-amber-300/80">
-                      Showing the first 2 MB for a responsive preview. Download the file to view all
-                      content.
-                    </div>
-                  )}
-                </>
-              )}
+                )}
+              </>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3 p-8 text-center">

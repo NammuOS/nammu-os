@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { Suspense, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { findToolById } from '../../lib/toolRegistry';
 import { SYSTEM_APPS } from '../os/systemAppRegistry';
 import { SystemAppContent } from '../os/SystemApps';
@@ -83,11 +83,19 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
         ) : systemApp ? (
           <SystemAppContent appId={systemApp.id} />
         ) : ToolComponent ? (
-          <div
-            className={tool?.id === 'subdomain-discovery' ? 'h-full' : 'h-full overflow-auto p-3'}
+          <Suspense
+            fallback={
+              <div className="grid h-full place-items-center text-[10px] text-os-text-dim">
+                Loading tool…
+              </div>
+            }
           >
-            <ToolComponent />
-          </div>
+            <div
+              className={tool?.id === 'subdomain-discovery' ? 'h-full' : 'h-full overflow-auto p-3'}
+            >
+              <ToolComponent />
+            </div>
+          </Suspense>
         ) : (
           <div className="grid h-full place-items-center bg-[#05070b] px-6 text-center">
             <div>

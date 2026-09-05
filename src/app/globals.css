@@ -482,6 +482,10 @@ html[data-crt-scanlines='on'] .os-scanline {
   height: 5px;
   border-radius: 50%;
   background: #10b981;
+  box-shadow: 0 0 5px currentColor;
+}
+
+.status-dot-live {
   animation: status-blink 2s ease-in-out infinite;
 }
 
@@ -675,7 +679,7 @@ html[data-crt-scanlines='on'] .os-scanline {
 }
 
 .eq-paused .vis-bar {
-  animation-play-state: paused;
+  animation: none;
   transform: scaleY(0.18);
 }
 

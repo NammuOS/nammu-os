@@ -54,7 +54,7 @@ export function useWindowManager() {
     };
 
     setWindows((prev) => {
-      const cleared = prev.map((w) => ({ ...w, isFocused: false }));
+      const cleared = prev.map((w) => (w.isFocused ? { ...w, isFocused: false } : w));
       activeIdRef.current = id;
       return [...cleared, newWindow];
     });
@@ -87,14 +87,14 @@ export function useWindowManager() {
   }, []);
 
   const focusWindow = useCallback((id: string) => {
+    if (activeIdRef.current === id) return;
     zIndexCounter += 1;
     activeIdRef.current = id;
     setWindows((prev) =>
-      prev.map((w) => ({
-        ...w,
-        isFocused: w.id === id,
-        zIndex: w.id === id ? zIndexCounter : w.zIndex,
-      })),
+      prev.map((w) => {
+        if (w.id === id) return { ...w, isFocused: true, zIndex: zIndexCounter };
+        return w.isFocused ? { ...w, isFocused: false } : w;
+      }),
     );
   }, []);
 
@@ -111,7 +111,9 @@ export function useWindowManager() {
       prev.map((w) =>
         w.id === id
           ? { ...w, isMinimized: false, isFocused: true, zIndex: zIndexCounter }
-          : { ...w, isFocused: false },
+          : w.isFocused
+            ? { ...w, isFocused: false }
+            : w,
       ),
     );
   }, []);
@@ -190,7 +192,9 @@ export function useWindowManager() {
                 isMaximized: false,
                 isFocused: true,
               }
-            : { ...w, isFocused: false },
+            : w.isFocused
+              ? { ...w, isFocused: false }
+              : w,
         );
       }
 
@@ -219,7 +223,7 @@ export function useWindowManager() {
             isMinimized: false,
             isFocused: false,
           };
-        return { ...w, isFocused: false };
+        return w.isFocused ? { ...w, isFocused: false } : w;
       });
     });
   }, []);

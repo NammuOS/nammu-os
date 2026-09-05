@@ -21,6 +21,7 @@ import type {
   TileLayer as LeafletTileLayer,
 } from 'leaflet';
 import styles from './MapApp.module.css';
+import { getPlatformCapabilities } from '../../platform';
 
 const INITIAL_CENTER: [number, number] = [41.2257, 1.7249];
 const MIN_ZOOM = 2;
@@ -306,7 +307,9 @@ export default function MapApp() {
     setStatus('Searching places');
 
     try {
-      const response = await fetch(`/api/maps/search?q=${encodeURIComponent(term)}`);
+      const response = await getPlatformCapabilities().services.request(
+        `/api/maps/search?q=${encodeURIComponent(term)}`,
+      );
       const payload = (await response.json()) as { results?: SearchResult[]; error?: string };
       if (!response.ok) throw new Error(payload.error || 'Search failed');
       const nextResults = payload.results ?? [];
@@ -370,7 +373,9 @@ export default function MapApp() {
         if (locationError.code === locationError.PERMISSION_DENIED) throw error;
 
         setStatus('Using approximate network location');
-        const response = await fetch('/api/maps/location', { cache: 'no-store' });
+        const response = await getPlatformCapabilities().services.request('/api/maps/location', {
+          cache: 'no-store',
+        });
         const fallback = (await response.json()) as NetworkLocation;
         if (!response.ok) throw new Error(fallback.error || 'Network location is unavailable');
 

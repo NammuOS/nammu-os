@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Cloud, Loader2, AlertCircle } from 'lucide-react';
 import type { CloudProvider } from '../types/cloudTypes';
 import { getProviderName, getProviderColor } from '../services/cloudClient';
+import { getPlatformCapabilities } from '../../../platform';
 
 interface ConnectModalProps {
   provider: CloudProvider | null;
   isOpen: boolean;
   onClose: () => void;
-  onConnect: (provider: CloudProvider, data: any) => Promise<void>;
+  onConnect: (provider: CloudProvider, data: any, signal?: AbortSignal) => Promise<void>;
 }
 
 export default function CloudConnectModal({
@@ -32,6 +33,14 @@ export default function CloudConnectModal({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const activeAuthorization = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      activeAuthorization.current?.abort();
+      activeAuthorization.current = null;
+    }
+  }, [isOpen]);
 
   if (!isOpen || !provider) return null;
 
@@ -41,6 +50,8 @@ export default function CloudConnectModal({
     e.preventDefault();
     setLoading(true);
     setError('');
+    const controller = new AbortController();
+    activeAuthorization.current = controller;
 
     try {
       if (provider === 's3') {
@@ -69,17 +80,28 @@ export default function CloudConnectModal({
         });
       } else {
         // OAuth initiate
-        await onConnect(provider, {
-          email: email.trim() || undefined,
-          label: label.trim() || undefined,
-        });
+        await onConnect(
+          provider,
+          {
+            email: email.trim() || undefined,
+            label: label.trim() || undefined,
+          },
+          controller.signal,
+        );
       }
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Failed to connect provider');
+      if (err?.name !== 'AbortError') setError(err?.message || 'Failed to connect provider');
     } finally {
+      if (activeAuthorization.current === controller) activeAuthorization.current = null;
       setLoading(false);
     }
+  };
+
+  const handleCancel = () => {
+    activeAuthorization.current?.abort();
+    activeAuthorization.current = null;
+    onClose();
   };
 
   const providerName = getProviderName(provider);
@@ -108,7 +130,7 @@ export default function CloudConnectModal({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="grid h-6 w-6 place-items-center rounded text-[#6a8094] hover:bg-white/[0.05] hover:text-[#d5e4f0]"
           >
             <X size={14} />
@@ -128,8 +150,10 @@ export default function CloudConnectModal({
             <div className="space-y-3.5 py-2">
               <p className="text-[#8ba2b5] leading-relaxed">
                 Connect your <strong className="text-white">{providerName}</strong> account via
-                OAuth 2.0. A popup will open to authenticate and authorize Nammu OS with read/write
-                access.
+                OAuth 2.0.{' '}
+                {getPlatformCapabilities().runtime === 'tauri'
+                  ? 'Your system browser will open securely; return to Nammu OS after approving access.'
+                  : 'A secure popup will open to authenticate and authorize Nammu OS with read/write access.'}
               </p>
               {['onedrive', 'dropbox', 'yandex'].includes(provider) && (
                 <div className="rounded border border-amber-500/20 bg-amber-500/10 p-2.5 font-mono text-[9px] text-amber-300/90 leading-relaxed">
@@ -332,8 +356,7 @@ export default function CloudConnectModal({
           <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4">
             <button
               type="button"
-              onClick={onClose}
-              disabled={loading}
+              onClick={handleCancel}
               className="rounded border border-white/[0.08] px-3.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#7990a4] transition-colors hover:bg-white/[0.04] hover:text-[#d5e0ea]"
             >
               Cancel

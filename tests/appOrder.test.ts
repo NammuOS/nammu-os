@@ -10,6 +10,7 @@ describe('Start Menu ordering', () => {
       'cloud',
       'projects',
       'whatsapp',
+      'telegram',
       'notes',
       'maps',
       'mail',

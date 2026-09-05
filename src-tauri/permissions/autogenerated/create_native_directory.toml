@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-native-directory"
+description = "Enables the create_native_directory command without any pre-configured scope."
+commands.allow = ["create_native_directory"]
+
+[[permission]]
+identifier = "deny-create-native-directory"
+description = "Denies the create_native_directory command without any pre-configured scope."
+commands.deny = ["create_native_directory"]

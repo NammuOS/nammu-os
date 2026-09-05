@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Palette,
   Volume2,
@@ -77,6 +77,7 @@ import {
   saveLockProfile,
   type OsLockProfile,
 } from '../../lib/osLock';
+import { getPlatformCapabilities } from '../../platform';
 
 export interface SystemSettings extends IconSettings {
   accentColor: string;
@@ -279,6 +280,7 @@ export function SettingsApp() {
   const [matrixEffectSettings, setMatrixEffectSettings] = useState<MatrixEffectSettingsMap>(() =>
     getSavedMatrixEffectSettings(),
   );
+  const matrixEffectSettingsRef = useRef(matrixEffectSettings);
   const activeMatrixEffect = getMatrixWallpaperVariant(wallpaperSrc);
 
   useEffect(() => {
@@ -370,8 +372,10 @@ export function SettingsApp() {
     key: Key,
     value: MatrixEffectSettings[Key],
   ) => {
-    const next = { ...matrixEffectSettings[variant], [key]: value };
-    setMatrixEffectSettings((current) => ({ ...current, [variant]: next }));
+    const next = { ...matrixEffectSettingsRef.current[variant], [key]: value };
+    const nextSettings = { ...matrixEffectSettingsRef.current, [variant]: next };
+    matrixEffectSettingsRef.current = nextSettings;
+    setMatrixEffectSettings(nextSettings);
     saveMatrixEffectSettings(variant, next);
   };
 
@@ -453,7 +457,7 @@ export function SettingsApp() {
   })();
 
   // Export full OS Data as JSON
-  const exportAllData = () => {
+  const exportAllData = async () => {
     const dump: Record<string, any> = {};
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -466,37 +470,43 @@ export function SettingsApp() {
       }
     }
 
-    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `nammu-os-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const result = await getPlatformCapabilities().files.save({
+      suggestedName: `nammu-os-backup-${new Date().toISOString().split('T')[0]}.json`,
+      contents: JSON.stringify(dump, null, 2),
+      mimeType: 'application/json',
+      filters: [{ name: 'Nammu OS backup', extensions: ['json'], mimeTypes: ['application/json'] }],
+    });
+
+    if (result.status === 'success') setImportStatus('Backup exported successfully!');
+    else if (result.status !== 'cancelled') setImportStatus('Failed to export backup');
   };
 
   // Import JSON Backup
-  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImportBackup = async () => {
+    const result = await getPlatformCapabilities().files.pick({
+      filters: [{ name: 'Nammu OS backup', extensions: ['json'], mimeTypes: ['application/json'] }],
+    });
+    if (result.status === 'cancelled') return;
+    if (result.status !== 'success' || result.value.files.length === 0) {
+      setImportStatus('Failed to open backup file');
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const data = JSON.parse(evt.target?.result as string);
-        Object.keys(data).forEach((k) => {
-          if (k.startsWith('nammu-')) {
-            const val = typeof data[k] === 'string' ? data[k] : JSON.stringify(data[k]);
-            localStorage.setItem(k, val);
-          }
-        });
-        setImportStatus('Backup restored successfully! Refreshing...');
-        setTimeout(() => window.location.reload(), 1200);
-      } catch {
-        setImportStatus('Failed to parse backup file');
-      }
-    };
-    reader.readAsText(file);
+    try {
+      const data = JSON.parse(new TextDecoder().decode(result.value.files[0].bytes));
+      if (!data || typeof data !== 'object' || Array.isArray(data))
+        throw new Error('Invalid backup');
+      Object.keys(data).forEach((k) => {
+        if (k.startsWith('nammu-')) {
+          const val = typeof data[k] === 'string' ? data[k] : JSON.stringify(data[k]);
+          localStorage.setItem(k, val);
+        }
+      });
+      setImportStatus('Backup restored successfully! Refreshing...');
+      setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      setImportStatus('Failed to parse backup file');
+    }
   };
 
   // Factory Reset
@@ -1511,21 +1521,19 @@ export function SettingsApp() {
               <div className="text-[10.5px] text-[#d5e0ea] font-medium">Backup & Restore</div>
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
-                  onClick={exportAllData}
+                  onClick={() => void exportAllData()}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-os-accent/15 border border-os-accent/30 text-os-accent hover:bg-os-accent/25 text-[10px] font-medium transition-colors"
                 >
                   <Download size={11} /> Export Full OS Backup (JSON)
                 </button>
 
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-white/[0.04] border border-white/[0.08] text-[#c5d4e2] hover:bg-white/[0.08] text-[10px] font-medium transition-colors cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => void handleImportBackup()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-white/[0.04] border border-white/[0.08] text-[#c5d4e2] hover:bg-white/[0.08] text-[10px] font-medium transition-colors cursor-pointer"
+                >
                   <Upload size={11} /> Restore Backup
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleImportBackup}
-                    className="hidden"
-                  />
-                </label>
+                </button>
               </div>
 
               {importStatus && (
@@ -1656,7 +1664,11 @@ export function SettingsApp() {
                     type="color"
                     value={matrixEffectSettings[activeMatrixEffect].color}
                     onChange={(event) =>
-                      updateMatrixEffectSetting(activeMatrixEffect, 'color', event.target.value)
+                      updateMatrixEffectSetting(
+                        activeMatrixEffect,
+                        'color',
+                        event.currentTarget.value,
+                      )
                     }
                     className="h-7 w-full cursor-pointer border border-white/[0.08] bg-transparent p-0.5"
                   />

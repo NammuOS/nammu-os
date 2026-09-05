@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Music2, Puzzle, RefreshCw, Search, X } from 'lucide-react';
+import { Music2, Puzzle, RefreshCw, Search, X } from 'lucide-react';
 
 import {
   DEFAULT_NAMMU_MUSIC_PREFERENCES,
@@ -13,9 +13,14 @@ import {
   type NammuMusicPreferences,
 } from './services/musicStore';
 import { useMasterVolume } from '../../hooks/useMasterVolume';
+import { getPlatformCapabilities } from '../../platform';
+import { getGeckoRuntimeUrl } from '../browser/services/geckoRuntimeUrl';
+import { useWindowRuntime } from '../os/WindowRuntimeContext';
+import NativeWebSurface, {
+  type NativeWebSurfaceHandle,
+} from '../web-surfaces/NativeWebSurface';
 
 const MUSIC_URL = 'https://music.youtube.com/';
-const FIREFOX_RUNTIME_URL = '/firefox-wasm/index.html';
 const CONTENT_RESPONSE_CHANNEL = 'nammu-youtube-music-content-response';
 
 export const ADBLOCK_BOOTSTRAP_SOURCE = `data:application/javascript;charset=utf-8,${encodeURIComponent(`
@@ -92,6 +97,7 @@ type EngineState = 'starting' | 'ready' | 'error';
 type DrawerView = 'extensions';
 
 type GeckoRuntimeWindow = Window & {
+  geckoDispose?: () => void;
   geckoEvalChrome?: (script: string) => Promise<unknown>;
 };
 
@@ -118,16 +124,6 @@ const EMPTY_MEDIA: MediaState = {
   videoId: '',
   volume: 0.8,
 };
-
-function runtimeUrl(attempt: number): string {
-  const params = new URLSearchParams({
-    app: '1',
-    autostart: '1',
-    url: 'about:blank',
-    session: `nammu-music-${attempt}`,
-  });
-  return `${FIREFOX_RUNTIME_URL}?${params.toString()}`;
-}
 
 function initializeMusicScript(): string {
   return `(()=>{
@@ -236,10 +232,12 @@ function mediaStateCommand(): string {
 function applyPreferencesCommand(
   preferences: NammuMusicPreferences,
   masterVolumePercent: number,
+  foregroundVisuals: boolean,
 ): string {
   const settings = JSON.stringify({
     ...preferences,
     masterVolume: Math.min(1, Math.max(0, masterVolumePercent / 100)),
+    foregroundVisuals,
   });
   const plugins = preferences.plugins;
   const runtimeStyles = `
@@ -265,6 +263,7 @@ function applyPreferencesCommand(
     ${plugins['ambient-mode'] ? 'body::before { content: ""; position: fixed; inset: -8%; background: var(--nammu-music-artwork) center/cover no-repeat; filter: blur(70px) saturate(1.25); opacity: .16; pointer-events: none; z-index: 0; } ytmusic-app { background: rgba(5,8,13,.78) !important; }' : ''}
     ${plugins['album-color-theme'] ? 'ytmusic-player-page { background-image: linear-gradient(180deg, rgba(5,8,13,.55), #05080d 72%), var(--nammu-music-artwork) !important; background-position: center !important; background-size: cover !important; }' : ''}
     ${plugins['performance-improvement'] ? 'ytmusic-app:not(:focus-within) #background, ytmusic-app:not(:focus-within) .animated-thumbnail { animation-play-state: paused !important; }' : ''}
+    ${foregroundVisuals ? '' : '#background, .animated-thumbnail { animation-play-state: paused !important; }'}
     ${plugins.adblocker ? '.ytp-ad-module, .ytp-ad-overlay-container, ytmusic-mealbar-promo-renderer, ytmusic-statement-banner-renderer, ytd-ad-slot-renderer, #masthead-ad { display: none !important; visibility: hidden !important; }' : ''}
     * { scrollbar-color: rgba(74,163,255,.45) rgba(255,255,255,.025) !important; }
     ::selection { background: rgba(74,163,255,.3) !important; }
@@ -419,17 +418,25 @@ function applyPreferencesCommand(
           runtime.adWasShowing = false;
           currentVideo.muted = Boolean(runtime.preAdMuted);
         }
-      }, 150);
+      }, 250);
     }
 
-    if (!runtime.visualizerLoop) {
+    if (!settings.foregroundVisuals || !p.visualizer) {
+      if (runtime.visualizerLoop) content.cancelAnimationFrame(runtime.visualizerLoop);
+      runtime.visualizerLoop = 0;
+      doc.getElementById('nammu-music-visualizer')?.remove();
+    } else if (!runtime.visualizerLoop) {
       const drawVisualizer = () => {
-        runtime.visualizerLoop = content.requestAnimationFrame(drawVisualizer);
         const currentSettings = runtime.settings;
         const currentDoc = runtime.document;
-        if (!currentSettings || !currentDoc) return;
+        if (!currentSettings?.foregroundVisuals || !currentSettings.plugins.visualizer || !currentDoc) {
+          runtime.visualizerLoop = 0;
+          currentDoc?.getElementById('nammu-music-visualizer')?.remove();
+          return;
+        }
+        runtime.visualizerLoop = content.requestAnimationFrame(drawVisualizer);
         let canvas = currentDoc.getElementById('nammu-music-visualizer');
-        if (!currentSettings.plugins.visualizer || !runtime.analyser) {
+        if (!runtime.analyser) {
           canvas?.remove();
           return;
         }
@@ -465,7 +472,12 @@ function applyPreferencesCommand(
 }
 
 export default function YouTubeMusicApp() {
+  const platform = getPlatformCapabilities();
+  const nativeSurfaceEnabled = platform.runtime === 'tauri';
+  const windowRuntime = useWindowRuntime();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const geckoRuntimeRef = useRef<GeckoRuntimeWindow | null>(null);
+  const nativeSurfaceRef = useRef<NativeWebSurfaceHandle | null>(null);
   const engineReadyRef = useRef(false);
   const commandQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mediaRef = useRef(EMPTY_MEDIA);
@@ -474,20 +486,46 @@ export default function YouTubeMusicApp() {
   const [engineState, setEngineState] = useState<EngineState>('starting');
   const [engineError, setEngineError] = useState('');
   const [engineAttempt, setEngineAttempt] = useState(1);
+  const [runtimeWispUrl, setRuntimeWispUrl] = useState('');
   const [preferences, setPreferences] = useState(DEFAULT_NAMMU_MUSIC_PREFERENCES);
   const [media, setMedia] = useState<MediaState>(EMPTY_MEDIA);
 
   const [drawer, setDrawer] = useState<DrawerView | null>(null);
   const [pluginQuery, setPluginQuery] = useState('');
   const [pluginCategory, setPluginCategory] = useState<MusicPluginCategory | 'All'>('All');
+  const [requestingNotificationPermission, setRequestingNotificationPermission] = useState(false);
 
   useEffect(() => setPreferences(getStoredNammuMusicPreferences()), []);
+
+  useEffect(() => {
+    if (nativeSurfaceEnabled) {
+      setRuntimeWispUrl('');
+      return;
+    }
+    let cancelled = false;
+    setRuntimeWispUrl('');
+    void getPlatformCapabilities()
+      .services.wispUrl()
+      .then((url) => {
+        if (!cancelled) setRuntimeWispUrl(url);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        engineReadyRef.current = false;
+        setEngineState('error');
+        setEngineError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [engineAttempt, nativeSurfaceEnabled]);
 
   useEffect(() => {
     saveNammuMusicPreferences(preferences);
   }, [preferences]);
 
   const evaluateInRuntime = useCallback((script: string): Promise<unknown> => {
+    if (nativeSurfaceEnabled) return Promise.resolve(null);
     const execute = async () => {
       const runtimeWindow = iframeRef.current?.contentWindow as GeckoRuntimeWindow | null;
       if (!runtimeWindow?.geckoEvalChrome) return null;
@@ -509,7 +547,7 @@ export default function YouTubeMusicApp() {
       () => undefined,
     );
     return result;
-  }, []);
+  }, [nativeSurfaceEnabled]);
 
   const runContent = useCallback(
     async <T,>(command: string): Promise<T | null> => {
@@ -538,7 +576,9 @@ export default function YouTubeMusicApp() {
   );
 
   const applyPreferences = useCallback(() => {
-    void runContent<boolean>(applyPreferencesCommand(preferences, masterVolume));
+    void runContent<boolean>(
+      applyPreferencesCommand(preferences, masterVolume, windowRuntime.isActive),
+    );
     void evaluateInRuntime(`(()=>{
       const enabled = ${preferences.plugins.adblocker};
       Services.prefs.setBoolPref('dom.disable_beforeunload', true);
@@ -575,9 +615,10 @@ export default function YouTubeMusicApp() {
       }
       return 'preferences-applied';
     })()`);
-  }, [evaluateInRuntime, masterVolume, preferences, runContent]);
+  }, [evaluateInRuntime, masterVolume, preferences, runContent, windowRuntime.isActive]);
 
   useEffect(() => {
+    if (nativeSurfaceEnabled) return;
     const onRuntimeMessage = (event: MessageEvent) => {
       if (
         event.origin !== window.location.origin ||
@@ -591,6 +632,7 @@ export default function YouTubeMusicApp() {
         return;
       }
       if (event.data?.type !== 'NAMMU_GECKO_READY') return;
+      geckoRuntimeRef.current = event.source as GeckoRuntimeWindow;
       const initialize = async () => {
         try {
           await evaluateInRuntime(initializeMusicScript());
@@ -609,7 +651,7 @@ export default function YouTubeMusicApp() {
     };
     window.addEventListener('message', onRuntimeMessage);
     return () => window.removeEventListener('message', onRuntimeMessage);
-  }, [evaluateInRuntime]);
+  }, [evaluateInRuntime, nativeSurfaceEnabled]);
 
   useEffect(() => {
     if (engineState !== 'starting') return;
@@ -623,20 +665,32 @@ export default function YouTubeMusicApp() {
   }, [engineAttempt, engineState]);
 
   useEffect(() => {
-    if (engineState !== 'ready') return;
+    if (nativeSurfaceEnabled || engineState !== 'ready') return;
     applyPreferences();
-    const applyTimer = window.setInterval(applyPreferences, 4000);
+    const applyTimer = window.setInterval(
+      applyPreferences,
+      windowRuntime.isActive ? 30_000 : 60_000,
+    );
     return () => window.clearInterval(applyTimer);
-  }, [applyPreferences, engineState]);
+  }, [applyPreferences, engineState, nativeSurfaceEnabled, windowRuntime.isActive]);
 
   useEffect(() => {
-    if (engineState !== 'ready') return;
+    if (nativeSurfaceEnabled || engineState !== 'ready') return;
     let disposed = false;
     const refresh = async () => {
       const next = await runContent<MediaState>(mediaStateCommand());
       if (!next || disposed) return;
       mediaRef.current = next;
-      setMedia(next);
+      setMedia((current) =>
+        current.artist === next.artist &&
+        current.muted === next.muted &&
+        current.paused === next.paused &&
+        current.thumbnail === next.thumbnail &&
+        current.title === next.title &&
+        current.videoId === next.videoId
+          ? current
+          : next,
+      );
       if (
         preferences.plugins.notifications &&
         !next.paused &&
@@ -645,49 +699,106 @@ export default function YouTubeMusicApp() {
         next.title !== lastNotifiedTitleRef.current
       ) {
         lastNotifiedTitleRef.current = next.title;
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(next.title, {
-            body: next.artist || 'YouTube Music',
-            icon: next.thumbnail,
-          });
-        }
+        void getPlatformCapabilities().notifications.show({
+          title: next.title,
+          body: next.artist || 'YouTube Music',
+          iconUrl: next.thumbnail,
+        });
       }
     };
     void refresh();
-    const timer = window.setInterval(refresh, 1000);
+    const refreshInterval = windowRuntime.isMinimized
+      ? 5_000
+      : windowRuntime.isActive
+        ? 1_000
+        : 2_000;
+    const timer = window.setInterval(refresh, refreshInterval);
     return () => {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [engineState, preferences.plugins.notifications, runContent]);
+  }, [
+    engineState,
+    nativeSurfaceEnabled,
+    preferences.plugins.notifications,
+    runContent,
+    windowRuntime.isActive,
+    windowRuntime.isMinimized,
+  ]);
 
   useEffect(() => {
-    if (!preferences.plugins.sponsorblock || !media.videoId || engineState !== 'ready') return;
+    if (
+      nativeSurfaceEnabled ||
+      !preferences.plugins.sponsorblock ||
+      !media.videoId ||
+      engineState !== 'ready'
+    )
+      return;
     const controller = new AbortController();
     let timer = 0;
-    fetch(`/api/music/sponsorblock?videoId=${encodeURIComponent(media.videoId)}`, {
-      signal: controller.signal,
-    })
+    getPlatformCapabilities()
+      .services.request(`/api/music/sponsorblock?videoId=${encodeURIComponent(media.videoId)}`, {
+        signal: controller.signal,
+      })
       .then((response) => response.json())
       .then((payload: { data?: Array<{ segment: [number, number] }> }) => {
         const segments = payload.data || [];
-        timer = window.setInterval(() => {
-          const current = mediaRef.current.currentTime;
-          const segment = segments.find(
-            ({ segment: [start, end] }) => current >= start && current < end,
-          );
-          if (segment)
-            void runContent(
-              `const video = content.document.querySelector('video'); if (video) video.currentTime = ${segment.segment[1]}; return true;`,
+        timer = window.setInterval(
+          () => {
+            const current = mediaRef.current.currentTime;
+            const segment = segments.find(
+              ({ segment: [start, end] }) => current >= start && current < end,
             );
-        }, 500);
+            if (segment)
+              void runContent(
+                `const video = content.document.querySelector('video'); if (video) video.currentTime = ${segment.segment[1]}; return true;`,
+              );
+          },
+          windowRuntime.isActive ? 750 : 1_500,
+        );
       })
       .catch(() => {});
     return () => {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [engineState, media.videoId, preferences.plugins.sponsorblock, runContent]);
+  }, [
+    engineState,
+    media.videoId,
+    nativeSurfaceEnabled,
+    preferences.plugins.sponsorblock,
+    runContent,
+    windowRuntime.isActive,
+  ]);
+
+  useEffect(
+    () => () => {
+      nativeSurfaceRef.current = null;
+      if (nativeSurfaceEnabled) return;
+      engineReadyRef.current = false;
+      const frame = iframeRef.current;
+      const runtimeWindow = geckoRuntimeRef.current;
+      try {
+        const cleanup = runtimeWindow?.geckoEvalChrome?.(`(()=>{
+          const runtime = globalThis.__nammuMusicAudioRuntime;
+          const runtimeWindow = runtime?.document?.defaultView;
+          if (runtime?.monitorTimer) runtimeWindow?.clearInterval(runtime.monitorTimer);
+          if (runtime?.visualizerLoop) runtimeWindow?.cancelAnimationFrame(runtime.visualizerLoop);
+          try { globalThis.__nammuMusicAdObserver && Services.obs.removeObserver(globalThis.__nammuMusicAdObserver, 'http-on-modify-request'); } catch {}
+          return 'music-runtime-disposed';
+        })()`);
+        void cleanup?.catch(() => undefined);
+      } catch {}
+      try {
+        runtimeWindow?.geckoDispose?.();
+      } catch {}
+      geckoRuntimeRef.current = null;
+      try {
+        frame?.setAttribute('src', 'about:blank');
+      } catch {}
+    },
+    [nativeSurfaceEnabled],
+  );
 
   const playPause = useCallback(() => {
     void runContent(
@@ -707,6 +818,7 @@ export default function YouTubeMusicApp() {
   );
 
   useEffect(() => {
+    if (nativeSurfaceEnabled) return;
     if (!preferences.plugins['taskbar-mediacontrol'] || !('mediaSession' in navigator)) return;
     if ('MediaMetadata' in window && media.title && media.title !== 'YouTube Music') {
       navigator.mediaSession.metadata = new MediaMetadata({
@@ -748,18 +860,26 @@ export default function YouTubeMusicApp() {
     media.paused,
     media.thumbnail,
     media.title,
+    nativeSurfaceEnabled,
     playPause,
     preferences.plugins,
     runContent,
     skip,
   ]);
 
-  const togglePlugin = (id: NammuMusicPluginId) => {
+  const togglePlugin = async (id: NammuMusicPluginId) => {
     const plugin = MUSIC_PLUGIN_CATALOG.find((item) => item.id === id);
     if (!plugin || plugin.support !== 'native') return;
     const enabling = !preferences.plugins[id];
-    if (id === 'notifications' && enabling && 'Notification' in window) {
-      if (Notification.permission === 'default') void Notification.requestPermission();
+    if (id === 'notifications' && enabling) {
+      if (requestingNotificationPermission) return;
+      setRequestingNotificationPermission(true);
+      try {
+        const permission = await getPlatformCapabilities().notifications.requestPermission();
+        if (permission.status !== 'success' || permission.value !== 'granted') return;
+      } finally {
+        setRequestingNotificationPermission(false);
+      }
     }
     setPreferences((current) => ({
       ...current,
@@ -790,7 +910,10 @@ export default function YouTubeMusicApp() {
           <Puzzle size={11} /> Extensions
         </button>
         <button
-          onClick={() => void runChrome("tab.linkedBrowser.reload(); return 'ok';")}
+          onClick={() => {
+            if (nativeSurfaceEnabled) void nativeSurfaceRef.current?.reload();
+            else void runChrome("tab.linkedBrowser.reload(); return 'ok';");
+          }}
           disabled={engineState !== 'ready'}
           className="flex h-6 items-center gap-1 border border-white/[0.06] px-2 font-mono text-[8px] uppercase tracking-wider text-[#71889d] hover:bg-white/[0.05] hover:text-white disabled:opacity-35"
           title="Reload YouTube Music"
@@ -799,53 +922,91 @@ export default function YouTubeMusicApp() {
         </button>
       </header>
       <div className="relative min-h-0 flex-1 bg-[#05080d]">
-        {engineState !== 'ready' && (
+        {engineState === 'error' && (
           <div className="absolute inset-0 z-30 grid place-items-center bg-[#05080d] p-6">
             <div className="w-full max-w-md border border-white/[0.07] bg-[#080d15] p-5 shadow-2xl">
-              {engineState === 'starting' ? (
-                <div className="flex items-center gap-3">
-                  <Loader2 size={20} className="animate-spin text-[#4aa3ff]" />
-                  <div>
-                    <div className="text-[12px] text-[#dce7f0]">Starting Nammu Music</div>
-                    <div className="mt-1 font-mono text-[8px] text-[#526b80]">
-                      One isolated Gecko session · plugins load once
-                    </div>
-                  </div>
+              <div>
+                <div className="flex items-center gap-2 text-[12px] text-red-300">
+                  <Music2 size={16} /> Music could not start
                 </div>
-              ) : (
-                <div>
-                  <div className="flex items-center gap-2 text-[12px] text-red-300">
-                    <Music2 size={16} /> Music could not start
-                  </div>
-                  <div className="mt-2 text-[10px] leading-relaxed text-[#71889d]">
-                    {engineError}
-                  </div>
-                  <button
-                    onClick={() => {
+                <div className="mt-2 text-[10px] leading-relaxed text-[#71889d]">
+                  {engineError}
+                </div>
+                <button
+                  onClick={() => {
+                    if (nativeSurfaceEnabled) {
+                      nativeSurfaceRef.current = null;
                       engineReadyRef.current = false;
-                      commandQueueRef.current = Promise.resolve();
                       setEngineState('starting');
                       setEngineError('');
                       setEngineAttempt((value) => value + 1);
-                    }}
-                    className="mt-4 border border-[#4aa3ff]/35 bg-[#4aa3ff]/12 px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-[#a8d3ff] hover:bg-[#4aa3ff]/20"
-                  >
-                    Retry engine
-                  </button>
-                </div>
-              )}
+                      return;
+                    }
+                    try {
+                      geckoRuntimeRef.current?.geckoDispose?.();
+                    } catch {}
+                    geckoRuntimeRef.current = null;
+                    engineReadyRef.current = false;
+                    commandQueueRef.current = Promise.resolve();
+                    setEngineState('starting');
+                    setEngineError('');
+                    setRuntimeWispUrl('');
+                    setEngineAttempt((value) => value + 1);
+                  }}
+                  className="mt-4 border border-[#4aa3ff]/35 bg-[#4aa3ff]/12 px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-[#a8d3ff] hover:bg-[#4aa3ff]/20"
+                >
+                  Retry engine
+                </button>
+              </div>
             </div>
           </div>
         )}
-        <iframe
-          key={engineAttempt}
-          ref={iframeRef}
-          src={runtimeUrl(engineAttempt)}
-          title="Nammu YouTube Music runtime"
-          className="h-full w-full border-0 bg-[#05080d]"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-pointer-lock allow-orientation-lock"
-          allow="cross-origin-isolated; autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture; encrypted-media"
-        />
+        {nativeSurfaceEnabled ? (
+          <NativeWebSurface
+            key={engineAttempt}
+            ref={nativeSurfaceRef}
+            enabled
+            active
+            owner="youtube-music"
+            profileKey="default"
+            privateSession={false}
+            url={MUSIC_URL}
+            zoom={100}
+            muted={media.muted}
+            browserOverlayActive={false}
+            overlayActive={drawer !== null}
+            surfaceLabel="YouTube Music"
+            onState={(snapshot) => {
+              setMedia((current) => ({
+                ...current,
+                title: snapshot.title || current.title,
+                muted: snapshot.isMuted,
+                paused: !snapshot.isAudioPlaying,
+              }));
+            }}
+            onReady={() => {
+              engineReadyRef.current = true;
+              setEngineState('ready');
+              setEngineError('');
+            }}
+            onFailure={(message) => {
+              engineReadyRef.current = false;
+              setEngineState('error');
+              setEngineError(message || 'YouTube Music could not open in the native web runtime.');
+            }}
+            onDiagnostic={() => {}}
+          />
+        ) : runtimeWispUrl ? (
+          <iframe
+            key={engineAttempt}
+            ref={iframeRef}
+            src={getGeckoRuntimeUrl(`nammu-music-${engineAttempt}`, runtimeWispUrl)}
+            title="Nammu YouTube Music runtime"
+            className="h-full w-full border-0 bg-[#05080d]"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-pointer-lock allow-orientation-lock"
+            allow="cross-origin-isolated; autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture; encrypted-media"
+          />
+        ) : null}
 
         {drawer === 'extensions' && (
           <aside className="absolute bottom-0 right-0 top-0 z-20 flex w-[330px] flex-col border-l border-white/[0.07] bg-[#070b12]/98 shadow-[-20px_0_60px_rgba(0,0,0,.5)] backdrop-blur-xl">
@@ -897,8 +1058,11 @@ export default function YouTubeMusicApp() {
                       return (
                         <button
                           key={plugin.id}
-                          onClick={() => togglePlugin(plugin.id)}
-                          disabled={plugin.support !== 'native'}
+                          onClick={() => void togglePlugin(plugin.id)}
+                          disabled={
+                            plugin.support !== 'native' ||
+                            (plugin.id === 'notifications' && requestingNotificationPermission)
+                          }
                           className={`flex w-full items-start gap-2 border p-2 text-left transition-colors ${plugin.support === 'native' ? 'border-white/[0.06] hover:bg-white/[0.025]' : 'cursor-default border-white/[0.035] opacity-70'} ${enabled && plugin.support === 'native' ? 'bg-[#4aa3ff]/[0.045]' : ''}`}
                         >
                           <span

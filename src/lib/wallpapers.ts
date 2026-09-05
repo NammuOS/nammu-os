@@ -74,7 +74,7 @@ export function getMatrixWallpaperVariant(src: string | null): MatrixWallpaperVa
   return null;
 }
 
-function normalizeMatrixEffectSettings(
+export function normalizeMatrixEffectSettings(
   variant: MatrixWallpaperVariant,
   value?: Partial<MatrixEffectSettings>,
 ): MatrixEffectSettings {

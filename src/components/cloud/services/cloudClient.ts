@@ -5,18 +5,7 @@ import type {
   CloudFile,
   StorageStats,
 } from '../types/cloudTypes';
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
-const CONFIGURED_WS_BASE_URL = (import.meta as any).env?.VITE_WS_BASE_URL as string | undefined;
-
-function getWebSocketBaseUrl(): string {
-  if (CONFIGURED_WS_BASE_URL) return CONFIGURED_WS_BASE_URL;
-  if (typeof window === 'undefined') {
-    throw new Error('Upload WebSocket URLs can only be resolved in the browser.');
-  }
-  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-  return `${protocol}${window.location.host}/ws/uploads`;
-}
+import { getPlatformCapabilities } from '../../../platform';
 
 // Utility formatting
 export function formatBytes(bytes: number | undefined | null): string {
@@ -126,16 +115,22 @@ export function getProviderColor(p?: CloudProvider | string): string {
   }
 }
 
-class CloudApiClient {
-  private async request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-      },
+export class CloudApiClient {
+  constructor(private readonly services = () => getPlatformCapabilities().services) {}
+
+  private async response(path: string, options: RequestInit = {}): Promise<Response> {
+    const headers = new Headers(options.headers);
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    return this.services().request(`/api${path}`, {
       ...options,
+      headers,
     });
+  }
+
+  private async request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+    const res = await this.response(path, options);
 
     if (!res.ok) {
       const payload = await res.json().catch(() => ({ error: 'API Error' }));
@@ -174,6 +169,39 @@ class CloudApiClient {
     return authUrl;
   }
 
+  async startDesktopOAuth(
+    provider: 'google_drive',
+    label?: string,
+  ): Promise<{ attemptId: string; authorizationUrl: string; expiresAt: string }> {
+    const res = await this.request<{
+      data: { attemptId: string; authorizationUrl: string; expiresAt: string };
+    }>(`/accounts/${provider}/connect`, {
+      method: 'POST',
+      body: JSON.stringify({ label: label?.trim() || undefined }),
+    });
+    return res.data;
+  }
+
+  async getDesktopOAuthStatus(attemptId: string): Promise<{
+    attemptId: string;
+    provider: 'google_drive';
+    status:
+      'awaiting_authorization' | 'exchanging' | 'completed' | 'cancelled' | 'expired' | 'failed';
+    expiresAt: string;
+    account?: CloudAccount;
+    warning?: string;
+    error?: { code: string; message: string };
+  }> {
+    const query = new URLSearchParams({ attempt_id: attemptId }).toString();
+    const res = await this.request<{ data: any }>(`/accounts/google_drive/status?${query}`);
+    return res.data;
+  }
+
+  async cancelDesktopOAuth(attemptId: string): Promise<void> {
+    const query = new URLSearchParams({ attempt_id: attemptId }).toString();
+    await this.request(`/accounts/google_drive/status?${query}`, { method: 'DELETE' });
+  }
+
   // FILES
   async listFiles(virtualPath = '/'): Promise<CloudFile[]> {
     const normalized = virtualPath.startsWith('/') ? virtualPath : `/${virtualPath}`;
@@ -192,8 +220,11 @@ class CloudApiClient {
     return res.data || [];
   }
 
-  async listSharedFiles(): Promise<CloudFile[]> {
-    const res = await this.request<{ data: CloudFile[] }>('/files?shared=1');
+  async listSharedFiles(parentFolderId?: string): Promise<CloudFile[]> {
+    const query = new URLSearchParams(
+      parentFolderId ? { shared_parent: parentFolderId } : { shared: '1' },
+    ).toString();
+    const res = await this.request<{ data: CloudFile[] }>(`/files?${query}`);
     return res.data || [];
   }
 
@@ -310,34 +341,16 @@ class CloudApiClient {
       throw new Error('Failed to initiate upload');
     }
 
-    // Connect WebSocket
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(`${getWebSocketBaseUrl()}?uploadId=${encodeURIComponent(init.uploadId)}`);
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.progress_percentage !== undefined) {
-            onProgress(data.progress_percentage);
-          }
-        } catch {}
-      };
-    } catch {}
-
-    // Upload stream
+    // The server exposes an HTTP stream, not a progress WebSocket. Keep the
+    // transfer indeterminate until the HTTP request completes instead of
+    // presenting fabricated byte progress.
+    onProgress(0);
     const formData = new FormData();
     formData.append('file', file);
-    const uploadRes = await fetch(`${API_BASE_URL}/uploads/${init.uploadId}/stream`, {
+    const uploadRes = await this.response(`/uploads/${init.uploadId}/stream`, {
       method: 'POST',
-      credentials: 'include',
       body: formData,
     });
-
-    if (ws) {
-      try {
-        ws.close();
-      } catch {}
-    }
 
     if (!uploadRes.ok) {
       const err = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
@@ -353,8 +366,7 @@ class CloudApiClient {
     file: CloudFile,
     onProgress: (percent: number, loadedBytes: number, totalBytes: number) => void,
   ): Promise<Blob> {
-    const downloadUrl = this.getDownloadUrl(file.id);
-    const response = await fetch(downloadUrl, { credentials: 'include' });
+    const response = await this.response(`/files/${encodeURIComponent(file.id)}/download`);
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
@@ -398,12 +410,15 @@ class CloudApiClient {
     return blob;
   }
 
-  getDownloadUrl(fileId: string): string {
-    return `${API_BASE_URL}/files/${fileId}/download`;
-  }
-
-  getPreviewUrl(fileId: string): string {
-    return `${API_BASE_URL}/files/${fileId}/preview`;
+  async fetchPreview(fileId: string, signal?: AbortSignal): Promise<Response> {
+    const response = await this.response(`/files/${encodeURIComponent(fileId)}/preview`, {
+      signal,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(payload.error || `Preview failed: HTTP ${response.status}`);
+    }
+    return response;
   }
 
   getStorageStats(accounts: CloudAccount[]): StorageStats {

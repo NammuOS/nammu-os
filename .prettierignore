@@ -1,7 +1,11 @@
 node_modules
 .next
 dist
+dist-desktop
 build
+src-tauri/target
+src-tauri/resources
+src-tauri/gen/schemas
 .git
 .github
 coverage

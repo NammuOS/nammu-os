@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-navigate-web-surface"
+description = "Enables the navigate_web_surface command without any pre-configured scope."
+commands.allow = ["navigate_web_surface"]
+
+[[permission]]
+identifier = "deny-navigate-web-surface"
+description = "Denies the navigate_web_surface command without any pre-configured scope."
+commands.deny = ["navigate_web_surface"]

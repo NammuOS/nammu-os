@@ -1,0 +1,34 @@
+fn main() {
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "get_local_service_info",
+            "authorize_local_request",
+            "list_native_file_roots",
+            "list_native_directory",
+            "stat_native_file",
+            "create_native_directory",
+            "create_native_file",
+            "rename_native_file",
+            "start_native_copy",
+            "start_native_move",
+            "start_native_duplicate",
+            "get_native_file_operation",
+            "cancel_native_file_operation",
+            "start_native_trash",
+            "start_native_permanent_delete",
+            "start_native_restore",
+            "get_native_deletion_operation",
+            "cancel_native_deletion_operation",
+            "create_web_surface",
+            "destroy_web_surface",
+            "navigate_web_surface",
+            "control_web_surface",
+            "set_web_surface_bounds",
+            "set_web_surface_visibility",
+            "focus_web_surface",
+            "set_web_surface_zoom",
+            "get_web_surface_state",
+        ]),
+    ))
+    .expect("failed to generate the Nammu OS Tauri application manifest")
+}

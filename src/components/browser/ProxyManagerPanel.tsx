@@ -20,6 +20,7 @@ import {
   type PublicProxyHealth,
   type PublicProxyProtocol,
 } from './services/publicProxy';
+import { getPlatformCapabilities } from '../../platform';
 
 interface ProxyManagerPanelProps {
   activeTabUrl: string;
@@ -100,7 +101,10 @@ export default function ProxyManagerPanel({
         if (country !== 'all') query.set('country', country);
         if (forceRefresh) query.set('refresh', '1');
 
-        const discoveryResponse = await fetch(`/api/browser/public-proxies?${query}`, { signal });
+        const discoveryResponse = await getPlatformCapabilities().services.request(
+          `/api/browser/public-proxies?${query}`,
+          { signal },
+        );
         const discoveryBody = (await discoveryResponse.json()) as {
           data?: PublicProxyEndpoint[];
           countries?: string[];
@@ -118,15 +122,18 @@ export default function ProxyManagerPanel({
         if (nextCandidates.length === 0) return;
 
         // Only endpoints proven live by our own health check are rendered as connectable.
-        const checkResponse = await fetch('/api/browser/public-proxies/check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ids: nextCandidates.slice(0, 20).map((proxy) => proxy.id),
-            ...(targetOrigin ? { targetUrl: targetOrigin } : {}),
-          }),
-          signal,
-        });
+        const checkResponse = await getPlatformCapabilities().services.request(
+          '/api/browser/public-proxies/check',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ids: nextCandidates.slice(0, 20).map((proxy) => proxy.id),
+              ...(targetOrigin ? { targetUrl: targetOrigin } : {}),
+            }),
+            signal,
+          },
+        );
         const checkBody = (await checkResponse.json()) as {
           data?: PublicProxyHealth[];
           error?: string;
@@ -180,14 +187,17 @@ export default function ProxyManagerPanel({
       const proposedFailovers = healthy
         .filter((candidate) => candidate.id !== proxy.id && candidate.protocol === proxy.protocol)
         .slice(0, 3);
-      const verificationResponse = await fetch('/api/browser/public-proxies/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ids: [proxy.id, ...proposedFailovers.map((item) => item.id)],
-          ...(targetOrigin ? { targetUrl: targetOrigin } : {}),
-        }),
-      });
+      const verificationResponse = await getPlatformCapabilities().services.request(
+        '/api/browser/public-proxies/check',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ids: [proxy.id, ...proposedFailovers.map((item) => item.id)],
+            ...(targetOrigin ? { targetUrl: targetOrigin } : {}),
+          }),
+        },
+      );
       const verificationBody = (await verificationResponse.json()) as {
         data?: PublicProxyHealth[];
         error?: string;
