@@ -2,6 +2,8 @@ import type {
   CapabilityResult,
   FilesystemResult,
   NativeDirectoryListing,
+  NativeDirectoryWatchDiagnostics,
+  NativeDirectoryWatchSubscription,
   NativeDeletionOperationSnapshot,
   NativeFileMetadata,
   NativeFileMutation,
@@ -205,6 +207,12 @@ export function createWebPlatformCapabilities(
       },
       async cancelDeletionOperation(): Promise<FilesystemResult<NativeDeletionOperationSnapshot>> {
         return unsupportedFilesystem<NativeDeletionOperationSnapshot>();
+      },
+      async watchDirectory(): Promise<FilesystemResult<NativeDirectoryWatchSubscription>> {
+        return unsupportedFilesystem<NativeDirectoryWatchSubscription>();
+      },
+      async getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>> {
+        return unsupportedFilesystem<NativeDirectoryWatchDiagnostics>();
       },
     }),
     files: Object.freeze({

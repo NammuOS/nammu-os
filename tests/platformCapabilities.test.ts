@@ -83,6 +83,19 @@ function tauriEnvironment(
       status: 'error',
       error: { code: 'NOT_FOUND', message: 'The operation is unavailable.' },
     }),
+    startNativeDirectoryWatch: async () => ({
+      status: 'error',
+      error: { code: 'WATCH_UNSUPPORTED', message: 'Watching is unavailable.' },
+    }),
+    stopNativeDirectoryWatch: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'The watcher is unavailable.' },
+    }),
+    getNativeDirectoryWatchDiagnostics: async () => ({
+      status: 'success',
+      value: { activeWatchers: 0, rawEvents: 0, emittedInvalidations: 0, droppedSignals: 0 },
+    }),
+    listenNativeFilesystemEvents: async () => () => undefined,
     pickFile: async () => null,
     saveFile: async () => null,
     readFile: async () => new Uint8Array(),
@@ -121,6 +134,7 @@ describe('platform capabilities', () => {
       'duplicate',
       'getDeletionOperation',
       'getOperation',
+      'getWatchDiagnostics',
       'listDirectory',
       'listRoots',
       'move',
@@ -130,6 +144,7 @@ describe('platform capabilities', () => {
       'stat',
       'supported',
       'trash',
+      'watchDirectory',
     ]);
     expect(Object.keys(firstWeb.files).sort()).toEqual(['pick', 'save']);
     expect(Object.keys(firstWeb.external)).toEqual(['openUrl']);
@@ -199,7 +214,7 @@ describe('platform capabilities', () => {
   test('fails closed instead of exposing a Desktop Wisp endpoint', async () => {
     const commands: string[] = [];
     const services = createTauriPlatformServices({
-      invoke: async <T>(command: string) => {
+      invoke: async <_T>(command: string) => {
         commands.push(command);
         throw new Error(`Unexpected command: ${command}`);
       },
@@ -249,6 +264,10 @@ describe('platform capabilities', () => {
       reason: 'This PC is available only in the Nammu desktop application.',
     });
     expect(await platform.filesystem.permanentlyDelete(['C:\\fixture.txt'], true)).toEqual({
+      status: 'unsupported',
+      reason: 'This PC is available only in the Nammu desktop application.',
+    });
+    expect(await platform.filesystem.watchDirectory('C:\\', () => undefined)).toEqual({
       status: 'unsupported',
       reason: 'This PC is available only in the Nammu desktop application.',
     });
@@ -601,6 +620,61 @@ describe('platform capabilities', () => {
       'permanent:C:\\fixture.txt:true',
       `restore:${'c'.repeat(32)}`,
     ]);
+  });
+
+  test('scopes native directory events to a disposable typed subscription', async () => {
+    const calls: string[] = [];
+    let nativeListener: ((payload: unknown) => void) | undefined;
+    let unlistened = false;
+    const events: string[] = [];
+    const watchId = 'd'.repeat(32);
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        listenNativeFilesystemEvents: async (listener) => {
+          nativeListener = listener;
+          return () => {
+            unlistened = true;
+          };
+        },
+        startNativeDirectoryWatch: async (path) => {
+          calls.push(`start:${path}`);
+          return { status: 'success', value: { id: watchId, path } };
+        },
+        stopNativeDirectoryWatch: async (id) => {
+          calls.push(`stop:${id}`);
+          return { status: 'success', value: { stopped: true, activeWatchers: 0 } };
+        },
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    const result = await platform.filesystem.watchDirectory('C:\\Fixture', (event) => {
+      events.push(event.kind);
+    });
+    expect(result.status).toBe('success');
+    nativeListener?.({ kind: 'malformed' });
+    nativeListener?.({
+      watchId,
+      rootPath: 'C:\\Fixture',
+      kind: 'renamed',
+      paths: ['C:\\Fixture\\old.txt', 'C:\\Fixture\\new.txt'],
+      rawEventCount: 2,
+      rescanRequired: false,
+      error: null,
+    });
+    expect(events).toEqual(['renamed']);
+    if (result.status === 'success') await result.value.dispose();
+    nativeListener?.({
+      watchId,
+      rootPath: 'C:\\Fixture',
+      kind: 'removed',
+      paths: ['C:\\Fixture\\new.txt'],
+      rawEventCount: 1,
+      rescanRequired: false,
+      error: null,
+    });
+    expect(events).toEqual(['renamed']);
+    expect(unlistened).toBe(true);
+    expect(calls).toEqual([`start:C:\\Fixture`, `stop:${watchId}`]);
   });
 
   test('fails closed on malformed native filesystem IPC and invalid paths', async () => {

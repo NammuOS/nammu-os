@@ -1,12 +1,15 @@
 import type {
   FilesystemResult,
   NativeDirectoryListing,
+  NativeDirectoryWatchDiagnostics,
+  NativeDirectoryWatchSubscription,
   NativeDeletionOperationSnapshot,
   NativeFileMetadata,
   NativeFileConflictStrategy,
   NativeFileMutation,
   NativeFileOperationSnapshot,
   NativeFileRoots,
+  NativeFilesystemWatchEvent,
   PlatformFilesystem,
 } from '../../platform';
 import { getPlatformCapabilities } from '../../platform';
@@ -47,6 +50,11 @@ export interface FilesystemService {
   restore(undoId: string): Promise<FilesystemResult<NativeDeletionOperationSnapshot>>;
   getDeletionOperation(id: string): Promise<FilesystemResult<NativeDeletionOperationSnapshot>>;
   cancelDeletionOperation(id: string): Promise<FilesystemResult<NativeDeletionOperationSnapshot>>;
+  watchDirectory(
+    path: string,
+    listener: (event: NativeFilesystemWatchEvent) => void,
+  ): Promise<FilesystemResult<NativeDirectoryWatchSubscription>>;
+  getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>>;
 }
 
 export interface FilesClipboard {
@@ -86,7 +94,58 @@ export function createFilesystemService(
     restore: (undoId: string) => filesystem.restore(undoId),
     getDeletionOperation: (id: string) => filesystem.getDeletionOperation(id),
     cancelDeletionOperation: (id: string) => filesystem.cancelDeletionOperation(id),
+    watchDirectory: (path: string, listener: (event: NativeFilesystemWatchEvent) => void) =>
+      filesystem.watchDirectory(path, listener),
+    getWatchDiagnostics: () => filesystem.getWatchDiagnostics(),
   });
+}
+
+export interface DirectoryRefreshCoordinator {
+  activate(path: string): number;
+  notify(path: string, generation: number): void;
+  deactivate(generation: number): void;
+}
+
+export function createDirectoryRefreshCoordinator(
+  refresh: (path: string, generation: number) => void,
+  schedule: (callback: () => void, delayMs: number) => unknown,
+  cancel: (handle: unknown) => void,
+  debounceMs = 120,
+): DirectoryRefreshCoordinator {
+  let currentGeneration = 0;
+  let currentPath: string | null = null;
+  let pending: unknown;
+
+  const clearPending = () => {
+    if (pending === undefined) return;
+    cancel(pending);
+    pending = undefined;
+  };
+
+  return {
+    activate(path) {
+      clearPending();
+      currentGeneration += 1;
+      currentPath = path;
+      return currentGeneration;
+    },
+    notify(path, generation) {
+      if (generation !== currentGeneration || path !== currentPath) return;
+      clearPending();
+      pending = schedule(() => {
+        pending = undefined;
+        if (generation === currentGeneration && path === currentPath) {
+          refresh(path, generation);
+        }
+      }, debounceMs);
+    },
+    deactivate(generation) {
+      if (generation !== currentGeneration) return;
+      clearPending();
+      currentGeneration += 1;
+      currentPath = null;
+    },
+  };
 }
 
 export function createFilesClipboard(

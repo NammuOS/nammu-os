@@ -46,6 +46,7 @@ import {
 } from 'react';
 import type {
   FilesystemError,
+  NativeDirectoryWatchSubscription,
   NativeDeletionOperationSnapshot,
   NativeDirectoryListing,
   NativeFileMetadata,
@@ -57,6 +58,7 @@ import { useContextMenu } from '../context-menu/useContextMenu';
 import {
   categorizeNativeFile,
   createFilesNavigationState,
+  createDirectoryRefreshCoordinator,
   createFilesClipboard,
   createFilesystemService,
   createLatestRequestGate,
@@ -171,6 +173,10 @@ type PendingConflict = {
 
 type PermanentDeleteDialog = {
   sources: readonly string[];
+};
+
+type LoadLocationOptions = {
+  background?: boolean;
 };
 
 type RecentFilesUndo =
@@ -290,6 +296,7 @@ export default function FilesApp() {
   const locationRef = useRef<FilesLocation>({ kind: 'roots' });
   const jobClipboard = useRef<FilesClipboard | null>(null);
   const transferHistoryMode = useRef<'record' | 'undo' | null>(null);
+  const selectedPathsRef = useRef<ReadonlySet<string>>(new Set());
   const [source, setSource] = useState<'nammu' | 'computer'>('nammu');
   const [mockLocation, setMockLocation] = useState<(typeof MOCK_LOCATIONS)[number]>('Home');
   const [query, setQuery] = useState('');
@@ -339,26 +346,33 @@ export default function FilesApp() {
   );
   const currentLocation = currentFilesLocation(navigation);
   locationRef.current = currentLocation;
+  selectedPathsRef.current = nativeSelectedPaths;
   const selectedNativeEntries = useMemo(
     () => (listing?.entries ?? []).filter((entry) => nativeSelectedPaths.has(entry.path)),
     [listing, nativeSelectedPaths],
   );
 
   const loadLocation = useCallback(
-    async (location: FilesLocation, selectionPaths: readonly string[] = []) => {
+    async (
+      location: FilesLocation,
+      selectionPaths: readonly string[] = [],
+      options: LoadLocationOptions = {},
+    ) => {
       const requestId = requestGate.current.begin();
       statGate.current.invalidate();
       const startedAt = typeof performance === 'undefined' ? 0 : performance.now();
-      setLoading(true);
-      setError(null);
-      setNativeSelected(null);
-      setNativeSelectedPaths(new Set());
-      setSelectionAnchor(null);
-      setRenderLimit(INITIAL_RENDER_LIMIT);
+      if (!options.background) {
+        setLoading(true);
+        setError(null);
+        setNativeSelected(null);
+        setNativeSelectedPaths(new Set());
+        setSelectionAnchor(null);
+        setRenderLimit(INITIAL_RENDER_LIMIT);
+      }
       if (location.kind === 'roots') {
         const result = await filesystem.listRoots();
         if (!requestGate.current.isCurrent(requestId)) return;
-        setLoading(false);
+        if (!options.background) setLoading(false);
         if (result.status === 'success') {
           setRoots(result.value.roots);
           setListing(null);
@@ -377,8 +391,9 @@ export default function FilesApp() {
 
       const result = await filesystem.listDirectory(location.path);
       if (!requestGate.current.isCurrent(requestId)) return;
-      setLoading(false);
+      if (!options.background) setLoading(false);
       if (result.status === 'success') {
+        setError(null);
         setListing(result.value);
         const availableSelection = result.value.entries.filter((entry) =>
           selectionPaths.includes(entry.path),
@@ -393,11 +408,36 @@ export default function FilesApp() {
         );
         return;
       }
-      setError(
-        result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
-      );
+      const nextError =
+        result.status === 'error'
+          ? result.error
+          : { code: 'IO_ERROR' as const, message: result.reason };
+      if (
+        options.background &&
+        ['NOT_FOUND', 'NOT_DIRECTORY', 'DRIVE_UNAVAILABLE'].includes(nextError.code)
+      ) {
+        setListing(null);
+        setNativeSelected(null);
+        setNativeSelectedPaths(new Set());
+        setSelectionAnchor(null);
+      }
+      setError(nextError);
     },
     [filesystem],
+  );
+
+  const refreshCoordinator = useMemo(
+    () =>
+      createDirectoryRefreshCoordinator(
+        (path) => {
+          const location = locationRef.current;
+          if (location.kind !== 'directory' || location.path !== path) return;
+          void loadLocation(location, [...selectedPathsRef.current], { background: true });
+        },
+        (callback, delayMs) => window.setTimeout(callback, delayMs),
+        (handle) => window.clearTimeout(handle as number),
+      ),
+    [loadLocation],
   );
 
   useEffect(() => {
@@ -410,6 +450,42 @@ export default function FilesApp() {
       metadataGate.invalidate();
     };
   }, []);
+
+  const watchPath =
+    source === 'computer' && currentLocation.kind === 'directory' ? currentLocation.path : null;
+
+  useEffect(() => {
+    if (!watchPath || !filesystem.supported) return;
+    const generation = refreshCoordinator.activate(watchPath);
+    let disposed = false;
+    let subscription: NativeDirectoryWatchSubscription | null = null;
+
+    void filesystem
+      .watchDirectory(watchPath, (event) => {
+        if (disposed) return;
+        if (event.kind === 'watch-error') {
+          setNotice('Live updates paused for this folder. Manual refresh remains available.');
+          return;
+        }
+        refreshCoordinator.notify(event.rootPath, generation);
+      })
+      .then((result) => {
+        if (result.status !== 'success') return;
+        if (disposed) {
+          void result.value.dispose();
+          return;
+        }
+        subscription = result.value;
+        // Closes the small enumeration-to-subscription race without polling.
+        refreshCoordinator.notify(result.value.path, generation);
+      });
+
+    return () => {
+      disposed = true;
+      refreshCoordinator.deactivate(generation);
+      if (subscription) void subscription.dispose();
+    };
+  }, [filesystem, refreshCoordinator, watchPath]);
 
   const openLocation = useCallback(
     (location: FilesLocation, push = true) => {

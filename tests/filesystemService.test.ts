@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
   categorizeNativeFile,
+  createDirectoryRefreshCoordinator,
   createFilesNavigationState,
   createFilesClipboard,
   createFilesystemService,
@@ -56,6 +57,42 @@ describe('Files native filesystem service', () => {
     expect(gate.isCurrent(latest)).toBe(true);
     gate.invalidate();
     expect(gate.isCurrent(latest)).toBe(false);
+  });
+
+  test('coalesces watcher bursts and rejects stale directory generations', () => {
+    const scheduled = new Map<number, () => void>();
+    const cancelled: number[] = [];
+    const refreshed: string[] = [];
+    let timerId = 0;
+    const coordinator = createDirectoryRefreshCoordinator(
+      (path) => refreshed.push(path),
+      (callback) => {
+        timerId += 1;
+        const currentTimer = timerId;
+        scheduled.set(currentTimer, () => {
+          scheduled.delete(currentTimer);
+          callback();
+        });
+        return timerId;
+      },
+      (handle) => {
+        cancelled.push(handle as number);
+        scheduled.delete(handle as number);
+      },
+    );
+    const first = coordinator.activate('C:\\A');
+    for (let index = 0; index < 1_000; index += 1) coordinator.notify('C:\\A', first);
+    expect(scheduled.size).toBe(1);
+    expect(cancelled).toHaveLength(999);
+    const second = coordinator.activate('C:\\B');
+    coordinator.notify('C:\\A', first);
+    expect(scheduled.size).toBe(0);
+    coordinator.notify('C:\\B', second);
+    [...scheduled.values()][0]?.();
+    expect(refreshed).toEqual(['C:\\B']);
+    coordinator.deactivate(second);
+    coordinator.notify('C:\\B', second);
+    expect(scheduled.size).toBe(0);
   });
 
   test('categorizes metadata without inspecting file contents', () => {
@@ -131,6 +168,15 @@ describe('Files native filesystem service', () => {
       async cancelDeletionOperation() {
         return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
       },
+      async watchDirectory() {
+        return { status: 'error', error: { code: 'WATCH_UNSUPPORTED', message: 'Unavailable.' } };
+      },
+      async getWatchDiagnostics() {
+        return {
+          status: 'success',
+          value: { activeWatchers: 0, rawEvents: 0, emittedInvalidations: 0, droppedSignals: 0 },
+        };
+      },
     };
     const service = createFilesystemService(filesystem);
     await service.listRoots();
@@ -146,6 +192,7 @@ describe('Files native filesystem service', () => {
       'duplicate',
       'getDeletionOperation',
       'getOperation',
+      'getWatchDiagnostics',
       'listDirectory',
       'listRoots',
       'move',
@@ -155,6 +202,7 @@ describe('Files native filesystem service', () => {
       'stat',
       'supported',
       'trash',
+      'watchDirectory',
     ]);
   });
 
@@ -218,6 +266,9 @@ describe('Files native filesystem service', () => {
     expect(capability.permissions).toContain('allow-start-native-restore');
     expect(capability.permissions).toContain('allow-get-native-deletion-operation');
     expect(capability.permissions).toContain('allow-cancel-native-deletion-operation');
+    expect(capability.permissions).toContain('allow-start-native-directory-watch');
+    expect(capability.permissions).toContain('allow-stop-native-directory-watch');
+    expect(capability.permissions).toContain('allow-get-native-directory-watch-diagnostics');
   });
 
   test('routes normal Delete to the Recycle Bin and Shift+Delete through confirmation', () => {
@@ -231,6 +282,16 @@ describe('Files native filesystem service', () => {
     expect(source).toContain('will not be moved to Recycle Bin and cannot be restored');
   });
 
+  test('binds one live watcher to the current directory and disposes it on lifecycle changes', () => {
+    const source = readFileSync('src/components/files/FilesApp.tsx', 'utf8');
+    expect(source).toContain('.watchDirectory(watchPath');
+    expect(source).toContain('void result.value.dispose()');
+    expect(source).toContain('if (subscription) void subscription.dispose()');
+    expect(source).toContain('{ background: true }');
+    expect(source).toContain('refreshCoordinator.deactivate(generation)');
+    expect(source).not.toContain('setInterval(');
+  });
+
   test('keeps the Rust Files boundary typed, trusted-main-only, and shell-free', () => {
     const readSource = readFileSync('src-tauri/src/native_filesystem.rs', 'utf8').split(
       '#[cfg(test)]',
@@ -241,6 +302,9 @@ describe('Files native filesystem service', () => {
     const deleteSource = readFileSync('src-tauri/src/native_recycle_bin.rs', 'utf8').split(
       '#[cfg(test)]',
     )[0];
+    const watchSource = readFileSync('src-tauri/src/native_directory_watcher.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
     const readCommands = [
       ...readSource.matchAll(/#\[tauri::command\][\s\S]*?pub async fn (\w+)/g),
     ].map((match) => match[1]);
@@ -249,6 +313,9 @@ describe('Files native filesystem service', () => {
     ].map((match) => match[1]);
     const deleteCommands = [
       ...deleteSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const watchCommands = [
+      ...watchSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
     ].map((match) => match[1]);
     expect(readCommands).toEqual([
       'list_native_file_roots',
@@ -272,7 +339,12 @@ describe('Files native filesystem service', () => {
       'get_native_deletion_operation',
       'cancel_native_deletion_operation',
     ]);
-    for (const source of [readSource, writeSource, deleteSource]) {
+    expect(watchCommands).toEqual([
+      'start_native_directory_watch',
+      'stop_native_directory_watch',
+      'get_native_directory_watch_diagnostics',
+    ]);
+    for (const source of [readSource, writeSource, deleteSource, watchSource]) {
       expect(source).not.toContain('std::process::Command');
       expect(source).not.toContain('Command::new');
       expect(source).not.toContain('powershell.exe');
@@ -281,5 +353,8 @@ describe('Files native filesystem service', () => {
       expect(source).toContain('require_trusted_caller');
     }
     expect(deleteCommands).not.toContain('delete_any_path');
+    expect(watchSource).toContain('RecursiveMode::NonRecursive');
+    expect(watchSource).toContain('emit_to(TRUSTED_WEBVIEW_LABEL');
+    expect(watchSource).not.toContain('PollWatcher');
   });
 });

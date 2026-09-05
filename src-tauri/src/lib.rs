@@ -1,4 +1,5 @@
 mod local_server;
+mod native_directory_watcher;
 mod native_file_operations;
 mod native_filesystem;
 mod native_recycle_bin;
@@ -99,6 +100,9 @@ pub fn run() {
             native_recycle_bin::start_native_restore,
             native_recycle_bin::get_native_deletion_operation,
             native_recycle_bin::cancel_native_deletion_operation,
+            native_directory_watcher::start_native_directory_watch,
+            native_directory_watcher::stop_native_directory_watch,
+            native_directory_watcher::get_native_directory_watch_diagnostics,
             web_surface::create_web_surface,
             web_surface::destroy_web_surface,
             web_surface::navigate_web_surface,
@@ -132,6 +136,7 @@ pub fn run() {
             app.manage(LocalServerState::new(supervisor));
             app.manage(native_file_operations::NativeFileOperationState::default());
             app.manage(native_recycle_bin::NativeRecycleBinState::default());
+            app.manage(native_directory_watcher::NativeDirectoryWatchState::default());
             app.manage(web_surface_state);
             Ok(())
         })

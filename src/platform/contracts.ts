@@ -62,6 +62,8 @@ export type FilesystemErrorCode =
   | 'ROOT_OPERATION_FORBIDDEN'
   | 'CONFIRMATION_REQUIRED'
   | 'UNDO_UNAVAILABLE'
+  | 'WATCH_UNSUPPORTED'
+  | 'WATCH_FAILED'
   | 'IO_ERROR';
 
 export interface FilesystemError {
@@ -187,6 +189,32 @@ export interface NativeDeletionOperationSnapshot {
   cancellationMode: NativeDeletionCancellationMode;
 }
 
+export type NativeFilesystemEventKind =
+  'created' | 'removed' | 'renamed' | 'modified' | 'metadata' | 'rescan-required' | 'watch-error';
+
+export interface NativeFilesystemWatchEvent {
+  watchId: string;
+  rootPath: string;
+  kind: NativeFilesystemEventKind;
+  paths: readonly string[];
+  rawEventCount: number;
+  rescanRequired: boolean;
+  error: FilesystemError | null;
+}
+
+export interface NativeDirectoryWatchDiagnostics {
+  activeWatchers: number;
+  rawEvents: number;
+  emittedInvalidations: number;
+  droppedSignals: number;
+}
+
+export interface NativeDirectoryWatchSubscription {
+  readonly id: string;
+  readonly path: string;
+  dispose(): Promise<void>;
+}
+
 export interface PlatformFilesystem {
   readonly supported: boolean;
   listRoots(): Promise<FilesystemResult<NativeFileRoots>>;
@@ -216,6 +244,11 @@ export interface PlatformFilesystem {
   restore(undoId: string): Promise<FilesystemResult<NativeDeletionOperationSnapshot>>;
   getDeletionOperation(id: string): Promise<FilesystemResult<NativeDeletionOperationSnapshot>>;
   cancelDeletionOperation(id: string): Promise<FilesystemResult<NativeDeletionOperationSnapshot>>;
+  watchDirectory(
+    path: string,
+    listener: (event: NativeFilesystemWatchEvent) => void,
+  ): Promise<FilesystemResult<NativeDirectoryWatchSubscription>>;
+  getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>>;
 }
 
 export type PlatformNotificationPermission = 'default' | 'granted' | 'denied';

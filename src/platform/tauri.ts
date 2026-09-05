@@ -4,6 +4,8 @@ import type {
   FilesystemErrorCode,
   FilesystemResult,
   NativeDirectoryListing,
+  NativeDirectoryWatchDiagnostics,
+  NativeDirectoryWatchSubscription,
   NativeDeletionCancellationMode,
   NativeDeletionFailure,
   NativeDeletionOperationSnapshot,
@@ -22,6 +24,8 @@ import type {
   NativeFileRoot,
   NativeFileRootKind,
   NativeFileRoots,
+  NativeFilesystemEventKind,
+  NativeFilesystemWatchEvent,
   PickFilesOptions,
   PickedFiles,
   PlatformCapabilities,
@@ -90,6 +94,10 @@ export interface TauriCapabilityEnvironment {
   startNativeRestore(undoId: string): Promise<unknown>;
   getNativeDeletionOperation(id: string): Promise<unknown>;
   cancelNativeDeletionOperation(id: string): Promise<unknown>;
+  startNativeDirectoryWatch(path: string): Promise<unknown>;
+  stopNativeDirectoryWatch(id: string): Promise<unknown>;
+  getNativeDirectoryWatchDiagnostics(): Promise<unknown>;
+  listenNativeFilesystemEvents(listener: (payload: unknown) => void): Promise<TauriUnlisten>;
   pickFile(options: {
     directory: false;
     multiple: boolean;
@@ -192,6 +200,19 @@ const tauriCapabilityEnvironment: TauriCapabilityEnvironment = {
   },
   async cancelNativeDeletionOperation(id) {
     return tauriServiceEnvironment.invoke('cancel_native_deletion_operation', { id });
+  },
+  async startNativeDirectoryWatch(path) {
+    return tauriServiceEnvironment.invoke('start_native_directory_watch', { path });
+  },
+  async stopNativeDirectoryWatch(id) {
+    return tauriServiceEnvironment.invoke('stop_native_directory_watch', { id });
+  },
+  async getNativeDirectoryWatchDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_directory_watch_diagnostics');
+  },
+  async listenNativeFilesystemEvents(listener) {
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen('nammu://native-filesystem-change', (event) => listener(event.payload));
   },
   async pickFile(options) {
     const { open } = await import('@tauri-apps/plugin-dialog');
@@ -522,6 +543,8 @@ const FILESYSTEM_ERROR_CODES = new Set<FilesystemErrorCode>([
   'ROOT_OPERATION_FORBIDDEN',
   'CONFIRMATION_REQUIRED',
   'UNDO_UNAVAILABLE',
+  'WATCH_UNSUPPORTED',
+  'WATCH_FAILED',
   'IO_ERROR',
 ]);
 const FILE_OPERATION_TYPES = new Set<NativeFileOperationType>(['copy', 'move', 'duplicate']);
@@ -550,6 +573,15 @@ const ROOT_KINDS = new Set<NativeFileRootKind>([
   'other',
 ]);
 const FILE_KINDS = new Set<NativeFileKind>(['file', 'directory', 'reparse-point', 'other']);
+const FILESYSTEM_EVENT_KINDS = new Set<NativeFilesystemEventKind>([
+  'created',
+  'removed',
+  'renamed',
+  'modified',
+  'metadata',
+  'rescan-required',
+  'watch-error',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -749,6 +781,58 @@ function validDeletionSnapshot(value: unknown): value is NativeDeletionOperation
     typeof value.reversible === 'boolean' &&
     typeof value.cancellationMode === 'string' &&
     DELETION_CANCELLATION_MODES.has(value.cancellationMode as NativeDeletionCancellationMode)
+  );
+}
+
+function validWatchRegistration(value: unknown): value is { id: string; path: string } {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.id) &&
+    typeof value.path === 'string' &&
+    value.path.length > 0
+  );
+}
+
+function validWatchStop(value: unknown): value is { stopped: boolean; activeWatchers: number } {
+  return (
+    isRecord(value) &&
+    value.stopped === true &&
+    Number.isSafeInteger(value.activeWatchers) &&
+    Number(value.activeWatchers) >= 0
+  );
+}
+
+function validWatchDiagnostics(value: unknown): value is NativeDirectoryWatchDiagnostics {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.activeWatchers) &&
+    Number(value.activeWatchers) >= 0 &&
+    Number.isSafeInteger(value.rawEvents) &&
+    Number(value.rawEvents) >= 0 &&
+    Number.isSafeInteger(value.emittedInvalidations) &&
+    Number(value.emittedInvalidations) >= 0 &&
+    Number.isSafeInteger(value.droppedSignals) &&
+    Number(value.droppedSignals) >= 0
+  );
+}
+
+function validFilesystemWatchEvent(value: unknown): value is NativeFilesystemWatchEvent {
+  return (
+    isRecord(value) &&
+    typeof value.watchId === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.watchId) &&
+    typeof value.rootPath === 'string' &&
+    value.rootPath.length > 0 &&
+    typeof value.kind === 'string' &&
+    FILESYSTEM_EVENT_KINDS.has(value.kind as NativeFilesystemEventKind) &&
+    Array.isArray(value.paths) &&
+    value.paths.length <= 32 &&
+    value.paths.every((path) => typeof path === 'string' && path.length > 0) &&
+    Number.isSafeInteger(value.rawEventCount) &&
+    Number(value.rawEventCount) > 0 &&
+    typeof value.rescanRequired === 'boolean' &&
+    (value.error === null || validFilesystemError(value.error))
   );
 }
 
@@ -1054,6 +1138,77 @@ export function createTauriPlatformCapabilities(
           return decodeFilesystemResponse(
             await environment.cancelNativeDeletionOperation(id),
             validDeletionSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async watchDirectory(
+        path: string,
+        listener: (event: NativeFilesystemWatchEvent) => void,
+      ): Promise<FilesystemResult<NativeDirectoryWatchSubscription>> {
+        if (!validFilesystemPath(path)) return invalidFilesystemPath();
+        let disposed = false;
+        let watchId: string | null = null;
+        const earlyEvents: NativeFilesystemWatchEvent[] = [];
+        let unlisten: TauriUnlisten;
+        try {
+          unlisten = await environment.listenNativeFilesystemEvents((payload) => {
+            if (disposed || !validFilesystemWatchEvent(payload)) return;
+            if (!watchId) {
+              if (earlyEvents.length < 64) earlyEvents.push(payload);
+              return;
+            }
+            if (payload.watchId === watchId) listener(payload);
+          });
+        } catch {
+          return filesystemFailure();
+        }
+        let started: FilesystemResult<{ id: string; path: string }>;
+        try {
+          started = decodeFilesystemResponse(
+            await environment.startNativeDirectoryWatch(path),
+            validWatchRegistration,
+          );
+        } catch {
+          unlisten();
+          return filesystemFailure();
+        }
+        if (started.status !== 'success') {
+          unlisten();
+          return started;
+        }
+        watchId = started.value.id;
+        for (const event of earlyEvents) {
+          if (event.watchId === watchId) listener(event);
+        }
+        const registration = started.value;
+        return {
+          status: 'success',
+          value: Object.freeze({
+            id: registration.id,
+            path: registration.path,
+            async dispose() {
+              if (disposed) return;
+              disposed = true;
+              unlisten();
+              try {
+                decodeFilesystemResponse(
+                  await environment.stopNativeDirectoryWatch(registration.id),
+                  validWatchStop,
+                );
+              } catch {
+                // Disposal is best-effort after the native runtime has begun shutting down.
+              }
+            },
+          }),
+        };
+      },
+      async getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeDirectoryWatchDiagnostics(),
+            validWatchDiagnostics,
           );
         } catch {
           return filesystemFailure();

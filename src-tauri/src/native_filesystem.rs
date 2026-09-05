@@ -29,6 +29,8 @@ pub enum NativeFilesystemErrorCode {
     RootOperationForbidden,
     ConfirmationRequired,
     UndoUnavailable,
+    WatchUnsupported,
+    WatchFailed,
     IoError,
 }
 
@@ -104,6 +106,12 @@ impl NativeFilesystemError {
             }
             NativeFilesystemErrorCode::UndoUnavailable => {
                 "This operation is no longer available to undo."
+            }
+            NativeFilesystemErrorCode::WatchUnsupported => {
+                "This location does not support live filesystem updates."
+            }
+            NativeFilesystemErrorCode::WatchFailed => {
+                "Live filesystem updates are temporarily unavailable for this folder."
             }
             NativeFilesystemErrorCode::IoError => operation,
         };

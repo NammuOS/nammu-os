@@ -17,6 +17,7 @@
     "desktop:server:smoke": "node scripts/smoke-desktop-local-server.mjs",
     "desktop:files:accept": "node scripts/accept-files-f2a.mjs",
     "desktop:files:delete:accept": "node scripts/accept-files-f2b.mjs",
+    "desktop:files:watch:accept": "node scripts/accept-files-f2c.mjs",
     "desktop:release:prepare": "bun run build && bun run desktop:server:prepare && bun run desktop:server:smoke",
     "desktop:release:verify": "node scripts/verify-desktop-release.mjs",
     "firefox:patch": "node scripts/patch-firefox-wasm-release.mjs",
