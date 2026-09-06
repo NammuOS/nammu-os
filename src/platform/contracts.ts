@@ -64,6 +64,16 @@ export type FilesystemErrorCode =
   | 'UNDO_UNAVAILABLE'
   | 'WATCH_UNSUPPORTED'
   | 'WATCH_FAILED'
+  | 'PREVIEW_UNSUPPORTED'
+  | 'PDF_ENCRYPTED'
+  | 'DECODE_FAILED'
+  | 'FILE_CHANGED'
+  | 'ARCHIVE_UNSUPPORTED'
+  | 'ARCHIVE_INVALID'
+  | 'ARCHIVE_ENCRYPTED'
+  | 'ARCHIVE_LIMIT_EXCEEDED'
+  | 'ARCHIVE_ENTRY_UNSAFE'
+  | 'ARCHIVE_CORRUPT'
   | 'IO_ERROR';
 
 export interface FilesystemError {
@@ -215,6 +225,253 @@ export interface NativeDirectoryWatchSubscription {
   dispose(): Promise<void>;
 }
 
+export type NativeFileSearchScope = 'current-folder' | 'current-tree' | 'selected-drive';
+export type NativeFileSearchKind = 'all' | 'files' | 'folders';
+export type NativeFileSearchState = 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface NativeFileSearchQuery {
+  rootPath: string;
+  text: string;
+  scope: NativeFileSearchScope;
+  kind: NativeFileSearchKind;
+  extensions: readonly string[];
+}
+
+export interface NativeFileSearchSnapshot {
+  id: string;
+  query: NativeFileSearchQuery;
+  state: NativeFileSearchState;
+  scannedEntries: number;
+  matchedEntries: number;
+  inaccessibleEntries: number;
+  retainedResults: number;
+  resultLimit: number;
+  truncated: boolean;
+  durationMs: number;
+  resultOffset: number;
+  results: readonly NativeFileMetadata[];
+  error: FilesystemError | null;
+}
+
+export interface NativeFileSearchDiagnostics {
+  activeSearches: number;
+  retainedSearches: number;
+  retainedResults: number;
+}
+
+export type NativeFilePreviewMode = 'thumbnail' | 'image-preview' | 'text-preview';
+export type NativeFilePreviewState = 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+export type NativeFilePreviewKind = 'image' | 'text';
+
+export interface NativeFilePreviewRequest {
+  path: string;
+  mode: NativeFilePreviewMode;
+  requestedWidth: number;
+  requestedHeight: number;
+}
+
+export interface NativeFilePreviewDescriptor {
+  kind: NativeFilePreviewKind;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  sourceWidth: number | null;
+  sourceHeight: number | null;
+  pageCount: number | null;
+  durationMs: number | null;
+  byteLength: number;
+  text: string | null;
+  truncated: boolean;
+  cacheHit: boolean;
+}
+
+export interface NativeFilePreviewSnapshot {
+  id: string;
+  request: NativeFilePreviewRequest;
+  state: NativeFilePreviewState;
+  durationMs: number;
+  result: NativeFilePreviewDescriptor | null;
+  error: FilesystemError | null;
+}
+
+export interface NativeFilePreviewDiagnostics {
+  activeJobs: number;
+  retainedJobs: number;
+  retainedResultBytes: number;
+  cacheEntries: number;
+  cacheBytes: number;
+  maxActiveJobs: number;
+  cacheMaxEntries: number;
+  cacheMaxBytes: number;
+}
+
+export type NativePropertyItemKind =
+  | 'file'
+  | 'directory'
+  | 'drive'
+  | 'symbolic-link'
+  | 'junction'
+  | 'other-reparse'
+  | 'other'
+  | 'unavailable';
+
+export interface NativeFileAttributes {
+  readOnly: boolean;
+  hidden: boolean;
+  system: boolean;
+  archive: boolean;
+  compressed: boolean;
+  encrypted: boolean;
+  sparse: boolean;
+  offline: boolean;
+  temporary: boolean;
+  reparsePoint: boolean;
+}
+
+export interface NativeVolumeProperties {
+  path: string;
+  label: string | null;
+  kind: NativeFileRootKind;
+  fileSystem: string | null;
+  totalBytes: number | null;
+  freeBytes: number | null;
+  usedBytes: number | null;
+  accessible: boolean;
+}
+
+export interface NativeFilePropertyItem {
+  name: string;
+  path: string;
+  parentPath: string | null;
+  extension: string | null;
+  kind: NativePropertyItemKind;
+  sizeBytes: number | null;
+  allocatedBytes: number | null;
+  createdAtMs: number | null;
+  modifiedAtMs: number | null;
+  accessedAtMs: number | null;
+  attributes: NativeFileAttributes;
+  hardLinkCount: number | null;
+  linkTarget: string | null;
+  volume: NativeVolumeProperties | null;
+  accessible: boolean;
+  accessError: FilesystemError | null;
+}
+
+export interface NativeFileProperties {
+  items: readonly NativeFilePropertyItem[];
+  itemCount: number;
+  fileCount: number;
+  folderCount: number;
+  driveCount: number;
+  directFileBytes: number;
+  directAllocatedBytes: number | null;
+  containsUnmeasuredFolders: boolean;
+  commonParentPath: string | null;
+  mixedKinds: boolean;
+  durationMs: number;
+}
+
+export type DirectoryMeasurementState = 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface DirectoryMeasurementSnapshot {
+  id: string;
+  state: DirectoryMeasurementState;
+  rootCount: number;
+  filesScanned: number;
+  directoriesScanned: number;
+  logicalBytes: number;
+  allocatedBytes: number | null;
+  allocationComplete: boolean;
+  skippedEntries: number;
+  reparsePointsSkipped: number;
+  durationMs: number;
+  error: FilesystemError | null;
+}
+
+export interface DirectoryMeasurementDiagnostics {
+  activeJobs: number;
+  retainedJobs: number;
+  maxActiveJobs: number;
+}
+
+export type NativeArchiveEntryKind = 'file' | 'directory' | 'symlink';
+
+export interface NativeArchiveEntry {
+  id: string;
+  path: string;
+  parentPath: string;
+  name: string;
+  kind: NativeArchiveEntryKind;
+  compressedSize: number;
+  uncompressedSize: number;
+  modified: string | null;
+  compressionMethod: string;
+  encrypted: boolean;
+}
+
+export interface NativeArchiveSummary {
+  id: string;
+  archivePath: string;
+  name: string;
+  entryCount: number;
+  fileCount: number;
+  directoryCount: number;
+  encryptedEntries: number;
+  symlinkEntries: number;
+  unsupportedEntries: number;
+  totalCompressedBytes: number;
+  totalUncompressedBytes: number;
+  durationMs: number;
+}
+
+export interface NativeArchiveListing {
+  archiveId: string;
+  path: string;
+  parentPath: string | null;
+  entries: readonly NativeArchiveEntry[];
+  totalEntries: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export type NativeArchiveConflictStrategy = 'skip' | 'keep-both' | 'cancel';
+export type NativeArchiveOperationType = 'extract' | 'create-zip';
+export type NativeArchiveOperationState =
+  'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface NativeArchiveFailure {
+  entry: string;
+  error: FilesystemError;
+}
+
+export interface NativeArchiveOperationSnapshot {
+  id: string;
+  operation: NativeArchiveOperationType;
+  state: NativeArchiveOperationState;
+  archivePath: string;
+  destinationPath: string;
+  currentEntry: string | null;
+  filesCompleted: number;
+  directoriesCompleted: number;
+  entriesTotal: number;
+  bytesProcessed: number;
+  bytesTotal: number;
+  skippedEntries: number;
+  failures: readonly NativeArchiveFailure[];
+  error: FilesystemError | null;
+}
+
+export interface NativeArchiveDiagnostics {
+  openArchives: number;
+  activeJobs: number;
+  retainedJobs: number;
+  maxActiveJobs: number;
+  maxArchiveEntries: number;
+  maxTotalUncompressedBytes: number;
+}
+
 export interface PlatformFilesystem {
   readonly supported: boolean;
   listRoots(): Promise<FilesystemResult<NativeFileRoots>>;
@@ -249,6 +506,53 @@ export interface PlatformFilesystem {
     listener: (event: NativeFilesystemWatchEvent) => void,
   ): Promise<FilesystemResult<NativeDirectoryWatchSubscription>>;
   getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>>;
+  startSearch(query: NativeFileSearchQuery): Promise<FilesystemResult<NativeFileSearchSnapshot>>;
+  getSearch(id: string, resultOffset: number): Promise<FilesystemResult<NativeFileSearchSnapshot>>;
+  cancelSearch(id: string): Promise<FilesystemResult<NativeFileSearchSnapshot>>;
+  releaseSearch(id: string): Promise<FilesystemResult<{ released: true }>>;
+  getSearchDiagnostics(): Promise<FilesystemResult<NativeFileSearchDiagnostics>>;
+  startPreview(
+    request: NativeFilePreviewRequest,
+  ): Promise<FilesystemResult<NativeFilePreviewSnapshot>>;
+  getPreview(id: string): Promise<FilesystemResult<NativeFilePreviewSnapshot>>;
+  takePreviewBytes(id: string): Promise<FilesystemResult<Uint8Array>>;
+  cancelPreview(id: string): Promise<FilesystemResult<NativeFilePreviewSnapshot>>;
+  releasePreview(id: string): Promise<FilesystemResult<{ released: true }>>;
+  getPreviewDiagnostics(): Promise<FilesystemResult<NativeFilePreviewDiagnostics>>;
+  getProperties(paths: readonly string[]): Promise<FilesystemResult<NativeFileProperties>>;
+  startDirectoryMeasurement(
+    paths: readonly string[],
+  ): Promise<FilesystemResult<DirectoryMeasurementSnapshot>>;
+  getDirectoryMeasurement(id: string): Promise<FilesystemResult<DirectoryMeasurementSnapshot>>;
+  cancelDirectoryMeasurement(id: string): Promise<FilesystemResult<DirectoryMeasurementSnapshot>>;
+  releaseDirectoryMeasurement(id: string): Promise<FilesystemResult<{ released: true }>>;
+  getDirectoryMeasurementDiagnostics(): Promise<FilesystemResult<DirectoryMeasurementDiagnostics>>;
+  openArchive(path: string): Promise<FilesystemResult<NativeArchiveSummary>>;
+  listArchiveEntries(
+    archiveId: string,
+    path: string,
+    offset?: number,
+    limit?: number,
+    query?: string,
+  ): Promise<FilesystemResult<NativeArchiveListing>>;
+  releaseArchive(archiveId: string): Promise<FilesystemResult<{ released: boolean }>>;
+  extractArchive(options: {
+    archiveId: string;
+    destinationPath: string;
+    selectedEntryIds?: readonly string[];
+    conflictStrategy: NativeArchiveConflictStrategy;
+  }): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  createZip(options: {
+    sources: readonly string[];
+    destinationPath: string;
+    conflictStrategy: NativeArchiveConflictStrategy;
+  }): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  getArchiveOperation(id: string): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  cancelArchiveOperation(id: string): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  releaseArchiveOperation(id: string): Promise<FilesystemResult<{ released: boolean }>>;
+  getArchiveDiagnostics(): Promise<FilesystemResult<NativeArchiveDiagnostics>>;
+  pickArchiveDestination(defaultPath?: string): Promise<FilesystemResult<string | null>>;
+  pickZipDestination(defaultName: string): Promise<FilesystemResult<string | null>>;
 }
 
 export type PlatformNotificationPermission = 'default' | 'granted' | 'denied';

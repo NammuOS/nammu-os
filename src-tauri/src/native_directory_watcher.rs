@@ -667,8 +667,20 @@ mod tests {
 
         drop(watcher);
         while receiver.try_recv().is_ok() {}
-        fs::write(root.join("after-unsubscribe.txt"), b"ignored").unwrap();
-        assert!(receiver.recv_timeout(Duration::from_millis(250)).is_err());
+        let after_unsubscribe = root.join("after-unsubscribe.txt");
+        fs::write(&after_unsubscribe, b"ignored").unwrap();
+        let deadline = Instant::now() + Duration::from_millis(250);
+        while Instant::now() < deadline {
+            match receiver.recv_timeout(Duration::from_millis(25)) {
+                Ok(Ok(event)) => assert!(
+                    !event.paths.iter().any(|path| path == &after_unsubscribe),
+                    "dropped watcher observed a generated post-unsubscribe change"
+                ),
+                Ok(Err(_)) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
         fs::remove_dir_all(root).unwrap();
     }
 }

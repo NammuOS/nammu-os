@@ -43,20 +43,27 @@ import {
   useState,
   type ComponentType,
   type MouseEvent as ReactMouseEvent,
+  type RefObject,
 } from 'react';
 import type {
   FilesystemError,
+  NativeArchiveOperationSnapshot,
+  NativeArchiveSummary,
   NativeDirectoryWatchSubscription,
   NativeDeletionOperationSnapshot,
   NativeDirectoryListing,
   NativeFileMetadata,
   NativeFileOperationSnapshot,
   NativeFileRoot,
+  NativeFileSearchScope,
+  NativeFileSearchSnapshot,
 } from '../../platform';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 import { useContextMenu } from '../context-menu/useContextMenu';
 import {
   categorizeNativeFile,
+  buildNativeSearchQuery,
+  canStartNativeSearch,
   createFilesNavigationState,
   createDirectoryRefreshCoordinator,
   createFilesClipboard,
@@ -69,7 +76,14 @@ import {
   visibleNativeEntries,
   type FilesClipboard,
   type FilesLocation,
+  type NativeSearchFilter,
 } from './filesystemService';
+import {
+  createNativePreviewScheduler,
+  type NativePreviewScheduler,
+} from './nativePreviewScheduler';
+import { FilePropertiesDialog } from './FilePropertiesDialog';
+import { ArchiveBrowser } from './ArchiveBrowser';
 
 type MockItem = {
   id: number;
@@ -192,6 +206,14 @@ function terminalDeletion(operation: NativeDeletionOperationSnapshot) {
   return ['completed', 'failed', 'cancelled'].includes(operation.state);
 }
 
+function terminalArchiveOperation(operation: NativeArchiveOperationSnapshot) {
+  return ['completed', 'failed', 'cancelled'].includes(operation.state);
+}
+
+function terminalSearch(search: NativeFileSearchSnapshot) {
+  return ['completed', 'failed', 'cancelled'].includes(search.state);
+}
+
 function leafName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }
@@ -249,7 +271,279 @@ function iconForEntry(
   }
 }
 
-function DriveCard({ root, onOpen }: { root: NativeFileRoot; onOpen: () => void }) {
+function previewIdentity(entry: NativeFileMetadata) {
+  return `${entry.path}\u0000${entry.sizeBytes ?? ''}\u0000${entry.modifiedAtMs ?? ''}`;
+}
+
+function formatMediaDuration(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    : `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+const TEXT_PREVIEW_EXTENSIONS = new Set([
+  'txt',
+  'md',
+  'json',
+  'yaml',
+  'yml',
+  'xml',
+  'csv',
+  'log',
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'css',
+  'scss',
+  'html',
+  'htm',
+  'rs',
+  'py',
+  'java',
+  'c',
+  'h',
+  'cpp',
+  'hpp',
+  'go',
+  'sql',
+  'toml',
+  'ini',
+  'conf',
+  'sh',
+  'ps1',
+  'bat',
+  'cmd',
+]);
+
+function NativeThumbnail({
+  entry,
+  scheduler,
+  scrollRoot,
+  size,
+}: {
+  entry: NativeFileMetadata;
+  scheduler: NativePreviewScheduler;
+  scrollRoot: RefObject<HTMLElement | null>;
+  size: 20 | 64;
+}) {
+  const host = useRef<HTMLSpanElement>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const Icon = iconForEntry(entry);
+  const category = categorizeNativeFile(entry);
+  const isPdf = category === 'pdf';
+  const isVideo = category === 'video';
+  const isPreviewable =
+    entry.kind === 'file' && (category === 'image' || ((isPdf || isVideo) && size === 64));
+  const identity = previewIdentity(entry);
+
+  useEffect(() => {
+    if (!isPreviewable || !host.current) return;
+    let disposed = false;
+    let activeUrl: string | null = null;
+    let scheduled: ReturnType<NativePreviewScheduler['schedule']> | null = null;
+    const observer = new IntersectionObserver(
+      ([visible]) => {
+        if (!visible?.isIntersecting || scheduled) return;
+        observer.disconnect();
+        scheduled = scheduler.schedule({
+          path: entry.path,
+          mode: 'thumbnail',
+          requestedWidth: size === 64 ? 96 : 64,
+          requestedHeight: size === 64 ? 96 : 64,
+        });
+        void scheduled.promise.then((outcome) => {
+          if (disposed || outcome.status !== 'success' || !outcome.value.bytes) return;
+          activeUrl = URL.createObjectURL(
+            new Blob([Uint8Array.from(outcome.value.bytes)], { type: 'image/png' }),
+          );
+          setUrl(activeUrl);
+        });
+      },
+      { root: scrollRoot.current, rootMargin: '240px' },
+    );
+    observer.observe(host.current);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      scheduled?.cancel();
+      if (activeUrl) URL.revokeObjectURL(activeUrl);
+    };
+  }, [entry.path, identity, isPreviewable, scheduler, scrollRoot, size]);
+
+  return (
+    <span
+      ref={host}
+      className={`grid shrink-0 place-items-center overflow-hidden ${url && isPdf ? 'border border-white/[0.08] bg-white' : ''} ${url && isVideo ? 'bg-black/35' : ''}`}
+      style={{ width: size, height: size }}
+    >
+      {url ? (
+        // The URL is an ephemeral in-memory PNG returned by the bounded native decoder.
+        <img
+          src={url}
+          alt=""
+          className={`h-full w-full ${isPdf || isVideo ? 'object-contain' : 'object-cover'}`}
+          draggable={false}
+        />
+      ) : (
+        <Icon
+          size={size === 64 ? 28 : 13}
+          strokeWidth={1.1}
+          className={entry.navigable ? 'text-[#4aa3ff]' : 'text-[#6f8598]'}
+        />
+      )}
+    </span>
+  );
+}
+
+function NativeInspectorPreview({
+  entry,
+  scheduler,
+}: {
+  entry: NativeFileMetadata;
+  scheduler: NativePreviewScheduler;
+}) {
+  const [preview, setPreview] = useState<{
+    url: string | null;
+    text: string | null;
+    dimensions: string | null;
+    pageCount: number | null;
+    durationMs: number | null;
+    truncated: boolean;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const category = categorizeNativeFile(entry);
+  const mode =
+    category === 'image' || category === 'pdf' || category === 'video'
+      ? 'image-preview'
+      : (entry.extension && TEXT_PREVIEW_EXTENSIONS.has(entry.extension.toLowerCase())) ||
+          entry.name.toLowerCase() === '.env'
+        ? 'text-preview'
+        : null;
+  const identity = previewIdentity(entry);
+  const [failure, setFailure] = useState<'encrypted' | 'unavailable' | null>(null);
+
+  useEffect(() => {
+    setPreview(null);
+    setFailure(null);
+    if (entry.kind !== 'file' || !mode) return;
+    let disposed = false;
+    let activeUrl: string | null = null;
+    setLoading(true);
+    const scheduled = scheduler.schedule(
+      {
+        path: entry.path,
+        mode,
+        requestedWidth: mode === 'image-preview' ? 512 : 0,
+        requestedHeight: mode === 'image-preview' ? 512 : 0,
+      },
+      'high',
+    );
+    void scheduled.promise.then((outcome) => {
+      if (disposed) return;
+      setLoading(false);
+      if (outcome.status !== 'success') {
+        if (outcome.error.code !== 'OPERATION_CANCELLED') {
+          setFailure(outcome.error.code === 'PDF_ENCRYPTED' ? 'encrypted' : 'unavailable');
+        }
+        return;
+      }
+      if (outcome.value.bytes) {
+        activeUrl = URL.createObjectURL(
+          new Blob([Uint8Array.from(outcome.value.bytes)], { type: 'image/png' }),
+        );
+      }
+      const descriptor = outcome.value.descriptor;
+      setPreview({
+        url: activeUrl,
+        text: descriptor.text,
+        dimensions:
+          descriptor.sourceWidth && descriptor.sourceHeight
+            ? `${descriptor.sourceWidth} × ${descriptor.sourceHeight}`
+            : null,
+        pageCount: descriptor.pageCount,
+        durationMs: descriptor.durationMs,
+        truncated: descriptor.truncated,
+      });
+    });
+    return () => {
+      disposed = true;
+      scheduled.cancel();
+      if (activeUrl) URL.revokeObjectURL(activeUrl);
+    };
+  }, [entry.kind, entry.path, identity, mode, scheduler]);
+
+  const Icon = iconForEntry(entry);
+  if (loading) {
+    return (
+      <div className="grid h-40 place-items-center">
+        <LoaderCircle size={17} className="animate-spin text-[#4aa3ff]" />
+      </div>
+    );
+  }
+  if (preview?.url) {
+    return (
+      <div>
+        <div className="grid min-h-32 place-items-center overflow-hidden border border-white/[0.05] bg-black/25 p-2">
+          <img
+            src={preview.url}
+            alt={`Preview of ${entry.name}`}
+            className="max-h-48 max-w-full object-contain"
+          />
+        </div>
+        {preview.dimensions && (
+          <div className="mt-1 font-mono text-[8px] text-[#52697c]">{preview.dimensions}</div>
+        )}
+        {preview.pageCount !== null && (
+          <div className="mt-1 font-mono text-[8px] text-[#52697c]">
+            {preview.pageCount} {preview.pageCount === 1 ? 'page' : 'pages'}
+          </div>
+        )}
+        {preview.durationMs !== null && (
+          <div className="mt-1 font-mono text-[8px] text-[#52697c]">
+            Video · {formatMediaDuration(preview.durationMs)}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (preview?.text !== null && preview?.text !== undefined) {
+    return (
+      <div>
+        <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words border border-white/[0.05] bg-black/25 p-2 font-mono text-[8px] leading-4 text-[#91a9bc] os-scrollbar">
+          {preview.text}
+        </pre>
+        {preview.truncated && (
+          <div className="mt-1 font-mono text-[8px] text-[#52697c]">First 512 KB shown</div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="grid h-28 place-items-center border border-white/[0.05] bg-white/[0.015]">
+      <div className="text-center">
+        <Icon size={26} strokeWidth={1} className="mx-auto text-[#4aa3ff]" />
+        <div className="mt-2 font-mono text-[8px] text-[#52697c]">
+          {failure === 'encrypted' ? 'Password-protected PDF' : 'Preview unavailable'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DriveCard({
+  root,
+  onOpen,
+  onContextMenu,
+}: {
+  root: NativeFileRoot;
+  onOpen: () => void;
+  onContextMenu: (event: ReactMouseEvent) => void;
+}) {
   const used =
     root.totalBytes !== null && root.freeBytes !== null ? root.totalBytes - root.freeBytes : null;
   const percent =
@@ -258,6 +552,7 @@ function DriveCard({ root, onOpen }: { root: NativeFileRoot; onOpen: () => void 
     <button
       type="button"
       onClick={onOpen}
+      onContextMenu={onContextMenu}
       className="group min-h-28 border border-white/[0.06] bg-white/[0.012] p-3 text-left hover:border-[#4aa3ff]/30 hover:bg-[#4aa3ff]/[0.04]"
     >
       <div className="flex items-start gap-3">
@@ -289,9 +584,13 @@ function DriveCard({ root, onOpen }: { root: NativeFileRoot; onOpen: () => void 
 
 export default function FilesApp() {
   const filesystem = useMemo(() => createFilesystemService(), []);
+  const previewScheduler = useMemo(() => createNativePreviewScheduler(filesystem), [filesystem]);
+  const nativeScrollRoot = useRef<HTMLElement>(null);
   const contextMenu = useContextMenu();
   const requestGate = useRef(createLatestRequestGate());
   const statGate = useRef(createLatestRequestGate());
+  const searchGate = useRef(createLatestRequestGate());
+  const activeSearchId = useRef<string | null>(null);
   const mounted = useRef(true);
   const locationRef = useRef<FilesLocation>({ kind: 'roots' });
   const jobClipboard = useRef<FilesClipboard | null>(null);
@@ -300,6 +599,11 @@ export default function FilesApp() {
   const [source, setSource] = useState<'nammu' | 'computer'>('nammu');
   const [mockLocation, setMockLocation] = useState<(typeof MOCK_LOCATIONS)[number]>('Home');
   const [query, setQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<NativeFileSearchScope>('current-tree');
+  const [searchFilter, setSearchFilter] = useState<NativeSearchFilter>('all');
+  const [searchRevision, setSearchRevision] = useState(0);
+  const [searchSnapshot, setSearchSnapshot] = useState<NativeFileSearchSnapshot | null>(null);
+  const [searchResults, setSearchResults] = useState<readonly NativeFileMetadata[]>([]);
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [mockSelected, setMockSelected] = useState<number | null>(4);
   const [nativeSelected, setNativeSelected] = useState<NativeFileMetadata | null>(null);
@@ -309,12 +613,16 @@ export default function FilesApp() {
   const [namingDialog, setNamingDialog] = useState<NamingDialog | null>(null);
   const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
   const [activeOperation, setActiveOperation] = useState<NativeFileOperationSnapshot | null>(null);
+  const [openArchive, setOpenArchive] = useState<NativeArchiveSummary | null>(null);
+  const [activeArchiveOperation, setActiveArchiveOperation] =
+    useState<NativeArchiveOperationSnapshot | null>(null);
   const [activeDeletion, setActiveDeletion] = useState<NativeDeletionOperationSnapshot | null>(
     null,
   );
   const [permanentDeleteDialog, setPermanentDeleteDialog] = useState<PermanentDeleteDialog | null>(
     null,
   );
+  const [propertiesPaths, setPropertiesPaths] = useState<readonly string[] | null>(null);
   const [recentUndo, setRecentUndo] = useState<RecentFilesUndo | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [navigation, setNavigation] = useState(createFilesNavigationState);
@@ -336,20 +644,26 @@ export default function FilesApp() {
     [mockLocation, query],
   );
   const mockActive = MOCK_ITEMS.find((item) => item.id === mockSelected) ?? null;
+  const currentLocation = currentFilesLocation(navigation);
+  const searchMode =
+    source === 'computer' && currentLocation.kind === 'directory' && query.trim().length > 0;
+  const nativeEntries = useMemo(
+    () => (searchMode ? searchResults : (listing?.entries ?? [])),
+    [listing?.entries, searchMode, searchResults],
+  );
   const nativeVisible = useMemo(
-    () => visibleNativeEntries(listing?.entries ?? [], renderLimit),
-    [listing, renderLimit],
+    () => visibleNativeEntries(nativeEntries, renderLimit),
+    [nativeEntries, renderLimit],
   );
   const hiddenCount = useMemo(
-    () => (listing?.entries ?? []).filter((entry) => entry.hidden || entry.system).length,
-    [listing],
+    () => nativeEntries.filter((entry) => entry.hidden || entry.system).length,
+    [nativeEntries],
   );
-  const currentLocation = currentFilesLocation(navigation);
   locationRef.current = currentLocation;
   selectedPathsRef.current = nativeSelectedPaths;
   const selectedNativeEntries = useMemo(
-    () => (listing?.entries ?? []).filter((entry) => nativeSelectedPaths.has(entry.path)),
-    [listing, nativeSelectedPaths],
+    () => nativeEntries.filter((entry) => nativeSelectedPaths.has(entry.path)),
+    [nativeEntries, nativeSelectedPaths],
   );
 
   const loadLocation = useCallback(
@@ -444,15 +758,20 @@ export default function FilesApp() {
     mounted.current = true;
     const gate = requestGate.current;
     const metadataGate = statGate.current;
+    const nativeSearchGate = searchGate.current;
     return () => {
       mounted.current = false;
       gate.invalidate();
       metadataGate.invalidate();
+      nativeSearchGate.invalidate();
+      previewScheduler.dispose();
     };
-  }, []);
+  }, [previewScheduler]);
 
   const watchPath =
-    source === 'computer' && currentLocation.kind === 'directory' ? currentLocation.path : null;
+    source === 'computer' && currentLocation.kind === 'directory' && !searchMode
+      ? currentLocation.path
+      : null;
 
   useEffect(() => {
     if (!watchPath || !filesystem.supported) return;
@@ -487,11 +806,100 @@ export default function FilesApp() {
     };
   }, [filesystem, refreshCoordinator, watchPath]);
 
+  useEffect(() => {
+    const gate = searchGate.current;
+    const generation = gate.begin();
+    let disposed = false;
+    let searchId: string | null = null;
+    let debounceHandle: number | null = null;
+    const release = async () => {
+      if (!searchId) return;
+      const id = searchId;
+      searchId = null;
+      if (activeSearchId.current === id) activeSearchId.current = null;
+      await filesystem.releaseSearch(id);
+    };
+
+    if (!searchMode || currentLocation.kind !== 'directory' || !filesystem.supported) {
+      setSearchSnapshot(null);
+      setSearchResults([]);
+      return () => {
+        disposed = true;
+        gate.invalidate();
+      };
+    }
+
+    const parsed = buildNativeSearchQuery(currentLocation.path, query, searchScope, searchFilter);
+    if (!canStartNativeSearch(parsed)) {
+      setSearchSnapshot(null);
+      setSearchResults([]);
+      return () => {
+        disposed = true;
+        gate.invalidate();
+      };
+    }
+
+    setSearchResults([]);
+    setSearchSnapshot(null);
+    setRenderLimit(INITIAL_RENDER_LIMIT);
+    setNativeSelected(null);
+    setNativeSelectedPaths(new Set());
+    setSelectionAnchor(null);
+    setActionError(null);
+
+    debounceHandle = window.setTimeout(() => {
+      void (async () => {
+        const started = await filesystem.startSearch(parsed);
+        if (disposed || !gate.isCurrent(generation) || started.status !== 'success') {
+          if (started.status === 'success') await filesystem.releaseSearch(started.value.id);
+          else if (!disposed && started.status === 'error') setActionError(started.error);
+          return;
+        }
+        searchId = started.value.id;
+        activeSearchId.current = searchId;
+        setSearchSnapshot(started.value);
+        let offset = 0;
+
+        while (!disposed && gate.isCurrent(generation)) {
+          const next = await filesystem.getSearch(searchId, offset);
+          if (disposed || !gate.isCurrent(generation)) break;
+          if (next.status !== 'success') {
+            if (next.status === 'error') setActionError(next.error);
+            break;
+          }
+          const snapshot = next.value;
+          if (snapshot.id !== searchId || snapshot.resultOffset !== offset) break;
+          if (snapshot.results.length > 0) {
+            setSearchResults((current) => [...current, ...snapshot.results]);
+            offset += snapshot.results.length;
+          }
+          setSearchSnapshot(snapshot);
+          if (terminalSearch(snapshot) && offset >= snapshot.retainedResults) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 80));
+        }
+        await release();
+      })();
+    }, 320);
+
+    return () => {
+      disposed = true;
+      gate.invalidate();
+      if (debounceHandle !== null) window.clearTimeout(debounceHandle);
+      const id = searchId;
+      searchId = null;
+      if (id) {
+        if (activeSearchId.current === id) activeSearchId.current = null;
+        void filesystem.releaseSearch(id);
+      }
+    };
+  }, [currentLocation, filesystem, query, searchFilter, searchMode, searchRevision, searchScope]);
+
   const openLocation = useCallback(
-    (location: FilesLocation, push = true) => {
+    (location: FilesLocation, push = true, selectionPaths: readonly string[] = []) => {
+      setOpenArchive(null);
       setSource('computer');
       if (push) setNavigation((current) => pushFilesLocation(current, location));
-      void loadLocation(location);
+      void loadLocation(location, selectionPaths);
     },
     [loadLocation],
   );
@@ -518,9 +926,10 @@ export default function FilesApp() {
   };
 
   const refresh = () => {
-    if (source === 'computer' && filesystem.supported)
-      void loadLocation(currentLocation, [...nativeSelectedPaths]);
-    else setQuery('');
+    if (source === 'computer' && filesystem.supported) {
+      if (searchMode) setSearchRevision((revision) => revision + 1);
+      else void loadLocation(currentLocation, [...nativeSelectedPaths]);
+    } else setQuery('');
   };
 
   const selectNativeEntry = useCallback(
@@ -535,7 +944,7 @@ export default function FilesApp() {
       setSelectionAnchor(next.anchorPath);
       const primary = next.selected.has(entry.path)
         ? entry
-        : (listing?.entries.find((item) => next.selected.has(item.path)) ?? null);
+        : (nativeEntries.find((item) => next.selected.has(item.path)) ?? null);
       setNativeSelected(primary);
       if (!primary) return;
       const requestId = statGate.current.begin();
@@ -545,12 +954,37 @@ export default function FilesApp() {
         }
       });
     },
-    [filesystem, listing, nativeSelectedPaths, nativeVisible, selectionAnchor],
+    [filesystem, nativeEntries, nativeSelectedPaths, nativeVisible, selectionAnchor],
   );
 
-  const openNativeEntry = (entry: NativeFileMetadata) => {
+  const openNativeEntry = async (entry: NativeFileMetadata) => {
     selectNativeEntry(entry);
-    if (entry.navigable) openLocation({ kind: 'directory', path: entry.path });
+    if (entry.navigable) {
+      if (searchMode) setQuery('');
+      openLocation({ kind: 'directory', path: entry.path });
+      return;
+    }
+    if (entry.kind === 'file' && entry.extension?.toLowerCase() === 'zip') {
+      setActionError(null);
+      const result = await filesystem.openArchive(entry.path);
+      if (result.status === 'success') {
+        setNativeSelected(null);
+        setNativeSelectedPaths(new Set());
+        setSelectionAnchor(null);
+        setOpenArchive(result.value);
+        return;
+      }
+      setActionError(
+        result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
+      );
+    }
+  };
+
+  const openFileLocation = (entry: NativeFileMetadata) => {
+    const parent = parentPath(entry.path);
+    if (!parent) return;
+    setQuery('');
+    openLocation({ kind: 'directory', path: parent }, true, [entry.path]);
   };
 
   const selectedPaths = useCallback(
@@ -559,6 +993,14 @@ export default function FilesApp() {
       return selectedNativeEntries.map((entry) => entry.path);
     },
     [nativeSelectedPaths, selectedNativeEntries],
+  );
+
+  const openProperties = useCallback(
+    (fallback?: NativeFileMetadata) => {
+      const paths = selectedPaths(fallback);
+      if (paths.length > 0) setPropertiesPaths(paths);
+    },
+    [selectedPaths],
   );
 
   const finishOperation = useCallback(
@@ -614,6 +1056,10 @@ export default function FilesApp() {
         }
       }
       transferHistoryMode.current = null;
+      if (searchMode) {
+        setSearchRevision((revision) => revision + 1);
+        return;
+      }
       const location = locationRef.current;
       if (location.kind === 'directory') {
         void loadLocation(
@@ -622,7 +1068,7 @@ export default function FilesApp() {
         );
       }
     },
-    [loadLocation],
+    [loadLocation, searchMode],
   );
 
   const monitorOperation = useCallback(
@@ -797,6 +1243,126 @@ export default function FilesApp() {
     }
   }, [activeOperation, filesystem]);
 
+  const monitorArchiveOperation = useCallback(
+    async (started: NativeArchiveOperationSnapshot) => {
+      setActiveArchiveOperation(started);
+      let snapshot = started;
+      while (!terminalArchiveOperation(snapshot) && mounted.current) {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        const result = await filesystem.getArchiveOperation(started.id);
+        if (!mounted.current) return;
+        if (result.status !== 'success') {
+          setActionError(
+            result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
+          );
+          return;
+        }
+        snapshot = result.value;
+        setActiveArchiveOperation(snapshot);
+      }
+      if (!mounted.current) return;
+      if (snapshot.state === 'completed') {
+        setNotice(
+          `${snapshot.operation === 'create-zip' ? 'ZIP created' : 'Extraction complete'} · ${snapshot.filesCompleted} files${snapshot.skippedEntries ? ` · ${snapshot.skippedEntries} skipped` : ''}`,
+        );
+      } else if (snapshot.state === 'cancelled') {
+        setNotice(
+          `Archive operation cancelled · ${snapshot.filesCompleted} completed files were preserved.`,
+        );
+      } else if (snapshot.error) {
+        setActionError(snapshot.error);
+      }
+      const location = locationRef.current;
+      if (location.kind === 'directory') void loadLocation(location);
+    },
+    [filesystem, loadLocation],
+  );
+
+  const startArchiveFromNative = useCallback(
+    async (entry: NativeFileMetadata, chooseDestination: boolean) => {
+      const parent = parentPath(entry.path);
+      if (!parent) return;
+      setActionError(null);
+      const opened = await filesystem.openArchive(entry.path);
+      if (opened.status !== 'success') {
+        setActionError(
+          opened.status === 'error' ? opened.error : { code: 'IO_ERROR', message: opened.reason },
+        );
+        return;
+      }
+      const destination = chooseDestination
+        ? await filesystem.pickArchiveDestination(parent)
+        : { status: 'success' as const, value: parent };
+      if (destination.status !== 'success' || !destination.value) {
+        await filesystem.releaseArchive(opened.value.id);
+        if (destination.status === 'error') setActionError(destination.error);
+        return;
+      }
+      const started = await filesystem.extractArchive({
+        archiveId: opened.value.id,
+        destinationPath: destination.value,
+        conflictStrategy: 'keep-both',
+      });
+      if (started.status === 'success') void monitorArchiveOperation(started.value);
+      else
+        setActionError(
+          started.status === 'error'
+            ? started.error
+            : { code: 'IO_ERROR', message: started.reason },
+        );
+      // Extraction owns its ZIP handle; the session metadata can be released after job creation.
+      // The native job retains the validated immutable session snapshot.
+      await filesystem.releaseArchive(opened.value.id);
+    },
+    [filesystem, monitorArchiveOperation],
+  );
+
+  const compressSelection = useCallback(
+    async (fallback?: NativeFileMetadata) => {
+      const sources = selectedPaths(fallback);
+      if (sources.length === 0) return;
+      const single =
+        fallback && !nativeSelectedPaths.has(fallback.path)
+          ? fallback
+          : selectedNativeEntries.length === 1
+            ? selectedNativeEntries[0]
+            : null;
+      const defaultName = single ? `${single.name.replace(/\.[^.]+$/, '')}.zip` : 'Archive.zip';
+      const destination = await filesystem.pickZipDestination(defaultName);
+      if (destination.status !== 'success' || !destination.value) {
+        if (destination.status === 'error') setActionError(destination.error);
+        return;
+      }
+      const started = await filesystem.createZip({
+        sources,
+        destinationPath: destination.value,
+        conflictStrategy: 'keep-both',
+      });
+      if (started.status === 'success') void monitorArchiveOperation(started.value);
+      else
+        setActionError(
+          started.status === 'error'
+            ? started.error
+            : { code: 'IO_ERROR', message: started.reason },
+        );
+    },
+    [
+      filesystem,
+      monitorArchiveOperation,
+      nativeSelectedPaths,
+      selectedNativeEntries,
+      selectedPaths,
+    ],
+  );
+
+  const cancelArchiveOperation = useCallback(() => {
+    if (activeArchiveOperation && !terminalArchiveOperation(activeArchiveOperation)) {
+      void filesystem.cancelArchiveOperation(activeArchiveOperation.id).then((result) => {
+        if (result.status === 'error') setActionError(result.error);
+      });
+    }
+  }, [activeArchiveOperation, filesystem]);
+
   const finishDeletion = useCallback(
     (operation: NativeDeletionOperationSnapshot) => {
       if (operation.operation === 'trash' && operation.reversible && operation.undoId) {
@@ -843,10 +1409,11 @@ export default function FilesApp() {
                 success.destinationPath ? [success.destinationPath] : [],
               )
             : operation.failures.map((failure) => failure.sourcePath);
-        void loadLocation(location, selection);
+        if (searchMode) setSearchRevision((revision) => revision + 1);
+        else void loadLocation(location, selection);
       }
     },
-    [loadLocation],
+    [loadLocation, searchMode],
   );
 
   const monitorDeletion = useCallback(
@@ -1014,6 +1581,40 @@ export default function FilesApp() {
           } satisfies ContextMenuEntry,
         ]
       : []),
+    ...(entry.kind === 'file' && entry.extension?.toLowerCase() === 'zip'
+      ? [
+          {
+            id: 'native-archive-open',
+            label: 'Open archive',
+            icon: FileArchive,
+            action: () => void openNativeEntry(entry),
+          } satisfies ContextMenuEntry,
+          {
+            id: 'native-archive-extract-here',
+            label: 'Extract here',
+            icon: FileArchive,
+            action: () => void startArchiveFromNative(entry, false),
+          } satisfies ContextMenuEntry,
+          {
+            id: 'native-archive-extract-to',
+            label: 'Extract to…',
+            icon: Folder,
+            action: () => void startArchiveFromNative(entry, true),
+          } satisfies ContextMenuEntry,
+          { id: 'native-archive-separator', type: 'separator' as const },
+        ]
+      : []),
+    ...(searchMode
+      ? [
+          {
+            id: 'native-file-open-location',
+            label: 'Open file location',
+            icon: Folder,
+            action: () => openFileLocation(entry),
+          } satisfies ContextMenuEntry,
+          { id: 'native-file-search-separator', type: 'separator' as const },
+        ]
+      : []),
     {
       id: 'native-file-cut',
       label: 'Cut',
@@ -1038,6 +1639,12 @@ export default function FilesApp() {
       icon: CopyPlus,
       action: () => void duplicateSelection(entry),
     },
+    {
+      id: 'native-file-compress',
+      label: 'Compress to ZIP',
+      icon: FileArchive,
+      action: () => void compressSelection(entry),
+    },
     { id: 'native-file-delete-separator', type: 'separator' },
     {
       id: 'native-file-delete',
@@ -1058,7 +1665,8 @@ export default function FilesApp() {
       id: 'native-file-properties',
       label: 'Properties',
       icon: Info,
-      action: () => selectNativeEntry(entry),
+      shortcut: 'Alt+Enter',
+      action: () => openProperties(entry),
     },
   ];
 
@@ -1066,7 +1674,12 @@ export default function FilesApp() {
     {
       id: 'files-header',
       type: 'header',
-      label: source === 'computer' ? 'This PC · Native' : `${mockLocation} · Nammu`,
+      label:
+        source === 'computer'
+          ? searchMode
+            ? `Search · ${query.trim()}`
+            : 'This PC · Native'
+          : `${mockLocation} · Nammu`,
     },
     { id: 'files-refresh', label: 'Refresh', icon: RefreshCw, action: refresh },
     ...(source === 'computer' && currentLocation.kind === 'directory'
@@ -1115,7 +1728,9 @@ export default function FilesApp() {
     },
   ];
 
-  const nativeEntriesTotal = (listing?.entries.length ?? 0) - hiddenCount;
+  const nativeEntriesTotal = nativeEntries.length - hiddenCount;
+  const nativeContentReady =
+    source === 'computer' && !loading && !error && (searchMode || Boolean(listing));
   const activeName = source === 'computer' ? nativeSelected?.name : mockActive?.name;
   const operationPercent = activeOperation
     ? activeOperation.bytesTotal && activeOperation.bytesTotal > 0
@@ -1136,7 +1751,10 @@ export default function FilesApp() {
     if (target.closest('input, textarea, [contenteditable="true"]')) return;
     if (source !== 'computer' || currentLocation.kind !== 'directory') return;
     const key = event.key.toLowerCase();
-    if (event.ctrlKey && event.shiftKey && key === 'n') {
+    if (event.altKey && event.key === 'Enter') {
+      event.preventDefault();
+      openProperties();
+    } else if (event.ctrlKey && event.shiftKey && key === 'n') {
       event.preventDefault();
       showNamingDialog({ kind: 'folder', value: 'New folder', target: null });
     } else if (event.ctrlKey && key === 'c') {
@@ -1283,30 +1901,55 @@ export default function FilesApp() {
                 >
                   This PC
                 </button>
-                {listing?.breadcrumbs.map((part) => (
-                  <span key={part.path} className="flex shrink-0 items-center">
-                    <ChevronRight size={10} />
-                    <button
-                      type="button"
-                      onClick={() => openLocation({ kind: 'directory', path: part.path })}
-                      className="hover:text-[#cfe6ff]"
-                    >
-                      {part.name}
-                    </button>
+                {searchMode ? (
+                  <span className="flex min-w-0 items-center">
+                    <ChevronRight size={10} className="shrink-0" />
+                    <span className="truncate text-[#9ab3c7]">Search: “{query.trim()}”</span>
                   </span>
-                ))}
+                ) : (
+                  listing?.breadcrumbs.map((part) => (
+                    <span key={part.path} className="flex shrink-0 items-center">
+                      <ChevronRight size={10} />
+                      <button
+                        type="button"
+                        onClick={() => openLocation({ kind: 'directory', path: part.path })}
+                        className="hover:text-[#cfe6ff]"
+                      >
+                        {part.name}
+                      </button>
+                    </span>
+                  ))
+                )}
               </>
             )}
           </div>
-          {source === 'nammu' && (
-            <div className="ml-1 flex w-40 items-center gap-1.5 border border-white/[0.06] bg-black/20 px-2 py-1.5">
+          {(source === 'nammu' || (currentLocation.kind === 'directory' && !openArchive)) && (
+            <div className="ml-1 flex w-48 items-center gap-1.5 border border-white/[0.06] bg-black/20 px-2 py-1.5">
               <Search size={10} className="text-[#4aa3ff]" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter resources"
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return;
+                  event.preventDefault();
+                  const id = activeSearchId.current;
+                  if (id) void filesystem.cancelSearch(id);
+                  setQuery('');
+                }}
+                placeholder={source === 'nammu' ? 'Filter resources' : 'Search files'}
+                aria-label={source === 'nammu' ? 'Filter resources' : 'Search native files'}
                 className="min-w-0 flex-1 bg-transparent text-[9px] text-[#c9d8e4] outline-none"
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="text-[#60798e] hover:text-[#cfe6ff]"
+                  aria-label="Clear search"
+                >
+                  <X size={10} />
+                </button>
+              )}
             </div>
           )}
           <button
@@ -1327,108 +1970,193 @@ export default function FilesApp() {
           </button>
         </div>
 
-        {source === 'computer' && currentLocation.kind === 'directory' && (
-          <div className="flex h-9 shrink-0 items-center gap-1 border-b border-white/[0.05] px-2">
+        {source === 'computer' && currentLocation.kind === 'directory' && searchMode && (
+          <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[0.05] px-2">
+            <select
+              value={searchScope}
+              onChange={(event) => setSearchScope(event.target.value as NativeFileSearchScope)}
+              className="border border-white/[0.07] bg-[#07101a] px-2 py-1 font-mono text-[8px] text-[#91a9bc] outline-none"
+              aria-label="Search scope"
+            >
+              <option value="current-folder">Current folder</option>
+              <option value="current-tree">Folder + subfolders</option>
+              <option value="selected-drive">Selected drive</option>
+            </select>
+            <select
+              value={searchFilter}
+              onChange={(event) => setSearchFilter(event.target.value as NativeSearchFilter)}
+              className="border border-white/[0.07] bg-[#07101a] px-2 py-1 font-mono text-[8px] text-[#91a9bc] outline-none"
+              aria-label="Search file type"
+            >
+              <option value="all">All items</option>
+              <option value="files">Files</option>
+              <option value="folders">Folders</option>
+              <option value="documents">Documents</option>
+              <option value="images">Images</option>
+              <option value="video">Video</option>
+              <option value="audio">Audio</option>
+              <option value="pdf">PDF</option>
+              <option value="archives">Archives</option>
+              <option value="code">Code</option>
+              <option value="applications">Applications</option>
+            </select>
+            <span className="min-w-0 flex-1 truncate font-mono text-[8px] text-[#587287]">
+              {searchSnapshot
+                ? `${searchSnapshot.state} · ${searchSnapshot.matchedEntries} matches · ${searchSnapshot.scannedEntries} scanned${searchSnapshot.inaccessibleEntries ? ` · ${searchSnapshot.inaccessibleEntries} skipped` : ''}`
+                : 'Preparing search…'}
+            </span>
+            {searchSnapshot && !terminalSearch(searchSnapshot) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = activeSearchId.current;
+                  if (id) void filesystem.cancelSearch(id);
+                  setQuery('');
+                }}
+                className="border border-white/[0.07] px-2 py-1 font-mono text-[8px] text-[#8ba2b5] hover:text-white"
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="button"
-              onClick={() =>
-                showNamingDialog({ kind: 'folder', value: 'New folder', target: null })
-              }
-              className="flex items-center gap-1.5 px-2 py-1 text-[9px] text-[#89a1b5] hover:bg-white/[0.035] hover:text-[#d4e5f2]"
+              onClick={() => setQuery('')}
+              className="px-2 py-1 font-mono text-[8px] text-[#6f879a] hover:text-white"
             >
-              <FolderPlus size={11} /> New folder
+              Clear
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                showNamingDialog({ kind: 'file', value: 'New file.txt', target: null })
-              }
-              className="flex items-center gap-1.5 px-2 py-1 text-[9px] text-[#89a1b5] hover:bg-white/[0.035] hover:text-[#d4e5f2]"
-            >
-              <FilePlus2 size={11} /> New file
-            </button>
-            <span className="mx-1 h-4 w-px bg-white/[0.06]" />
-            <button
-              type="button"
-              onClick={() => copySelection('cut')}
-              disabled={selectedNativeEntries.length === 0}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Cut selected items"
-              title="Cut (Ctrl+X)"
-            >
-              <Scissors size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={() => copySelection('copy')}
-              disabled={selectedNativeEntries.length === 0}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Copy selected items"
-              title="Copy (Ctrl+C)"
-            >
-              <Copy size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={paste}
-              disabled={!fileClipboard}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Paste items"
-              title="Paste (Ctrl+V)"
-            >
-              <ClipboardPaste size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={() => openRename()}
-              disabled={selectedNativeEntries.length !== 1}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Rename selected item"
-              title="Rename (F2)"
-            >
-              <Pencil size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void duplicateSelection()}
-              disabled={selectedNativeEntries.length === 0}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Duplicate selected items"
-              title="Duplicate (Ctrl+D)"
-            >
-              <CopyPlus size={11} />
-            </button>
-            <span className="mx-1 h-4 w-px bg-white/[0.06]" />
-            <button
-              type="button"
-              onClick={() => void startTrash()}
-              disabled={selectedNativeEntries.length === 0}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Move selected items to Recycle Bin"
-              title="Delete (Recycle Bin)"
-            >
-              <Trash2 size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void undoRecentMutation()}
-              disabled={!recentUndo}
-              className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
-              aria-label="Undo recent file operation"
-              title={recentUndo ? `Undo recent ${recentUndo.kind} operation` : 'Nothing to undo'}
-            >
-              <Undo2 size={11} />
-            </button>
-            <div className="ml-auto truncate font-mono text-[8px] text-[#4f687d]">
-              {fileClipboard
-                ? `${fileClipboard.sources.length} item${fileClipboard.sources.length === 1 ? '' : 's'} to ${fileClipboard.operation}`
-                : `${selectedNativeEntries.length} selected`}
-            </div>
           </div>
         )}
 
+        {source === 'computer' &&
+          currentLocation.kind === 'directory' &&
+          !searchMode &&
+          !openArchive && (
+            <div className="flex h-9 shrink-0 items-center gap-1 border-b border-white/[0.05] px-2">
+              <button
+                type="button"
+                onClick={() =>
+                  showNamingDialog({ kind: 'folder', value: 'New folder', target: null })
+                }
+                className="flex items-center gap-1.5 px-2 py-1 text-[9px] text-[#89a1b5] hover:bg-white/[0.035] hover:text-[#d4e5f2]"
+              >
+                <FolderPlus size={11} /> New folder
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  showNamingDialog({ kind: 'file', value: 'New file.txt', target: null })
+                }
+                className="flex items-center gap-1.5 px-2 py-1 text-[9px] text-[#89a1b5] hover:bg-white/[0.035] hover:text-[#d4e5f2]"
+              >
+                <FilePlus2 size={11} /> New file
+              </button>
+              <span className="mx-1 h-4 w-px bg-white/[0.06]" />
+              <button
+                type="button"
+                onClick={() => copySelection('cut')}
+                disabled={selectedNativeEntries.length === 0}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Cut selected items"
+                title="Cut (Ctrl+X)"
+              >
+                <Scissors size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => copySelection('copy')}
+                disabled={selectedNativeEntries.length === 0}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Copy selected items"
+                title="Copy (Ctrl+C)"
+              >
+                <Copy size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={paste}
+                disabled={!fileClipboard}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Paste items"
+                title="Paste (Ctrl+V)"
+              >
+                <ClipboardPaste size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => openRename()}
+                disabled={selectedNativeEntries.length !== 1}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Rename selected item"
+                title="Rename (F2)"
+              >
+                <Pencil size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void duplicateSelection()}
+                disabled={selectedNativeEntries.length === 0}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Duplicate selected items"
+                title="Duplicate (Ctrl+D)"
+              >
+                <CopyPlus size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void compressSelection()}
+                disabled={selectedNativeEntries.length === 0}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Compress selected items to ZIP"
+                title="Compress to ZIP"
+              >
+                <FileArchive size={11} />
+              </button>
+              <span className="mx-1 h-4 w-px bg-white/[0.06]" />
+              <button
+                type="button"
+                onClick={() => void startTrash()}
+                disabled={selectedNativeEntries.length === 0}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Move selected items to Recycle Bin"
+                title="Delete (Recycle Bin)"
+              >
+                <Trash2 size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void undoRecentMutation()}
+                disabled={!recentUndo}
+                className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
+                aria-label="Undo recent file operation"
+                title={recentUndo ? `Undo recent ${recentUndo.kind} operation` : 'Nothing to undo'}
+              >
+                <Undo2 size={11} />
+              </button>
+              <div className="ml-auto truncate font-mono text-[8px] text-[#4f687d]">
+                {fileClipboard
+                  ? `${fileClipboard.sources.length} item${fileClipboard.sources.length === 1 ? '' : 's'} to ${fileClipboard.operation}`
+                  : `${selectedNativeEntries.length} selected`}
+              </div>
+            </div>
+          )}
+
         <div className="flex min-h-0 flex-1">
-          <main className="min-w-0 flex-1 overflow-auto p-1.5 os-scrollbar">
+          <main
+            ref={nativeScrollRoot}
+            className="relative min-w-0 flex-1 overflow-auto p-1.5 os-scrollbar"
+          >
+            {openArchive && (
+              <div className="absolute inset-0 z-20">
+                <ArchiveBrowser
+                  filesystem={filesystem}
+                  summary={openArchive}
+                  onClose={() => setOpenArchive(null)}
+                  onOperation={(operation) => void monitorArchiveOperation(operation)}
+                  onError={setActionError}
+                />
+              </div>
+            )}
             {source === 'computer' && loading && (
               <div className="grid h-40 place-items-center font-mono text-[9px] text-[#60798e]">
                 Reading location…
@@ -1452,6 +2180,27 @@ export default function FilesApp() {
                     key={root.path}
                     root={root}
                     onOpen={() => openLocation({ kind: 'directory', path: root.path })}
+                    onContextMenu={(event) =>
+                      contextMenu.openAtEvent(
+                        event,
+                        [
+                          { id: 'drive-header', type: 'header', label: root.label || root.name },
+                          {
+                            id: 'drive-open',
+                            label: 'Open drive',
+                            icon: HardDrive,
+                            action: () => openLocation({ kind: 'directory', path: root.path }),
+                          },
+                          {
+                            id: 'drive-properties',
+                            label: 'Properties',
+                            icon: Info,
+                            action: () => setPropertiesPaths([root.path]),
+                          },
+                        ],
+                        { ariaLabel: `${root.name} menu` },
+                      )
+                    }
                   />
                 ))}
               </div>
@@ -1465,16 +2214,18 @@ export default function FilesApp() {
                   No Windows drives are currently available
                 </div>
               )}
-            {view === 'list' &&
-              (source === 'nammu' || (source === 'computer' && listing && !loading && !error)) && (
-                <div className="grid grid-cols-[22px_minmax(120px,1fr)_100px_92px_78px] border-b border-white/[0.05] px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] text-[#43586b]">
-                  <span />
-                  <span>Name</span>
-                  <span>Type</span>
-                  <span>Size</span>
-                  <span className="text-right">Modified</span>
-                </div>
-              )}
+            {view === 'list' && (source === 'nammu' || nativeContentReady) && (
+              <div
+                className={`grid border-b border-white/[0.05] px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] text-[#43586b] ${searchMode ? 'grid-cols-[22px_minmax(120px,1fr)_minmax(140px,1fr)_86px_82px_78px]' : 'grid-cols-[22px_minmax(120px,1fr)_100px_92px_78px]'}`}
+              >
+                <span />
+                <span>Name</span>
+                {searchMode && <span>Location</span>}
+                <span>Type</span>
+                <span>Size</span>
+                <span className="text-right">Modified</span>
+              </div>
+            )}
             {source === 'nammu' && (
               <div
                 className={
@@ -1525,7 +2276,7 @@ export default function FilesApp() {
                 })}
               </div>
             )}
-            {source === 'computer' && listing && !loading && !error && (
+            {nativeContentReady && (
               <div
                 className={
                   view === 'grid'
@@ -1534,7 +2285,6 @@ export default function FilesApp() {
                 }
               >
                 {nativeVisible.map((entry) => {
-                  const Icon = iconForEntry(entry);
                   const selected = nativeSelectedPaths.has(entry.path);
                   const common = {
                     onClick: (event: ReactMouseEvent) =>
@@ -1559,14 +2309,21 @@ export default function FilesApp() {
                       {...common}
                       className={`flex min-h-24 flex-col items-center justify-center gap-2 border p-2 ${selected ? 'border-[#4aa3ff]/35 bg-[#4aa3ff]/8' : 'border-white/[0.04] hover:bg-white/[0.025]'}`}
                     >
-                      <Icon
-                        size={24}
-                        strokeWidth={1.1}
-                        className={entry.navigable ? 'text-[#4aa3ff]' : 'text-[#7f95a8]'}
+                      <NativeThumbnail
+                        key={previewIdentity(entry)}
+                        entry={entry}
+                        scheduler={previewScheduler}
+                        scrollRoot={nativeScrollRoot}
+                        size={64}
                       />
                       <span className="max-w-full truncate text-[10px] text-[#c6d4df]">
                         {entry.name}
                       </span>
+                      {searchMode && (
+                        <span className="max-w-full truncate font-mono text-[7px] text-[#496276]">
+                          {parentPath(entry.path)}
+                        </span>
+                      )}
                       <span className="font-mono text-[7px] uppercase text-[#52697c]">
                         {fileType(entry)}
                       </span>
@@ -1576,13 +2333,21 @@ export default function FilesApp() {
                       key={entry.path}
                       type="button"
                       {...common}
-                      className={`grid w-full grid-cols-[22px_minmax(120px,1fr)_100px_92px_78px] items-center px-2 py-1.5 text-left ${selected ? 'bg-[#4aa3ff]/8' : 'hover:bg-white/[0.025]'}`}
+                      className={`grid w-full items-center px-2 py-1.5 text-left ${searchMode ? 'grid-cols-[22px_minmax(120px,1fr)_minmax(140px,1fr)_86px_82px_78px]' : 'grid-cols-[22px_minmax(120px,1fr)_100px_92px_78px]'} ${selected ? 'bg-[#4aa3ff]/8' : 'hover:bg-white/[0.025]'}`}
                     >
-                      <Icon
-                        size={12}
-                        className={entry.navigable ? 'text-[#4aa3ff]' : 'text-[#6f8598]'}
+                      <NativeThumbnail
+                        key={previewIdentity(entry)}
+                        entry={entry}
+                        scheduler={previewScheduler}
+                        scrollRoot={nativeScrollRoot}
+                        size={20}
                       />
                       <span className="truncate text-[#c9d7e2]">{entry.name}</span>
+                      {searchMode && (
+                        <span className="truncate pr-2 font-mono text-[8px] text-[#496276]">
+                          {parentPath(entry.path)}
+                        </span>
+                      )}
                       <span className="truncate font-mono text-[8px] text-[#536a7d]">
                         {fileType(entry)}
                       </span>
@@ -1597,12 +2362,16 @@ export default function FilesApp() {
                 })}
               </div>
             )}
-            {source === 'computer' && listing && !loading && !error && nativeEntriesTotal === 0 && (
+            {nativeContentReady && nativeEntriesTotal === 0 && (
               <div className="grid h-40 place-items-center font-mono text-[9px] text-[#52697c]">
-                This folder is empty
+                {searchMode
+                  ? searchSnapshot && terminalSearch(searchSnapshot)
+                    ? 'No files matched this search'
+                    : 'Searching…'
+                  : 'This folder is empty'}
               </div>
             )}
-            {source === 'computer' && listing && nativeVisible.length < nativeEntriesTotal && (
+            {nativeContentReady && nativeVisible.length < nativeEntriesTotal && (
               <div className="flex justify-center p-3">
                 <button
                   type="button"
@@ -1616,15 +2385,40 @@ export default function FilesApp() {
             )}
           </main>
 
-          <aside className="hidden w-44 shrink-0 border-l border-white/[0.06] p-3 md:block">
+          <aside className="hidden w-64 shrink-0 overflow-auto border-l border-white/[0.06] p-3 md:block os-scrollbar">
             <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-[#43586b]">
               Properties
             </div>
-            {activeName ? (
+            {source === 'computer' && selectedNativeEntries.length > 1 ? (
               <div className="mt-5">
-                <div className="grid h-16 place-items-center border border-white/[0.05] bg-white/[0.015]">
-                  <File size={22} strokeWidth={1} className="text-[#4aa3ff]" />
+                <div className="grid h-28 place-items-center border border-white/[0.05] bg-white/[0.015]">
+                  <div className="text-center">
+                    <Copy size={24} strokeWidth={1} className="mx-auto text-[#4aa3ff]" />
+                    <div className="mt-2 font-mono text-[8px] text-[#61798d]">
+                      {selectedNativeEntries.length} items selected
+                    </div>
+                  </div>
                 </div>
+                <div className="mt-3 font-mono text-[8px] leading-5 text-[#536a7d]">
+                  {formatBytes(
+                    selectedNativeEntries.reduce((total, item) => total + (item.sizeBytes ?? 0), 0),
+                  )}{' '}
+                  total
+                </div>
+              </div>
+            ) : activeName ? (
+              <div className="mt-5">
+                {source === 'computer' && nativeSelected ? (
+                  <NativeInspectorPreview
+                    key={previewIdentity(nativeSelected)}
+                    entry={nativeSelected}
+                    scheduler={previewScheduler}
+                  />
+                ) : (
+                  <div className="grid h-16 place-items-center border border-white/[0.05] bg-white/[0.015]">
+                    <File size={22} strokeWidth={1} className="text-[#4aa3ff]" />
+                  </div>
+                )}
                 <div className="mt-3 break-all text-[#d1deea]">{activeName}</div>
                 {source === 'computer' && nativeSelected ? (
                   <div className="mt-2 break-all font-mono text-[8px] leading-5 text-[#536a7d]">
@@ -1680,17 +2474,31 @@ export default function FilesApp() {
           <span>
             {source === 'nammu'
               ? `${mockVisible.length} prototype resources`
-              : listing
-                ? `${nativeEntriesTotal} items${hiddenCount ? ` · ${hiddenCount} protected/hidden` : ''}`
-                : `${roots.length} drives`}
+              : searchMode
+                ? `${nativeEntriesTotal} shown · ${searchSnapshot?.matchedEntries ?? 0} matches${searchSnapshot?.truncated ? ` · showing first ${searchSnapshot.resultLimit}` : ''}`
+                : listing
+                  ? `${nativeEntriesTotal} items${hiddenCount ? ` · ${hiddenCount} protected/hidden` : ''}`
+                  : `${roots.length} drives`}
           </span>
           <span>
             {source === 'computer'
-              ? `${loading ? 'Reading' : 'Native filesystem'}${uiDuration !== null ? ` · ${Math.round(uiDuration)} ms` : ''}`
+              ? searchMode
+                ? `${searchSnapshot?.state ?? 'debouncing'}${searchSnapshot ? ` · ${Math.round(searchSnapshot.durationMs)} ms` : ''}`
+                : `${loading ? 'Reading' : 'Native filesystem'}${uiDuration !== null ? ` · ${Math.round(uiDuration)} ms` : ''}`
               : 'Web-safe mock workspace'}
           </span>
         </div>
       </section>
+
+      {propertiesPaths && (
+        <FilePropertiesDialog
+          paths={propertiesPaths}
+          filesystem={filesystem}
+          previewScheduler={previewScheduler}
+          refreshToken={(listing?.durationMs ?? 0) + searchRevision}
+          onClose={() => setPropertiesPaths(null)}
+        />
+      )}
 
       {activeOperation && (
         <div className="absolute bottom-9 right-3 z-30 w-72 border border-[#4aa3ff]/20 bg-[#07111b]/95 p-3 shadow-2xl backdrop-blur-xl">
@@ -1745,6 +2553,71 @@ export default function FilesApp() {
                 : ` / ${formatBytes(activeOperation.bytesTotal)}`}
             </span>
           </div>
+        </div>
+      )}
+
+      {activeArchiveOperation && (
+        <div className="absolute bottom-9 right-3 z-40 w-72 border border-[#4aa3ff]/20 bg-[#07111b]/95 p-3 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-2">
+            {!terminalArchiveOperation(activeArchiveOperation) && (
+              <LoaderCircle size={13} className="animate-spin text-[#4aa3ff]" />
+            )}
+            <FileArchive size={13} className="text-[#4aa3ff]" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] capitalize text-[#c9dbe9]">
+                {activeArchiveOperation.operation.replace('-', ' ')} ·{' '}
+                {activeArchiveOperation.state}
+              </div>
+              <div className="mt-0.5 truncate font-mono text-[8px] text-[#5e7a90]">
+                {activeArchiveOperation.currentEntry ??
+                  `${activeArchiveOperation.filesCompleted} files completed`}
+              </div>
+            </div>
+            {terminalArchiveOperation(activeArchiveOperation) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void filesystem.releaseArchiveOperation(activeArchiveOperation.id);
+                  setActiveArchiveOperation(null);
+                }}
+                className="p-1 text-[#668095] hover:bg-white/[0.04] hover:text-white"
+                aria-label="Close archive operation status"
+              >
+                <X size={11} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={cancelArchiveOperation}
+                className="border border-white/[0.08] px-2 py-1 font-mono text-[8px] text-[#8da2b4] hover:border-[#ff7b7b]/30 hover:text-[#ffaaaa]"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          <div className="mt-2 h-1 bg-white/[0.06]">
+            <span
+              className="block h-full bg-[#4aa3ff] transition-[width]"
+              style={{
+                width: `${Math.min(100, Math.round((activeArchiveOperation.bytesProcessed / Math.max(activeArchiveOperation.bytesTotal, 1)) * 100))}%`,
+              }}
+            />
+          </div>
+          <div className="mt-1.5 flex justify-between font-mono text-[8px] text-[#536d82]">
+            <span>
+              {activeArchiveOperation.filesCompleted + activeArchiveOperation.directoriesCompleted}{' '}
+              / {activeArchiveOperation.entriesTotal} entries
+            </span>
+            <span>
+              {formatBytes(activeArchiveOperation.bytesProcessed)} /{' '}
+              {formatBytes(activeArchiveOperation.bytesTotal)}
+            </span>
+          </div>
+          {activeArchiveOperation.error && (
+            <div className="mt-2 font-mono text-[8px] leading-4 text-[#d88f8f]">
+              {activeArchiveOperation.error.message}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-native-file-preview"
+description = "Enables the start_native_file_preview command without any pre-configured scope."
+commands.allow = ["start_native_file_preview"]
+
+[[permission]]
+identifier = "deny-start-native-file-preview"
+description = "Denies the start_native_file_preview command without any pre-configured scope."
+commands.deny = ["start_native_file_preview"]

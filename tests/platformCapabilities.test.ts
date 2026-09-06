@@ -96,6 +96,117 @@ function tauriEnvironment(
       value: { activeWatchers: 0, rawEvents: 0, emittedInvalidations: 0, droppedSignals: 0 },
     }),
     listenNativeFilesystemEvents: async () => () => undefined,
+    startNativeFileSearch: async () => ({
+      status: 'error',
+      error: { code: 'ACCESS_DENIED', message: 'Native search is unavailable.' },
+    }),
+    getNativeFileSearch: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'The search is unavailable.' },
+    }),
+    cancelNativeFileSearch: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'The search is unavailable.' },
+    }),
+    releaseNativeFileSearch: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'The search is unavailable.' },
+    }),
+    getNativeFileSearchDiagnostics: async () => ({
+      status: 'success',
+      value: { activeSearches: 0, retainedSearches: 0, retainedResults: 0 },
+    }),
+    startNativeFilePreview: async () => ({
+      status: 'error',
+      error: { code: 'PREVIEW_UNSUPPORTED', message: 'Preview unavailable.' },
+    }),
+    getNativeFilePreview: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Preview unavailable.' },
+    }),
+    takeNativeFilePreviewBytes: async () => new Uint8Array(),
+    cancelNativeFilePreview: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Preview unavailable.' },
+    }),
+    releaseNativeFilePreview: async () => ({ status: 'success', value: { released: true } }),
+    getNativeFilePreviewDiagnostics: async () => ({
+      status: 'success',
+      value: {
+        activeJobs: 0,
+        retainedJobs: 0,
+        retainedResultBytes: 0,
+        cacheEntries: 0,
+        cacheBytes: 0,
+        maxActiveJobs: 4,
+        cacheMaxEntries: 256,
+        cacheMaxBytes: 33554432,
+      },
+    }),
+    getNativeFileProperties: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Properties unavailable.' },
+    }),
+    startNativeDirectoryMeasurement: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Measurement unavailable.' },
+    }),
+    getNativeDirectoryMeasurement: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Measurement unavailable.' },
+    }),
+    cancelNativeDirectoryMeasurement: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Measurement unavailable.' },
+    }),
+    releaseNativeDirectoryMeasurement: async () => ({
+      status: 'success',
+      value: { released: true },
+    }),
+    getNativeDirectoryMeasurementDiagnostics: async () => ({
+      status: 'success',
+      value: { activeJobs: 0, retainedJobs: 0, maxActiveJobs: 2 },
+    }),
+    openNativeArchive: async () => ({
+      status: 'error',
+      error: { code: 'ARCHIVE_INVALID', message: 'Invalid archive.' },
+    }),
+    getNativeArchiveEntries: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Archive is not open.' },
+    }),
+    releaseNativeArchive: async () => ({ status: 'success', value: { released: false } }),
+    startNativeArchiveExtract: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Archive is not open.' },
+    }),
+    startNativeZipCreate: async () => ({
+      status: 'error',
+      error: { code: 'ACCESS_DENIED', message: 'Cannot create archive.' },
+    }),
+    getNativeArchiveOperation: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Archive operation is not available.' },
+    }),
+    cancelNativeArchiveOperation: async () => ({
+      status: 'error',
+      error: { code: 'NOT_FOUND', message: 'Archive operation is not available.' },
+    }),
+    releaseNativeArchiveOperation: async () => ({
+      status: 'success',
+      value: { released: false },
+    }),
+    getNativeArchiveDiagnostics: async () => ({
+      status: 'success',
+      value: {
+        openArchives: 0,
+        activeJobs: 0,
+        retainedJobs: 0,
+        maxActiveJobs: 2,
+        maxArchiveEntries: 100000,
+        maxTotalUncompressedBytes: 274877906944,
+      },
+    }),
     pickFile: async () => null,
     saveFile: async () => null,
     readFile: async () => new Uint8Array(),
@@ -126,23 +237,51 @@ describe('platform capabilities', () => {
     expect(Object.keys(firstWeb.services).sort()).toEqual(['ready', 'request', 'wispUrl']);
     expect(Object.keys(firstWeb.webSurfaces).sort()).toEqual(Object.keys(tauri.webSurfaces).sort());
     expect(Object.keys(firstWeb.filesystem).sort()).toEqual([
+      'cancelArchiveOperation',
       'cancelDeletionOperation',
+      'cancelDirectoryMeasurement',
       'cancelOperation',
+      'cancelPreview',
+      'cancelSearch',
       'copy',
       'createDirectory',
       'createFile',
+      'createZip',
       'duplicate',
+      'extractArchive',
+      'getArchiveDiagnostics',
+      'getArchiveOperation',
       'getDeletionOperation',
+      'getDirectoryMeasurement',
+      'getDirectoryMeasurementDiagnostics',
       'getOperation',
+      'getPreview',
+      'getPreviewDiagnostics',
+      'getProperties',
+      'getSearch',
+      'getSearchDiagnostics',
       'getWatchDiagnostics',
+      'listArchiveEntries',
       'listDirectory',
       'listRoots',
       'move',
+      'openArchive',
       'permanentlyDelete',
+      'pickArchiveDestination',
+      'pickZipDestination',
+      'releaseArchive',
+      'releaseArchiveOperation',
+      'releaseDirectoryMeasurement',
+      'releasePreview',
+      'releaseSearch',
       'rename',
       'restore',
+      'startDirectoryMeasurement',
+      'startPreview',
+      'startSearch',
       'stat',
       'supported',
+      'takePreviewBytes',
       'trash',
       'watchDirectory',
     ]);
@@ -677,6 +816,318 @@ describe('platform capabilities', () => {
     expect(calls).toEqual([`start:C:\\Fixture`, `stop:${watchId}`]);
   });
 
+  test('validates progressive native search snapshots and explicit job lifecycle', async () => {
+    const id = 'e'.repeat(32);
+    const calls: string[] = [];
+    const query = {
+      rootPath: 'C:\\Fixture',
+      text: 'invoice',
+      scope: 'current-tree' as const,
+      kind: 'files' as const,
+      extensions: ['pdf'],
+    };
+    const snapshot = {
+      id,
+      query,
+      state: 'running',
+      scannedEntries: 120,
+      matchedEntries: 1,
+      inaccessibleEntries: 2,
+      retainedResults: 1,
+      resultLimit: 5_000,
+      truncated: false,
+      durationMs: 12.5,
+      resultOffset: 0,
+      results: [
+        {
+          name: 'invoice.pdf',
+          path: 'C:\\Fixture\\invoice.pdf',
+          kind: 'file',
+          sizeBytes: 12,
+          createdAtMs: null,
+          modifiedAtMs: null,
+          extension: 'pdf',
+          hidden: false,
+          system: false,
+          readOnly: false,
+          readable: true,
+          navigable: false,
+        },
+      ],
+      error: null,
+    };
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        startNativeFileSearch: async (input) => {
+          calls.push(`start:${input.text}`);
+          return { status: 'success', value: snapshot };
+        },
+        getNativeFileSearch: async (searchId, offset) => {
+          calls.push(`get:${searchId}:${offset}`);
+          return { status: 'success', value: snapshot };
+        },
+        cancelNativeFileSearch: async (searchId) => {
+          calls.push(`cancel:${searchId}`);
+          return { status: 'success', value: { ...snapshot, state: 'cancelled', results: [] } };
+        },
+        releaseNativeFileSearch: async (searchId) => {
+          calls.push(`release:${searchId}`);
+          return { status: 'success', value: { released: true } };
+        },
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    expect(await platform.filesystem.startSearch(query)).toMatchObject({
+      status: 'success',
+      value: { id, matchedEntries: 1 },
+    });
+    expect(await platform.filesystem.getSearch(id, 0)).toMatchObject({ status: 'success' });
+    expect(await platform.filesystem.cancelSearch(id)).toMatchObject({
+      status: 'success',
+      value: { state: 'cancelled' },
+    });
+    expect(await platform.filesystem.releaseSearch(id)).toEqual({
+      status: 'success',
+      value: { released: true },
+    });
+    expect(calls).toEqual(['start:invoice', `get:${id}:0`, `cancel:${id}`, `release:${id}`]);
+  });
+
+  test('keeps native search unavailable on Web and rejects malformed native search data', async () => {
+    expect(
+      await getPlatformCapabilities('web').filesystem.startSearch({
+        rootPath: 'C:\\',
+        text: 'private',
+        scope: 'current-tree',
+        kind: 'all',
+        extensions: [],
+      }),
+    ).toMatchObject({ status: 'unsupported' });
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        startNativeFileSearch: async () => ({
+          status: 'success',
+          value: { id: 'leaked-paths', results: ['C:\\secret.txt'] },
+        }),
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    expect(
+      await platform.filesystem.startSearch({
+        rootPath: 'C:\\',
+        text: 'secret',
+        scope: 'current-tree',
+        kind: 'all',
+        extensions: [],
+      }),
+    ).toEqual({
+      status: 'error',
+      error: { code: 'IO_ERROR', message: 'The native filesystem returned invalid data.' },
+    });
+  });
+
+  test('validates bounded native previews and keeps Web preview access unsupported', async () => {
+    const id = 'f'.repeat(32);
+    const request = {
+      path: 'C:\\Fixture\\report.pdf',
+      mode: 'thumbnail' as const,
+      requestedWidth: 64,
+      requestedHeight: 64,
+    };
+    const value = {
+      id,
+      request,
+      state: 'completed',
+      durationMs: 4,
+      result: {
+        kind: 'image',
+        mimeType: 'image/png',
+        width: 64,
+        height: 40,
+        sourceWidth: 800,
+        sourceHeight: 500,
+        pageCount: 12,
+        durationMs: null,
+        byteLength: 4,
+        text: null,
+        truncated: false,
+        cacheHit: false,
+      },
+      error: null,
+    };
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        startNativeFilePreview: async () => ({ status: 'success', value }),
+        getNativeFilePreview: async () => ({ status: 'success', value }),
+        takeNativeFilePreviewBytes: async () => new Uint8Array([137, 80, 78, 71]),
+        releaseNativeFilePreview: async () => ({ status: 'success', value: { released: true } }),
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    expect(await platform.filesystem.startPreview(request)).toMatchObject({
+      status: 'success',
+      value: { id, result: { pageCount: 12 } },
+    });
+    expect(await platform.filesystem.takePreviewBytes(id)).toEqual({
+      status: 'success',
+      value: new Uint8Array([137, 80, 78, 71]),
+    });
+    expect(await platform.filesystem.releasePreview(id)).toEqual({
+      status: 'success',
+      value: { released: true },
+    });
+    expect(
+      await platform.filesystem.startPreview({ ...request, requestedWidth: 50_000 }),
+    ).toMatchObject({ status: 'error', error: { code: 'INVALID_PATH' } });
+    expect(await getPlatformCapabilities('web').filesystem.startPreview(request)).toMatchObject({
+      status: 'unsupported',
+    });
+  });
+
+  test('validates read-only properties and cancellable directory measurements', async () => {
+    const id = '9'.repeat(32);
+    const item = {
+      name: 'video.mp4',
+      path: 'C:\\Fixture\\video.mp4',
+      parentPath: 'C:\\Fixture',
+      extension: 'mp4',
+      kind: 'file',
+      sizeBytes: 1024,
+      allocatedBytes: 4096,
+      createdAtMs: 1,
+      modifiedAtMs: 2,
+      accessedAtMs: 3,
+      attributes: {
+        readOnly: false,
+        hidden: false,
+        system: false,
+        archive: true,
+        compressed: false,
+        encrypted: false,
+        sparse: false,
+        offline: false,
+        temporary: false,
+        reparsePoint: false,
+      },
+      hardLinkCount: 1,
+      linkTarget: null,
+      volume: {
+        path: 'C:\\',
+        label: 'System',
+        kind: 'local',
+        fileSystem: 'NTFS',
+        totalBytes: 1000,
+        freeBytes: 400,
+        usedBytes: 600,
+        accessible: true,
+      },
+      accessible: true,
+      accessError: null,
+    };
+    const properties = {
+      items: [item],
+      itemCount: 1,
+      fileCount: 1,
+      folderCount: 0,
+      driveCount: 0,
+      directFileBytes: 1024,
+      directAllocatedBytes: 4096,
+      containsUnmeasuredFolders: false,
+      commonParentPath: 'C:\\Fixture',
+      mixedKinds: false,
+      durationMs: 1,
+    };
+    const measurement = {
+      id,
+      state: 'running',
+      rootCount: 1,
+      filesScanned: 100,
+      directoriesScanned: 2,
+      logicalBytes: 1024,
+      allocatedBytes: 4096,
+      allocationComplete: true,
+      skippedEntries: 0,
+      reparsePointsSkipped: 1,
+      durationMs: 5,
+      error: null,
+    };
+    const calls: string[] = [];
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        getNativeFileProperties: async (paths) => {
+          calls.push(`properties:${paths.length}`);
+          return { status: 'success', value: properties };
+        },
+        startNativeDirectoryMeasurement: async () => ({ status: 'success', value: measurement }),
+        getNativeDirectoryMeasurement: async () => ({ status: 'success', value: measurement }),
+        cancelNativeDirectoryMeasurement: async () => ({
+          status: 'success',
+          value: { ...measurement, state: 'cancelled' },
+        }),
+        releaseNativeDirectoryMeasurement: async () => ({
+          status: 'success',
+          value: { released: true },
+        }),
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    expect(await platform.filesystem.getProperties([item.path])).toMatchObject({
+      status: 'success',
+      value: { directAllocatedBytes: 4096 },
+    });
+    expect(await platform.filesystem.startDirectoryMeasurement(['C:\\Fixture'])).toMatchObject({
+      status: 'success',
+      value: { reparsePointsSkipped: 1 },
+    });
+    expect(await platform.filesystem.cancelDirectoryMeasurement(id)).toMatchObject({
+      status: 'success',
+      value: { state: 'cancelled' },
+    });
+    expect(await platform.filesystem.releaseDirectoryMeasurement(id)).toEqual({
+      status: 'success',
+      value: { released: true },
+    });
+    expect(calls).toEqual(['properties:1']);
+    expect(
+      await getPlatformCapabilities('web').filesystem.getProperties([item.path]),
+    ).toMatchObject({ status: 'unsupported' });
+  });
+
+  test('fails closed on malformed preview descriptors and oversized byte responses', async () => {
+    const id = 'a'.repeat(32);
+    const request = {
+      path: 'C:\\Fixture\\photo.png',
+      mode: 'thumbnail' as const,
+      requestedWidth: 64,
+      requestedHeight: 64,
+    };
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        startNativeFilePreview: async () => ({
+          status: 'success',
+          value: {
+            id,
+            request,
+            state: 'completed',
+            durationMs: 1,
+            result: { kind: 'html', text: '<script>' },
+            error: null,
+          },
+        }),
+        takeNativeFilePreviewBytes: async () => new Uint8Array(8 * 1024 * 1024 + 1),
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    expect(await platform.filesystem.startPreview(request)).toMatchObject({
+      status: 'error',
+      error: { code: 'IO_ERROR' },
+    });
+    expect(await platform.filesystem.takePreviewBytes(id)).toMatchObject({
+      status: 'error',
+      error: { code: 'IO_ERROR' },
+    });
+  });
+
   test('fails closed on malformed native filesystem IPC and invalid paths', async () => {
     const platform = createTauriPlatformCapabilities(
       tauriEnvironment({
@@ -802,5 +1253,109 @@ describe('platform capabilities', () => {
         message: 'A safe file name is required.',
       });
     }
+  });
+
+  test('keeps ZIP archives behind typed desktop-only commands and validates results', async () => {
+    const calls: string[] = [];
+    const archiveId = 'a'.repeat(32);
+    const operationId = 'b'.repeat(32);
+    const operation = {
+      id: operationId,
+      operation: 'extract',
+      state: 'queued',
+      archivePath: 'C:\\Downloads\\safe.zip',
+      destinationPath: 'C:\\Downloads',
+      currentEntry: null,
+      filesCompleted: 0,
+      directoriesCompleted: 0,
+      entriesTotal: 1,
+      bytesProcessed: 0,
+      bytesTotal: 4,
+      skippedEntries: 0,
+      failures: [],
+      error: null,
+    };
+    const desktop = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        openNativeArchive: async (path) => {
+          calls.push(`open:${path}`);
+          return {
+            status: 'success',
+            value: {
+              id: archiveId,
+              archivePath: path,
+              name: 'safe.zip',
+              entryCount: 1,
+              fileCount: 1,
+              directoryCount: 0,
+              encryptedEntries: 0,
+              symlinkEntries: 0,
+              unsupportedEntries: 0,
+              totalCompressedBytes: 4,
+              totalUncompressedBytes: 4,
+              durationMs: 1,
+            },
+          };
+        },
+        getNativeArchiveEntries: async () => ({
+          status: 'success',
+          value: {
+            archiveId,
+            path: '',
+            parentPath: null,
+            entries: [
+              {
+                id: 'entry:0',
+                path: 'safe.txt',
+                parentPath: '',
+                name: 'safe.txt',
+                kind: 'file',
+                compressedSize: 4,
+                uncompressedSize: 4,
+                modified: null,
+                compressionMethod: 'Stored',
+                encrypted: false,
+              },
+            ],
+            totalEntries: 1,
+            offset: 0,
+            limit: 500,
+            hasMore: false,
+          },
+        }),
+        startNativeArchiveExtract: async (_id, _destination, _selection, strategy) => {
+          calls.push(`extract:${strategy}`);
+          return { status: 'success', value: operation };
+        },
+      }),
+    );
+    expect((await desktop.filesystem.openArchive('C:\\Downloads\\safe.zip')).status).toBe(
+      'success',
+    );
+    expect((await desktop.filesystem.listArchiveEntries(archiveId, '')).status).toBe('success');
+    expect(
+      (
+        await desktop.filesystem.extractArchive({
+          archiveId,
+          destinationPath: 'C:\\Downloads',
+          conflictStrategy: 'keep-both',
+        })
+      ).status,
+    ).toBe('success');
+    expect(calls).toEqual(['open:C:\\Downloads\\safe.zip', 'extract:keep-both']);
+
+    const web = createWebPlatformCapabilities(unavailableWebEnvironment);
+    expect((await web.filesystem.openArchive('C:\\Downloads\\safe.zip')).status).toBe(
+      'unsupported',
+    );
+    expect(
+      (
+        await web.filesystem.extractArchive({
+          archiveId,
+          destinationPath: 'C:\\Downloads',
+          conflictStrategy: 'cancel',
+        })
+      ).status,
+    ).toBe('unsupported');
   });
 });

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-release-native-directory-measurement"
+description = "Enables the release_native_directory_measurement command without any pre-configured scope."
+commands.allow = ["release_native_directory_measurement"]
+
+[[permission]]
+identifier = "deny-release-native-directory-measurement"
+description = "Denies the release_native_directory_measurement command without any pre-configured scope."
+commands.deny = ["release_native_directory_measurement"]

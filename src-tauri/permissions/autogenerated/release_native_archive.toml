@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-release-native-archive"
+description = "Enables the release_native_archive command without any pre-configured scope."
+commands.allow = ["release_native_archive"]
+
+[[permission]]
+identifier = "deny-release-native-archive"
+description = "Denies the release_native_archive command without any pre-configured scope."
+commands.deny = ["release_native_archive"]

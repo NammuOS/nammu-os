@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
   categorizeNativeFile,
+  buildNativeSearchQuery,
+  canStartNativeSearch,
   createDirectoryRefreshCoordinator,
   createFilesNavigationState,
   createFilesClipboard,
@@ -34,6 +36,35 @@ function entry(overrides: Partial<NativeFileMetadata> = {}): NativeFileMetadata 
 }
 
 describe('Files native filesystem service', () => {
+  test('builds literal structured search queries without shell or regex interpretation', () => {
+    expect(buildNativeSearchQuery('C:\\Work', 'Invoice', 'current-tree', 'all')).toEqual({
+      rootPath: 'C:\\Work',
+      text: 'Invoice',
+      scope: 'current-tree',
+      kind: 'all',
+      extensions: [],
+    });
+    expect(buildNativeSearchQuery('C:\\Work', '*.PDF', 'current-folder', 'all')).toEqual({
+      rootPath: 'C:\\Work',
+      text: '',
+      scope: 'current-folder',
+      kind: 'files',
+      extensions: ['pdf'],
+    });
+    expect(
+      buildNativeSearchQuery('C:\\Work', 'folder: Projects', 'selected-drive', 'files'),
+    ).toEqual({
+      rootPath: 'C:\\Work',
+      text: 'Projects',
+      scope: 'selected-drive',
+      kind: 'folders',
+      extensions: [],
+    });
+    expect(
+      canStartNativeSearch(buildNativeSearchQuery('C:\\Work', ' ', 'current-tree', 'all')),
+    ).toBe(false);
+  });
+
   test('keeps navigation history deterministic and discards forward branches', () => {
     let state = createFilesNavigationState();
     state = pushFilesLocation(state, { kind: 'directory', path: 'C:\\' });
@@ -177,6 +208,118 @@ describe('Files native filesystem service', () => {
           value: { activeWatchers: 0, rawEvents: 0, emittedInvalidations: 0, droppedSignals: 0 },
         };
       },
+      async startSearch() {
+        return { status: 'error', error: { code: 'ACCESS_DENIED', message: 'Unavailable.' } };
+      },
+      async getSearch() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async cancelSearch() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async releaseSearch() {
+        return { status: 'success', value: { released: true as const } };
+      },
+      async getSearchDiagnostics() {
+        return {
+          status: 'success',
+          value: { activeSearches: 0, retainedSearches: 0, retainedResults: 0 },
+        };
+      },
+      async startPreview() {
+        return { status: 'error', error: { code: 'PREVIEW_UNSUPPORTED', message: 'Unavailable.' } };
+      },
+      async getPreview() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async takePreviewBytes() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async cancelPreview() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async releasePreview() {
+        return { status: 'success', value: { released: true as const } };
+      },
+      async getPreviewDiagnostics() {
+        return {
+          status: 'success',
+          value: {
+            activeJobs: 0,
+            retainedJobs: 0,
+            retainedResultBytes: 0,
+            cacheEntries: 0,
+            cacheBytes: 0,
+            maxActiveJobs: 4,
+            cacheMaxEntries: 256,
+            cacheMaxBytes: 33554432,
+          },
+        };
+      },
+      async getProperties() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async startDirectoryMeasurement() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async getDirectoryMeasurement() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async cancelDirectoryMeasurement() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async releaseDirectoryMeasurement() {
+        return { status: 'success', value: { released: true as const } };
+      },
+      async getDirectoryMeasurementDiagnostics() {
+        return {
+          status: 'success',
+          value: { activeJobs: 0, retainedJobs: 0, maxActiveJobs: 2 },
+        };
+      },
+      async openArchive() {
+        return { status: 'error', error: { code: 'ARCHIVE_INVALID', message: 'Invalid.' } };
+      },
+      async listArchiveEntries() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async releaseArchive() {
+        return { status: 'success', value: { released: false } };
+      },
+      async extractArchive() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async createZip() {
+        return { status: 'error', error: { code: 'ACCESS_DENIED', message: 'Denied.' } };
+      },
+      async getArchiveOperation() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async cancelArchiveOperation() {
+        return { status: 'error', error: { code: 'NOT_FOUND', message: 'Missing.' } };
+      },
+      async releaseArchiveOperation() {
+        return { status: 'success', value: { released: false } };
+      },
+      async getArchiveDiagnostics() {
+        return {
+          status: 'success',
+          value: {
+            openArchives: 0,
+            activeJobs: 0,
+            retainedJobs: 0,
+            maxActiveJobs: 2,
+            maxArchiveEntries: 100000,
+            maxTotalUncompressedBytes: 274877906944,
+          },
+        };
+      },
+      async pickArchiveDestination() {
+        return { status: 'success', value: null };
+      },
+      async pickZipDestination() {
+        return { status: 'success', value: null };
+      },
     };
     const service = createFilesystemService(filesystem);
     await service.listRoots();
@@ -184,23 +327,51 @@ describe('Files native filesystem service', () => {
     await service.stat('C:\\document.txt');
     expect(calls).toEqual(['roots', 'list:C:\\', 'stat:C:\\document.txt']);
     expect(Object.keys(service).sort()).toEqual([
+      'cancelArchiveOperation',
       'cancelDeletionOperation',
+      'cancelDirectoryMeasurement',
       'cancelOperation',
+      'cancelPreview',
+      'cancelSearch',
       'copy',
       'createDirectory',
       'createFile',
+      'createZip',
       'duplicate',
+      'extractArchive',
+      'getArchiveDiagnostics',
+      'getArchiveOperation',
       'getDeletionOperation',
+      'getDirectoryMeasurement',
+      'getDirectoryMeasurementDiagnostics',
       'getOperation',
+      'getPreview',
+      'getPreviewDiagnostics',
+      'getProperties',
+      'getSearch',
+      'getSearchDiagnostics',
       'getWatchDiagnostics',
+      'listArchiveEntries',
       'listDirectory',
       'listRoots',
       'move',
+      'openArchive',
       'permanentlyDelete',
+      'pickArchiveDestination',
+      'pickZipDestination',
+      'releaseArchive',
+      'releaseArchiveOperation',
+      'releaseDirectoryMeasurement',
+      'releasePreview',
+      'releaseSearch',
       'rename',
       'restore',
+      'startDirectoryMeasurement',
+      'startPreview',
+      'startSearch',
       'stat',
       'supported',
+      'takePreviewBytes',
       'trash',
       'watchDirectory',
     ]);
@@ -269,6 +440,11 @@ describe('Files native filesystem service', () => {
     expect(capability.permissions).toContain('allow-start-native-directory-watch');
     expect(capability.permissions).toContain('allow-stop-native-directory-watch');
     expect(capability.permissions).toContain('allow-get-native-directory-watch-diagnostics');
+    expect(capability.permissions).toContain('allow-start-native-file-preview');
+    expect(capability.permissions).toContain('allow-take-native-file-preview-bytes');
+    expect(capability.permissions).toContain('allow-get-native-file-properties');
+    expect(capability.permissions).toContain('allow-start-native-directory-measurement');
+    expect(capability.permissions).toContain('allow-cancel-native-directory-measurement');
   });
 
   test('routes normal Delete to the Recycle Bin and Shift+Delete through confirmation', () => {
@@ -292,6 +468,18 @@ describe('Files native filesystem service', () => {
     expect(source).not.toContain('setInterval(');
   });
 
+  test('keeps search generation-scoped, cancellable, progressively bounded, and separate from watchers', () => {
+    const source = readFileSync('src/components/files/FilesApp.tsx', 'utf8');
+    expect(source).toContain('const searchGate = useRef(createLatestRequestGate())');
+    expect(source).toContain('await filesystem.getSearch(searchId, offset)');
+    expect(source).toContain('await filesystem.releaseSearch(id)');
+    expect(source).toContain('}, 320)');
+    expect(source).toContain("currentLocation.kind === 'directory' && !searchMode");
+    expect(source).toContain('nativeVisible.length < nativeEntriesTotal');
+    expect(source).toContain('Open file location');
+    expect(source).not.toContain('setInterval(');
+  });
+
   test('keeps the Rust Files boundary typed, trusted-main-only, and shell-free', () => {
     const readSource = readFileSync('src-tauri/src/native_filesystem.rs', 'utf8').split(
       '#[cfg(test)]',
@@ -305,6 +493,19 @@ describe('Files native filesystem service', () => {
     const watchSource = readFileSync('src-tauri/src/native_directory_watcher.rs', 'utf8').split(
       '#[cfg(test)]',
     )[0];
+    const searchSource = readFileSync('src-tauri/src/native_file_search.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
+    const previewSource = readFileSync('src-tauri/src/native_file_preview.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
+    const videoPreviewSource = readFileSync('src-tauri/src/native_video_preview.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
+    const propertiesSource = readFileSync('src-tauri/src/native_file_properties.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
+    const archiveSource = `${readFileSync('src-tauri/src/native_archive/mod.rs', 'utf8').split('#[cfg(test)]')[0]}\n${readFileSync('src-tauri/src/native_archive/safety.rs', 'utf8').split('#[cfg(test)]')[0]}`;
     const readCommands = [
       ...readSource.matchAll(/#\[tauri::command\][\s\S]*?pub async fn (\w+)/g),
     ].map((match) => match[1]);
@@ -316,6 +517,18 @@ describe('Files native filesystem service', () => {
     ].map((match) => match[1]);
     const watchCommands = [
       ...watchSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const searchCommands = [
+      ...searchSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const previewCommands = [
+      ...previewSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const propertiesCommands = [
+      ...propertiesSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const archiveCommands = [
+      ...archiveSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
     ].map((match) => match[1]);
     expect(readCommands).toEqual([
       'list_native_file_roots',
@@ -344,7 +557,50 @@ describe('Files native filesystem service', () => {
       'stop_native_directory_watch',
       'get_native_directory_watch_diagnostics',
     ]);
-    for (const source of [readSource, writeSource, deleteSource, watchSource]) {
+    expect(searchCommands).toEqual([
+      'start_native_file_search',
+      'get_native_file_search',
+      'cancel_native_file_search',
+      'release_native_file_search',
+      'get_native_file_search_diagnostics',
+    ]);
+    expect(previewCommands).toEqual([
+      'start_native_file_preview',
+      'get_native_file_preview',
+      'take_native_file_preview_bytes',
+      'cancel_native_file_preview',
+      'release_native_file_preview',
+      'get_native_file_preview_diagnostics',
+    ]);
+    expect(propertiesCommands).toEqual([
+      'get_native_file_properties',
+      'start_native_directory_measurement',
+      'get_native_directory_measurement',
+      'cancel_native_directory_measurement',
+      'release_native_directory_measurement',
+      'get_native_directory_measurement_diagnostics',
+    ]);
+    expect(archiveCommands).toEqual([
+      'open_native_archive',
+      'get_native_archive_entries',
+      'release_native_archive',
+      'start_native_archive_extract',
+      'start_native_zip_create',
+      'get_native_archive_operation',
+      'cancel_native_archive_operation',
+      'release_native_archive_operation',
+      'get_native_archive_diagnostics',
+    ]);
+    for (const source of [
+      readSource,
+      writeSource,
+      deleteSource,
+      watchSource,
+      searchSource,
+      previewSource,
+      propertiesSource,
+      archiveSource,
+    ]) {
       expect(source).not.toContain('std::process::Command');
       expect(source).not.toContain('Command::new');
       expect(source).not.toContain('powershell.exe');
@@ -356,5 +612,80 @@ describe('Files native filesystem service', () => {
     expect(watchSource).toContain('RecursiveMode::NonRecursive');
     expect(watchSource).toContain('emit_to(TRUSTED_WEBVIEW_LABEL');
     expect(watchSource).not.toContain('PollWatcher');
+    expect(searchSource).toContain('tauri::async_runtime::spawn_blocking');
+    expect(searchSource).toContain('MAX_ACTIVE_SEARCHES: usize = 2');
+    expect(searchSource).toContain('RESULT_LIMIT: usize = 5_000');
+    expect(searchSource).toContain('RESULT_BATCH_LIMIT: usize = 200');
+    expect(searchSource).toContain('metadata.kind == NativeFileKind::Directory');
+    expect(searchSource).not.toContain('WalkDir');
+    expect(searchSource).not.toContain('emit_to(');
+    expect(searchCommands).not.toContain('walk_any_path');
+    expect(previewSource).toContain('MAX_ACTIVE_JOBS: usize = 4');
+    expect(previewSource).toContain('MAX_IMAGE_DIMENSION: u32 = 20_000');
+    expect(previewSource).toContain('TEXT_PREVIEW_BYTES: usize = 512 * 1024');
+    expect(previewSource).not.toContain('file://');
+    expect(previewSource).not.toContain('PreviewHandler');
+    expect(previewSource).toContain('native_video_preview::render_poster');
+    expect(videoPreviewSource).toContain('MFCreateSourceReaderFromByteStream');
+    expect(videoPreviewSource).toContain('MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING');
+    expect(videoPreviewSource).not.toContain('std::process::Command');
+    expect(videoPreviewSource).not.toContain('ffmpeg');
+    expect(videoPreviewSource).not.toContain('PreviewHandler');
+    expect(videoPreviewSource).not.toContain('http://');
+    expect(videoPreviewSource).not.toContain('https://');
+    expect(propertiesSource).toContain('FileStandardInfo');
+    expect(propertiesSource).toContain('FILE_STANDARD_INFO');
+    expect(propertiesSource).not.toContain('GetCompressedFileSizeW');
+    expect(propertiesSource).toContain('MAX_ACTIVE_MEASUREMENTS: usize = 2');
+    expect(propertiesSource).toContain('fs::symlink_metadata');
+    expect(propertiesSource).not.toContain('WalkDir');
+    expect(propertiesSource).not.toContain('std::process::Command');
+    expect(propertiesSource).not.toContain('powershell');
+    expect(propertiesSource).not.toContain('icacls');
+    expect(propertiesSource).not.toContain('takeown');
+    expect(archiveSource).toContain('require_trusted_caller');
+    expect(archiveSource).toContain('MAX_ARCHIVE_ENTRIES: usize = 100_000');
+    expect(archiveSource).toContain('MAX_COMPRESSION_RATIO: u64 = 1_000');
+    expect(archiveSource).toContain('nammu-partial-');
+    expect(archiveSource).not.toContain('std::process::Command');
+    expect(archiveSource).not.toContain('powershell');
+    expect(archiveSource).not.toContain('Expand-Archive');
+    expect(archiveSource).not.toContain('7z.exe');
+
+    const uiSource = readFileSync('src/components/files/FilesApp.tsx', 'utf8');
+    expect(uiSource).toContain('new IntersectionObserver');
+    expect(uiSource).toContain("rootMargin: '240px'");
+    expect(uiSource).toContain('URL.createObjectURL');
+    expect(uiSource).toContain('URL.revokeObjectURL');
+    expect(uiSource.match(/<NativeThumbnail/g)).toHaveLength(2);
+    expect(uiSource).not.toContain('dangerouslySetInnerHTML');
+    expect(uiSource).not.toContain('file://');
+    expect(uiSource).not.toContain('<video');
+    expect(uiSource).toContain("shortcut: 'Alt+Enter'");
+    const propertiesUiSource = readFileSync(
+      'src/components/files/FilePropertiesDialog.tsx',
+      'utf8',
+    );
+    expect(propertiesUiSource).toContain('Read only');
+    expect(propertiesUiSource).toContain('startDirectoryMeasurement(paths)');
+    expect(propertiesUiSource).toContain('cancelDirectoryMeasurement(id)');
+    expect(propertiesUiSource).toContain('previewScheduler.schedule');
+    expect(propertiesUiSource).not.toContain('type="checkbox"');
+
+    const capability = JSON.parse(readFileSync('src-tauri/capabilities/main.json', 'utf8')) as {
+      permissions: string[];
+    };
+    for (const command of searchCommands) {
+      expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
+    }
+    for (const command of previewCommands) {
+      expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
+    }
+    for (const command of propertiesCommands) {
+      expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
+    }
+    for (const command of archiveCommands) {
+      expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
+    }
   });
 });

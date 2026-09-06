@@ -1,5 +1,7 @@
 import type {
   FilesystemResult,
+  DirectoryMeasurementDiagnostics,
+  DirectoryMeasurementSnapshot,
   NativeDirectoryListing,
   NativeDirectoryWatchDiagnostics,
   NativeDirectoryWatchSubscription,
@@ -8,9 +10,22 @@ import type {
   NativeFileConflictStrategy,
   NativeFileMutation,
   NativeFileOperationSnapshot,
+  NativeFileProperties,
+  NativeFilePreviewDiagnostics,
+  NativeFilePreviewRequest,
+  NativeFilePreviewSnapshot,
   NativeFileRoots,
+  NativeFileSearchDiagnostics,
+  NativeFileSearchQuery,
+  NativeFileSearchScope,
+  NativeFileSearchSnapshot,
   NativeFilesystemWatchEvent,
   PlatformFilesystem,
+  NativeArchiveConflictStrategy,
+  NativeArchiveDiagnostics,
+  NativeArchiveListing,
+  NativeArchiveOperationSnapshot,
+  NativeArchiveSummary,
 } from '../../platform';
 import { getPlatformCapabilities } from '../../platform';
 
@@ -55,6 +70,53 @@ export interface FilesystemService {
     listener: (event: NativeFilesystemWatchEvent) => void,
   ): Promise<FilesystemResult<NativeDirectoryWatchSubscription>>;
   getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>>;
+  startSearch(query: NativeFileSearchQuery): Promise<FilesystemResult<NativeFileSearchSnapshot>>;
+  getSearch(id: string, resultOffset: number): Promise<FilesystemResult<NativeFileSearchSnapshot>>;
+  cancelSearch(id: string): Promise<FilesystemResult<NativeFileSearchSnapshot>>;
+  releaseSearch(id: string): Promise<FilesystemResult<{ released: true }>>;
+  getSearchDiagnostics(): Promise<FilesystemResult<NativeFileSearchDiagnostics>>;
+  startPreview(
+    request: NativeFilePreviewRequest,
+  ): Promise<FilesystemResult<NativeFilePreviewSnapshot>>;
+  getPreview(id: string): Promise<FilesystemResult<NativeFilePreviewSnapshot>>;
+  takePreviewBytes(id: string): Promise<FilesystemResult<Uint8Array>>;
+  cancelPreview(id: string): Promise<FilesystemResult<NativeFilePreviewSnapshot>>;
+  releasePreview(id: string): Promise<FilesystemResult<{ released: true }>>;
+  getPreviewDiagnostics(): Promise<FilesystemResult<NativeFilePreviewDiagnostics>>;
+  getProperties(paths: readonly string[]): Promise<FilesystemResult<NativeFileProperties>>;
+  startDirectoryMeasurement(
+    paths: readonly string[],
+  ): Promise<FilesystemResult<DirectoryMeasurementSnapshot>>;
+  getDirectoryMeasurement(id: string): Promise<FilesystemResult<DirectoryMeasurementSnapshot>>;
+  cancelDirectoryMeasurement(id: string): Promise<FilesystemResult<DirectoryMeasurementSnapshot>>;
+  releaseDirectoryMeasurement(id: string): Promise<FilesystemResult<{ released: true }>>;
+  getDirectoryMeasurementDiagnostics(): Promise<FilesystemResult<DirectoryMeasurementDiagnostics>>;
+  openArchive(path: string): Promise<FilesystemResult<NativeArchiveSummary>>;
+  listArchiveEntries(
+    archiveId: string,
+    path: string,
+    offset?: number,
+    limit?: number,
+    query?: string,
+  ): Promise<FilesystemResult<NativeArchiveListing>>;
+  releaseArchive(archiveId: string): Promise<FilesystemResult<{ released: boolean }>>;
+  extractArchive(options: {
+    archiveId: string;
+    destinationPath: string;
+    selectedEntryIds?: readonly string[];
+    conflictStrategy: NativeArchiveConflictStrategy;
+  }): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  createZip(options: {
+    sources: readonly string[];
+    destinationPath: string;
+    conflictStrategy: NativeArchiveConflictStrategy;
+  }): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  getArchiveOperation(id: string): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  cancelArchiveOperation(id: string): Promise<FilesystemResult<NativeArchiveOperationSnapshot>>;
+  releaseArchiveOperation(id: string): Promise<FilesystemResult<{ released: boolean }>>;
+  getArchiveDiagnostics(): Promise<FilesystemResult<NativeArchiveDiagnostics>>;
+  pickArchiveDestination(defaultPath?: string): Promise<FilesystemResult<string | null>>;
+  pickZipDestination(defaultName: string): Promise<FilesystemResult<string | null>>;
 }
 
 export interface FilesClipboard {
@@ -97,7 +159,99 @@ export function createFilesystemService(
     watchDirectory: (path: string, listener: (event: NativeFilesystemWatchEvent) => void) =>
       filesystem.watchDirectory(path, listener),
     getWatchDiagnostics: () => filesystem.getWatchDiagnostics(),
+    startSearch: (query: NativeFileSearchQuery) => filesystem.startSearch(query),
+    getSearch: (id: string, resultOffset: number) => filesystem.getSearch(id, resultOffset),
+    cancelSearch: (id: string) => filesystem.cancelSearch(id),
+    releaseSearch: (id: string) => filesystem.releaseSearch(id),
+    getSearchDiagnostics: () => filesystem.getSearchDiagnostics(),
+    startPreview: (request: NativeFilePreviewRequest) => filesystem.startPreview(request),
+    getPreview: (id: string) => filesystem.getPreview(id),
+    takePreviewBytes: (id: string) => filesystem.takePreviewBytes(id),
+    cancelPreview: (id: string) => filesystem.cancelPreview(id),
+    releasePreview: (id: string) => filesystem.releasePreview(id),
+    getPreviewDiagnostics: () => filesystem.getPreviewDiagnostics(),
+    getProperties: (paths: readonly string[]) => filesystem.getProperties(paths),
+    startDirectoryMeasurement: (paths: readonly string[]) =>
+      filesystem.startDirectoryMeasurement(paths),
+    getDirectoryMeasurement: (id: string) => filesystem.getDirectoryMeasurement(id),
+    cancelDirectoryMeasurement: (id: string) => filesystem.cancelDirectoryMeasurement(id),
+    releaseDirectoryMeasurement: (id: string) => filesystem.releaseDirectoryMeasurement(id),
+    getDirectoryMeasurementDiagnostics: () => filesystem.getDirectoryMeasurementDiagnostics(),
+    openArchive: (path: string) => filesystem.openArchive(path),
+    listArchiveEntries: (
+      archiveId: string,
+      path: string,
+      offset?: number,
+      limit?: number,
+      query?: string,
+    ) => filesystem.listArchiveEntries(archiveId, path, offset, limit, query),
+    releaseArchive: (archiveId: string) => filesystem.releaseArchive(archiveId),
+    extractArchive: (options: Parameters<PlatformFilesystem['extractArchive']>[0]) =>
+      filesystem.extractArchive(options),
+    createZip: (options: Parameters<PlatformFilesystem['createZip']>[0]) =>
+      filesystem.createZip(options),
+    getArchiveOperation: (id: string) => filesystem.getArchiveOperation(id),
+    cancelArchiveOperation: (id: string) => filesystem.cancelArchiveOperation(id),
+    releaseArchiveOperation: (id: string) => filesystem.releaseArchiveOperation(id),
+    getArchiveDiagnostics: () => filesystem.getArchiveDiagnostics(),
+    pickArchiveDestination: (defaultPath?: string) =>
+      filesystem.pickArchiveDestination(defaultPath),
+    pickZipDestination: (defaultName: string) => filesystem.pickZipDestination(defaultName),
   });
+}
+
+export type NativeSearchFilter =
+  | 'all'
+  | 'files'
+  | 'folders'
+  | 'documents'
+  | 'images'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'archives'
+  | 'code'
+  | 'applications';
+
+const SEARCH_FILTER_EXTENSIONS: Readonly<Partial<Record<NativeSearchFilter, readonly string[]>>> = {
+  documents: ['csv', 'doc', 'docx', 'md', 'odt', 'ppt', 'pptx', 'rtf', 'txt', 'xls', 'xlsx'],
+  images: ['avif', 'bmp', 'gif', 'heic', 'jpeg', 'jpg', 'png', 'svg', 'webp'],
+  video: ['avi', 'm4v', 'mkv', 'mov', 'mp4', 'webm'],
+  audio: ['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav'],
+  pdf: ['pdf'],
+  archives: ['7z', 'bz2', 'gz', 'rar', 'tar', 'zip'],
+  code: ['css', 'html', 'js', 'json', 'jsx', 'py', 'rs', 'ts', 'tsx', 'xml', 'yaml', 'yml'],
+  applications: ['appx', 'bat', 'cmd', 'com', 'exe', 'msi'],
+};
+
+export function buildNativeSearchQuery(
+  rootPath: string,
+  input: string,
+  scope: NativeFileSearchScope,
+  filter: NativeSearchFilter,
+): NativeFileSearchQuery {
+  let text = input.trim();
+  let kind: NativeFileSearchQuery['kind'] =
+    filter === 'folders' ? 'folders' : filter === 'files' ? 'files' : 'all';
+  let extensions = [...(SEARCH_FILTER_EXTENSIONS[filter] ?? [])];
+  const folderMatch = /^folder:\s*(.*)$/i.exec(text);
+  if (folderMatch) {
+    kind = 'folders';
+    text = folderMatch[1]?.trim() ?? '';
+    extensions = [];
+  } else {
+    const extensionMatch = /^\*?\.([a-z0-9_-]{1,24})$/i.exec(text);
+    if (extensionMatch) {
+      text = '';
+      extensions = [extensionMatch[1].toLowerCase()];
+      if (kind === 'all') kind = 'files';
+    }
+  }
+  return { rootPath, text, scope, kind, extensions };
+}
+
+export function canStartNativeSearch(query: NativeFileSearchQuery): boolean {
+  return Boolean(query.rootPath && (query.text.trim() || query.extensions.length > 0));
 }
 
 export interface DirectoryRefreshCoordinator {
@@ -237,7 +391,7 @@ export function createLatestRequestGate() {
 
 const CATEGORY_EXTENSIONS = {
   image: new Set(['avif', 'bmp', 'gif', 'heic', 'jpeg', 'jpg', 'png', 'svg', 'webp']),
-  video: new Set(['avi', 'm4v', 'mkv', 'mov', 'mp4', 'webm']),
+  video: new Set(['avi', 'm4v', 'mkv', 'mov', 'mp4', 'webm', 'wmv']),
   audio: new Set(['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav']),
   pdf: new Set(['pdf']),
   document: new Set([

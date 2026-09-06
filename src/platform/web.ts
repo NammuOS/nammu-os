@@ -1,14 +1,25 @@
 import type {
   CapabilityResult,
+  DirectoryMeasurementDiagnostics,
+  DirectoryMeasurementSnapshot,
   FilesystemResult,
   NativeDirectoryListing,
+  NativeArchiveDiagnostics,
+  NativeArchiveListing,
+  NativeArchiveOperationSnapshot,
+  NativeArchiveSummary,
   NativeDirectoryWatchDiagnostics,
   NativeDirectoryWatchSubscription,
   NativeDeletionOperationSnapshot,
   NativeFileMetadata,
   NativeFileMutation,
   NativeFileOperationSnapshot,
+  NativeFileProperties,
+  NativeFilePreviewDiagnostics,
+  NativeFilePreviewSnapshot,
   NativeFileRoots,
+  NativeFileSearchDiagnostics,
+  NativeFileSearchSnapshot,
   PickFilesOptions,
   PickedFiles,
   PlatformCapabilities,
@@ -213,6 +224,92 @@ export function createWebPlatformCapabilities(
       },
       async getWatchDiagnostics(): Promise<FilesystemResult<NativeDirectoryWatchDiagnostics>> {
         return unsupportedFilesystem<NativeDirectoryWatchDiagnostics>();
+      },
+      async startSearch(): Promise<FilesystemResult<NativeFileSearchSnapshot>> {
+        return unsupportedFilesystem<NativeFileSearchSnapshot>();
+      },
+      async getSearch(): Promise<FilesystemResult<NativeFileSearchSnapshot>> {
+        return unsupportedFilesystem<NativeFileSearchSnapshot>();
+      },
+      async cancelSearch(): Promise<FilesystemResult<NativeFileSearchSnapshot>> {
+        return unsupportedFilesystem<NativeFileSearchSnapshot>();
+      },
+      async releaseSearch(): Promise<FilesystemResult<{ released: true }>> {
+        return unsupportedFilesystem<{ released: true }>();
+      },
+      async getSearchDiagnostics(): Promise<FilesystemResult<NativeFileSearchDiagnostics>> {
+        return unsupportedFilesystem<NativeFileSearchDiagnostics>();
+      },
+      async startPreview(): Promise<FilesystemResult<NativeFilePreviewSnapshot>> {
+        return unsupportedFilesystem<NativeFilePreviewSnapshot>();
+      },
+      async getPreview(): Promise<FilesystemResult<NativeFilePreviewSnapshot>> {
+        return unsupportedFilesystem<NativeFilePreviewSnapshot>();
+      },
+      async takePreviewBytes(): Promise<FilesystemResult<Uint8Array>> {
+        return unsupportedFilesystem<Uint8Array>();
+      },
+      async cancelPreview(): Promise<FilesystemResult<NativeFilePreviewSnapshot>> {
+        return unsupportedFilesystem<NativeFilePreviewSnapshot>();
+      },
+      async releasePreview(): Promise<FilesystemResult<{ released: true }>> {
+        return unsupportedFilesystem<{ released: true }>();
+      },
+      async getPreviewDiagnostics(): Promise<FilesystemResult<NativeFilePreviewDiagnostics>> {
+        return unsupportedFilesystem<NativeFilePreviewDiagnostics>();
+      },
+      async getProperties(): Promise<FilesystemResult<NativeFileProperties>> {
+        return unsupportedFilesystem<NativeFileProperties>();
+      },
+      async startDirectoryMeasurement(): Promise<FilesystemResult<DirectoryMeasurementSnapshot>> {
+        return unsupportedFilesystem<DirectoryMeasurementSnapshot>();
+      },
+      async getDirectoryMeasurement(): Promise<FilesystemResult<DirectoryMeasurementSnapshot>> {
+        return unsupportedFilesystem<DirectoryMeasurementSnapshot>();
+      },
+      async cancelDirectoryMeasurement(): Promise<FilesystemResult<DirectoryMeasurementSnapshot>> {
+        return unsupportedFilesystem<DirectoryMeasurementSnapshot>();
+      },
+      async releaseDirectoryMeasurement(): Promise<FilesystemResult<{ released: true }>> {
+        return unsupportedFilesystem<{ released: true }>();
+      },
+      async getDirectoryMeasurementDiagnostics(): Promise<
+        FilesystemResult<DirectoryMeasurementDiagnostics>
+      > {
+        return unsupportedFilesystem<DirectoryMeasurementDiagnostics>();
+      },
+      async openArchive() {
+        return unsupportedFilesystem<NativeArchiveSummary>();
+      },
+      async listArchiveEntries() {
+        return unsupportedFilesystem<NativeArchiveListing>();
+      },
+      async releaseArchive() {
+        return unsupportedFilesystem<{ released: boolean }>();
+      },
+      async extractArchive() {
+        return unsupportedFilesystem<NativeArchiveOperationSnapshot>();
+      },
+      async createZip() {
+        return unsupportedFilesystem<NativeArchiveOperationSnapshot>();
+      },
+      async getArchiveOperation() {
+        return unsupportedFilesystem<NativeArchiveOperationSnapshot>();
+      },
+      async cancelArchiveOperation() {
+        return unsupportedFilesystem<NativeArchiveOperationSnapshot>();
+      },
+      async releaseArchiveOperation() {
+        return unsupportedFilesystem<{ released: boolean }>();
+      },
+      async getArchiveDiagnostics() {
+        return unsupportedFilesystem<NativeArchiveDiagnostics>();
+      },
+      async pickArchiveDestination() {
+        return unsupportedFilesystem<string | null>();
+      },
+      async pickZipDestination() {
+        return unsupportedFilesystem<string | null>();
       },
     }),
     files: Object.freeze({

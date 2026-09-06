@@ -6,7 +6,9 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const resourceRoot = join(repositoryRoot, 'src-tauri', 'resources', 'local-server');
 const appRoot = join(resourceRoot, 'app');
 const desktopBundle = join(repositoryRoot, 'dist-desktop');
-const releaseExecutable = join(repositoryRoot, 'src-tauri', 'target', 'release', 'nammu-os.exe');
+const releaseExecutable = process.env.NAMMU_RELEASE_EXECUTABLE
+  ? resolve(process.env.NAMMU_RELEASE_EXECUTABLE)
+  : join(repositoryRoot, 'src-tauri', 'target', 'release', 'nammu-os.exe');
 const tauriConfig = JSON.parse(
   readFileSync(join(repositoryRoot, 'src-tauri', 'tauri.conf.json'), 'utf8'),
 );
@@ -19,6 +21,7 @@ const installer = join(
   'nsis',
   `Nammu OS_${tauriConfig.version}_x64-setup.exe`,
 );
+const requireInstaller = process.env.NAMMU_VERIFY_INSTALLER !== 'false';
 const expectedRuntimePackages = [
   'better-sqlite3',
   'busboy',
@@ -93,7 +96,7 @@ for (const required of [
   resourceRoot,
   desktopBundle,
   releaseExecutable,
-  installer,
+  ...(requireInstaller ? [installer] : []),
   join(resourceRoot, 'runtime', 'node.exe'),
 ]) {
   assert(
@@ -186,7 +189,7 @@ const scanTargets = [
   ...filesUnder(resourceRoot),
   ...filesUnder(desktopBundle),
   releaseExecutable,
-  installer,
+  ...(requireInstaller ? [installer] : []),
 ];
 const leaks = [];
 for (const path of scanTargets) {
@@ -231,7 +234,8 @@ console.info(
     runtimeFiles: stagedFiles.length,
     runtimeBytes: resourceBytes,
     executableBytes: statSync(releaseExecutable).size,
-    installerBytes: statSync(installer).size,
+    installerBytes: requireInstaller ? statSync(installer).size : null,
+    installerVerification: requireInstaller ? 'verified' : 'not-requested',
     sensitiveConfigurationMatches: 0,
     desktopClientMetadataScope: 'local-server-config-only',
   }),

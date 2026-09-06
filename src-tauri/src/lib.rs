@@ -1,8 +1,14 @@
 mod local_server;
+mod native_archive;
 mod native_directory_watcher;
 mod native_file_operations;
+mod native_file_preview;
+mod native_file_properties;
+mod native_file_search;
 mod native_filesystem;
+mod native_pdf_preview;
 mod native_recycle_bin;
+mod native_video_preview;
 mod web_surface;
 #[cfg(windows)]
 mod windows_job;
@@ -95,6 +101,12 @@ pub fn run() {
             native_file_operations::start_native_duplicate,
             native_file_operations::get_native_file_operation,
             native_file_operations::cancel_native_file_operation,
+            native_file_properties::get_native_file_properties,
+            native_file_properties::start_native_directory_measurement,
+            native_file_properties::get_native_directory_measurement,
+            native_file_properties::cancel_native_directory_measurement,
+            native_file_properties::release_native_directory_measurement,
+            native_file_properties::get_native_directory_measurement_diagnostics,
             native_recycle_bin::start_native_trash,
             native_recycle_bin::start_native_permanent_delete,
             native_recycle_bin::start_native_restore,
@@ -103,6 +115,26 @@ pub fn run() {
             native_directory_watcher::start_native_directory_watch,
             native_directory_watcher::stop_native_directory_watch,
             native_directory_watcher::get_native_directory_watch_diagnostics,
+            native_file_search::start_native_file_search,
+            native_file_search::get_native_file_search,
+            native_file_search::cancel_native_file_search,
+            native_file_search::release_native_file_search,
+            native_file_search::get_native_file_search_diagnostics,
+            native_file_preview::start_native_file_preview,
+            native_file_preview::get_native_file_preview,
+            native_file_preview::take_native_file_preview_bytes,
+            native_file_preview::cancel_native_file_preview,
+            native_file_preview::release_native_file_preview,
+            native_file_preview::get_native_file_preview_diagnostics,
+            native_archive::open_native_archive,
+            native_archive::get_native_archive_entries,
+            native_archive::release_native_archive,
+            native_archive::start_native_archive_extract,
+            native_archive::start_native_zip_create,
+            native_archive::get_native_archive_operation,
+            native_archive::cancel_native_archive_operation,
+            native_archive::release_native_archive_operation,
+            native_archive::get_native_archive_diagnostics,
             web_surface::create_web_surface,
             web_surface::destroy_web_surface,
             web_surface::navigate_web_surface,
@@ -135,8 +167,12 @@ pub fn run() {
             );
             app.manage(LocalServerState::new(supervisor));
             app.manage(native_file_operations::NativeFileOperationState::default());
+            app.manage(native_file_properties::NativeFilePropertiesState::default());
             app.manage(native_recycle_bin::NativeRecycleBinState::default());
             app.manage(native_directory_watcher::NativeDirectoryWatchState::default());
+            app.manage(native_file_search::NativeFileSearchState::default());
+            app.manage(native_file_preview::NativeFilePreviewState::default());
+            app.manage(native_archive::NativeArchiveState::default());
             app.manage(web_surface_state);
             Ok(())
         })

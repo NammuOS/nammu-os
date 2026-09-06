@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cancel-native-file-preview"
+description = "Enables the cancel_native_file_preview command without any pre-configured scope."
+commands.allow = ["cancel_native_file_preview"]
+
+[[permission]]
+identifier = "deny-cancel-native-file-preview"
+description = "Denies the cancel_native_file_preview command without any pre-configured scope."
+commands.deny = ["cancel_native_file_preview"]

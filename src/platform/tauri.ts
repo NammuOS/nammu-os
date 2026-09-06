@@ -1,8 +1,20 @@
 import type {
   CapabilityResult,
+  DirectoryMeasurementDiagnostics,
+  DirectoryMeasurementSnapshot,
+  DirectoryMeasurementState,
   FilesystemError,
   FilesystemErrorCode,
   FilesystemResult,
+  NativeArchiveConflictStrategy,
+  NativeArchiveDiagnostics,
+  NativeArchiveEntry,
+  NativeArchiveEntryKind,
+  NativeArchiveListing,
+  NativeArchiveOperationSnapshot,
+  NativeArchiveOperationState,
+  NativeArchiveOperationType,
+  NativeArchiveSummary,
   NativeDirectoryListing,
   NativeDirectoryWatchDiagnostics,
   NativeDirectoryWatchSubscription,
@@ -21,11 +33,28 @@ import type {
   NativeFileOperationState,
   NativeFileOperationSuccess,
   NativeFileOperationType,
+  NativeFileProperties,
+  NativeFilePropertyItem,
+  NativeFilePreviewDescriptor,
+  NativeFilePreviewDiagnostics,
+  NativeFilePreviewKind,
+  NativeFilePreviewMode,
+  NativeFilePreviewRequest,
+  NativeFilePreviewSnapshot,
+  NativeFilePreviewState,
   NativeFileRoot,
   NativeFileRootKind,
+  NativePropertyItemKind,
   NativeFileRoots,
+  NativeFileSearchDiagnostics,
+  NativeFileSearchKind,
+  NativeFileSearchQuery,
+  NativeFileSearchScope,
+  NativeFileSearchSnapshot,
+  NativeFileSearchState,
   NativeFilesystemEventKind,
   NativeFilesystemWatchEvent,
+  NativeVolumeProperties,
   PickFilesOptions,
   PickedFiles,
   PlatformCapabilities,
@@ -98,10 +127,52 @@ export interface TauriCapabilityEnvironment {
   stopNativeDirectoryWatch(id: string): Promise<unknown>;
   getNativeDirectoryWatchDiagnostics(): Promise<unknown>;
   listenNativeFilesystemEvents(listener: (payload: unknown) => void): Promise<TauriUnlisten>;
+  startNativeFileSearch(query: NativeFileSearchQuery): Promise<unknown>;
+  getNativeFileSearch(id: string, resultOffset: number): Promise<unknown>;
+  cancelNativeFileSearch(id: string): Promise<unknown>;
+  releaseNativeFileSearch(id: string): Promise<unknown>;
+  getNativeFileSearchDiagnostics(): Promise<unknown>;
+  startNativeFilePreview(request: NativeFilePreviewRequest): Promise<unknown>;
+  getNativeFilePreview(id: string): Promise<unknown>;
+  takeNativeFilePreviewBytes(id: string): Promise<unknown>;
+  cancelNativeFilePreview(id: string): Promise<unknown>;
+  releaseNativeFilePreview(id: string): Promise<unknown>;
+  getNativeFilePreviewDiagnostics(): Promise<unknown>;
+  getNativeFileProperties(paths: readonly string[]): Promise<unknown>;
+  startNativeDirectoryMeasurement(paths: readonly string[]): Promise<unknown>;
+  getNativeDirectoryMeasurement(id: string): Promise<unknown>;
+  cancelNativeDirectoryMeasurement(id: string): Promise<unknown>;
+  releaseNativeDirectoryMeasurement(id: string): Promise<unknown>;
+  getNativeDirectoryMeasurementDiagnostics(): Promise<unknown>;
+  openNativeArchive(path: string): Promise<unknown>;
+  getNativeArchiveEntries(
+    archiveId: string,
+    path: string,
+    offset: number,
+    limit: number,
+    query?: string,
+  ): Promise<unknown>;
+  releaseNativeArchive(archiveId: string): Promise<unknown>;
+  startNativeArchiveExtract(
+    archiveId: string,
+    destinationPath: string,
+    selectedEntryIds: readonly string[],
+    conflictStrategy: NativeArchiveConflictStrategy,
+  ): Promise<unknown>;
+  startNativeZipCreate(
+    sources: readonly string[],
+    destinationPath: string,
+    conflictStrategy: NativeArchiveConflictStrategy,
+  ): Promise<unknown>;
+  getNativeArchiveOperation(id: string): Promise<unknown>;
+  cancelNativeArchiveOperation(id: string): Promise<unknown>;
+  releaseNativeArchiveOperation(id: string): Promise<unknown>;
+  getNativeArchiveDiagnostics(): Promise<unknown>;
   pickFile(options: {
-    directory: false;
+    directory: boolean;
     multiple: boolean;
     filters?: TauriDialogFilter[];
+    defaultPath?: string;
   }): Promise<string | string[] | null>;
   saveFile(options: { defaultPath: string; filters?: TauriDialogFilter[] }): Promise<string | null>;
   readFile(path: string): Promise<Uint8Array>;
@@ -213,6 +284,99 @@ const tauriCapabilityEnvironment: TauriCapabilityEnvironment = {
   async listenNativeFilesystemEvents(listener) {
     const { listen } = await import('@tauri-apps/api/event');
     return listen('nammu://native-filesystem-change', (event) => listener(event.payload));
+  },
+  async startNativeFileSearch(query) {
+    return tauriServiceEnvironment.invoke('start_native_file_search', { query });
+  },
+  async getNativeFileSearch(id, resultOffset) {
+    return tauriServiceEnvironment.invoke('get_native_file_search', { id, resultOffset });
+  },
+  async cancelNativeFileSearch(id) {
+    return tauriServiceEnvironment.invoke('cancel_native_file_search', { id });
+  },
+  async releaseNativeFileSearch(id) {
+    return tauriServiceEnvironment.invoke('release_native_file_search', { id });
+  },
+  async getNativeFileSearchDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_file_search_diagnostics');
+  },
+  async startNativeFilePreview(request) {
+    return tauriServiceEnvironment.invoke('start_native_file_preview', { request });
+  },
+  async getNativeFilePreview(id) {
+    return tauriServiceEnvironment.invoke('get_native_file_preview', { id });
+  },
+  async takeNativeFilePreviewBytes(id) {
+    return tauriServiceEnvironment.invoke<ArrayBuffer>('take_native_file_preview_bytes', { id });
+  },
+  async cancelNativeFilePreview(id) {
+    return tauriServiceEnvironment.invoke('cancel_native_file_preview', { id });
+  },
+  async releaseNativeFilePreview(id) {
+    return tauriServiceEnvironment.invoke('release_native_file_preview', { id });
+  },
+  async getNativeFilePreviewDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_file_preview_diagnostics');
+  },
+  async getNativeFileProperties(paths) {
+    return tauriServiceEnvironment.invoke('get_native_file_properties', { paths });
+  },
+  async startNativeDirectoryMeasurement(paths) {
+    return tauriServiceEnvironment.invoke('start_native_directory_measurement', { paths });
+  },
+  async getNativeDirectoryMeasurement(id) {
+    return tauriServiceEnvironment.invoke('get_native_directory_measurement', { id });
+  },
+  async cancelNativeDirectoryMeasurement(id) {
+    return tauriServiceEnvironment.invoke('cancel_native_directory_measurement', { id });
+  },
+  async releaseNativeDirectoryMeasurement(id) {
+    return tauriServiceEnvironment.invoke('release_native_directory_measurement', { id });
+  },
+  async getNativeDirectoryMeasurementDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_directory_measurement_diagnostics');
+  },
+  async openNativeArchive(path) {
+    return tauriServiceEnvironment.invoke('open_native_archive', { path });
+  },
+  async getNativeArchiveEntries(archiveId, path, offset, limit, query) {
+    return tauriServiceEnvironment.invoke('get_native_archive_entries', {
+      archiveId,
+      path,
+      offset,
+      limit,
+      ...(query ? { query } : {}),
+    });
+  },
+  async releaseNativeArchive(archiveId) {
+    return tauriServiceEnvironment.invoke('release_native_archive', { archiveId });
+  },
+  async startNativeArchiveExtract(archiveId, destinationPath, selectedEntryIds, conflictStrategy) {
+    return tauriServiceEnvironment.invoke('start_native_archive_extract', {
+      archiveId,
+      destinationPath,
+      selectedEntryIds,
+      conflictStrategy,
+    });
+  },
+  async startNativeZipCreate(sources, destinationPath, conflictStrategy) {
+    return tauriServiceEnvironment.invoke('start_native_zip_create', {
+      sources,
+      destinationPath,
+      conflictStrategy,
+    });
+  },
+  async getNativeArchiveOperation(id) {
+    return tauriServiceEnvironment.invoke('get_native_archive_operation', { id });
+  },
+  async cancelNativeArchiveOperation(id) {
+    return tauriServiceEnvironment.invoke('cancel_native_archive_operation', { id });
+  },
+  async releaseNativeArchiveOperation(id) {
+    return tauriServiceEnvironment.invoke('release_native_archive_operation', { id });
+  },
+  async getNativeArchiveDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_archive_diagnostics');
   },
   async pickFile(options) {
     const { open } = await import('@tauri-apps/plugin-dialog');
@@ -545,6 +709,16 @@ const FILESYSTEM_ERROR_CODES = new Set<FilesystemErrorCode>([
   'UNDO_UNAVAILABLE',
   'WATCH_UNSUPPORTED',
   'WATCH_FAILED',
+  'PREVIEW_UNSUPPORTED',
+  'PDF_ENCRYPTED',
+  'DECODE_FAILED',
+  'FILE_CHANGED',
+  'ARCHIVE_UNSUPPORTED',
+  'ARCHIVE_INVALID',
+  'ARCHIVE_ENCRYPTED',
+  'ARCHIVE_LIMIT_EXCEEDED',
+  'ARCHIVE_ENTRY_UNSAFE',
+  'ARCHIVE_CORRUPT',
   'IO_ERROR',
 ]);
 const FILE_OPERATION_TYPES = new Set<NativeFileOperationType>(['copy', 'move', 'duplicate']);
@@ -581,6 +755,58 @@ const FILESYSTEM_EVENT_KINDS = new Set<NativeFilesystemEventKind>([
   'metadata',
   'rescan-required',
   'watch-error',
+]);
+const FILE_SEARCH_SCOPES = new Set<NativeFileSearchScope>([
+  'current-folder',
+  'current-tree',
+  'selected-drive',
+]);
+const FILE_SEARCH_KINDS = new Set<NativeFileSearchKind>(['all', 'files', 'folders']);
+const FILE_SEARCH_STATES = new Set<NativeFileSearchState>([
+  'queued',
+  'running',
+  'completed',
+  'cancelled',
+  'failed',
+]);
+const FILE_PREVIEW_MODES = new Set<NativeFilePreviewMode>([
+  'thumbnail',
+  'image-preview',
+  'text-preview',
+]);
+const FILE_PREVIEW_STATES = new Set<NativeFilePreviewState>([
+  'queued',
+  'running',
+  'completed',
+  'cancelled',
+  'failed',
+]);
+const FILE_PREVIEW_KINDS = new Set<NativeFilePreviewKind>(['image', 'text']);
+const PROPERTY_ITEM_KINDS = new Set<NativePropertyItemKind>([
+  'file',
+  'directory',
+  'drive',
+  'symbolic-link',
+  'junction',
+  'other-reparse',
+  'other',
+  'unavailable',
+]);
+const DIRECTORY_MEASUREMENT_STATES = new Set<DirectoryMeasurementState>([
+  'queued',
+  'running',
+  'completed',
+  'cancelled',
+  'failed',
+]);
+const ARCHIVE_ENTRY_KINDS = new Set<NativeArchiveEntryKind>(['file', 'directory', 'symlink']);
+const ARCHIVE_OPERATION_TYPES = new Set<NativeArchiveOperationType>(['extract', 'create-zip']);
+const ARCHIVE_OPERATION_STATES = new Set<NativeArchiveOperationState>([
+  'queued',
+  'running',
+  'completed',
+  'cancelled',
+  'failed',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -834,6 +1060,386 @@ function validFilesystemWatchEvent(value: unknown): value is NativeFilesystemWat
     typeof value.rescanRequired === 'boolean' &&
     (value.error === null || validFilesystemError(value.error))
   );
+}
+
+function validSearchQuery(value: unknown): value is NativeFileSearchQuery {
+  return (
+    isRecord(value) &&
+    typeof value.rootPath === 'string' &&
+    value.rootPath.length > 0 &&
+    typeof value.text === 'string' &&
+    value.text.length <= 256 &&
+    typeof value.scope === 'string' &&
+    FILE_SEARCH_SCOPES.has(value.scope as NativeFileSearchScope) &&
+    typeof value.kind === 'string' &&
+    FILE_SEARCH_KINDS.has(value.kind as NativeFileSearchKind) &&
+    Array.isArray(value.extensions) &&
+    value.extensions.length <= 16 &&
+    value.extensions.every(
+      (extension) => typeof extension === 'string' && /^[a-zA-Z0-9_-]{1,24}$/.test(extension),
+    )
+  );
+}
+
+function validSearchSnapshot(value: unknown): value is NativeFileSearchSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.id) &&
+    validSearchQuery(value.query) &&
+    typeof value.state === 'string' &&
+    FILE_SEARCH_STATES.has(value.state as NativeFileSearchState) &&
+    Number.isSafeInteger(value.scannedEntries) &&
+    Number(value.scannedEntries) >= 0 &&
+    Number.isSafeInteger(value.matchedEntries) &&
+    Number(value.matchedEntries) >= 0 &&
+    Number.isSafeInteger(value.inaccessibleEntries) &&
+    Number(value.inaccessibleEntries) >= 0 &&
+    Number.isSafeInteger(value.retainedResults) &&
+    Number(value.retainedResults) >= 0 &&
+    Number(value.retainedResults) <= 5_000 &&
+    value.resultLimit === 5_000 &&
+    typeof value.truncated === 'boolean' &&
+    isDuration(value.durationMs) &&
+    Number.isSafeInteger(value.resultOffset) &&
+    Number(value.resultOffset) >= 0 &&
+    Number(value.resultOffset) <= 5_000 &&
+    Array.isArray(value.results) &&
+    value.results.length <= 200 &&
+    value.results.every(validNativeMetadata) &&
+    (value.error === null || validFilesystemError(value.error))
+  );
+}
+
+function validSearchRelease(value: unknown): value is { released: true } {
+  return isRecord(value) && value.released === true;
+}
+
+function validSearchDiagnostics(value: unknown): value is NativeFileSearchDiagnostics {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.activeSearches) &&
+    Number(value.activeSearches) >= 0 &&
+    Number(value.activeSearches) <= 2 &&
+    Number.isSafeInteger(value.retainedSearches) &&
+    Number(value.retainedSearches) >= 0 &&
+    Number(value.retainedSearches) <= 16 &&
+    Number.isSafeInteger(value.retainedResults) &&
+    Number(value.retainedResults) >= 0 &&
+    Number(value.retainedResults) <= 80_000
+  );
+}
+
+function validPreviewRequest(value: unknown): value is NativeFilePreviewRequest {
+  return (
+    isRecord(value) &&
+    validFilesystemPath(String(value.path ?? '')) &&
+    typeof value.mode === 'string' &&
+    FILE_PREVIEW_MODES.has(value.mode as NativeFilePreviewMode) &&
+    Number.isSafeInteger(value.requestedWidth) &&
+    Number(value.requestedWidth) >= 0 &&
+    Number(value.requestedWidth) <= 1_024 &&
+    Number.isSafeInteger(value.requestedHeight) &&
+    Number(value.requestedHeight) >= 0 &&
+    Number(value.requestedHeight) <= 1_024
+  );
+}
+
+function validPreviewDescriptor(value: unknown): value is NativeFilePreviewDescriptor {
+  return (
+    isRecord(value) &&
+    typeof value.kind === 'string' &&
+    FILE_PREVIEW_KINDS.has(value.kind as NativeFilePreviewKind) &&
+    typeof value.mimeType === 'string' &&
+    isNullableSafeNumber(value.width) &&
+    isNullableSafeNumber(value.height) &&
+    isNullableSafeNumber(value.sourceWidth) &&
+    isNullableSafeNumber(value.sourceHeight) &&
+    isNullableSafeNumber(value.pageCount) &&
+    isNullableSafeNumber(value.durationMs) &&
+    Number.isSafeInteger(value.byteLength) &&
+    Number(value.byteLength) >= 0 &&
+    Number(value.byteLength) <= 8 * 1024 * 1024 &&
+    isNullableString(value.text) &&
+    (value.text === null || value.text.length <= 512 * 1024) &&
+    typeof value.truncated === 'boolean' &&
+    typeof value.cacheHit === 'boolean'
+  );
+}
+
+function validPreviewSnapshot(value: unknown): value is NativeFilePreviewSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.id) &&
+    validPreviewRequest(value.request) &&
+    typeof value.state === 'string' &&
+    FILE_PREVIEW_STATES.has(value.state as NativeFilePreviewState) &&
+    isDuration(value.durationMs) &&
+    (value.result === null || validPreviewDescriptor(value.result)) &&
+    (value.error === null || validFilesystemError(value.error))
+  );
+}
+
+function validPreviewDiagnostics(value: unknown): value is NativeFilePreviewDiagnostics {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.activeJobs) &&
+    Number(value.activeJobs) >= 0 &&
+    Number(value.activeJobs) <= 4 &&
+    Number.isSafeInteger(value.retainedJobs) &&
+    Number(value.retainedJobs) >= 0 &&
+    Number(value.retainedJobs) <= 64 &&
+    Number.isSafeInteger(value.retainedResultBytes) &&
+    Number(value.retainedResultBytes) >= 0 &&
+    Number.isSafeInteger(value.cacheEntries) &&
+    Number(value.cacheEntries) >= 0 &&
+    Number(value.cacheEntries) <= 256 &&
+    Number.isSafeInteger(value.cacheBytes) &&
+    Number(value.cacheBytes) >= 0 &&
+    value.maxActiveJobs === 4 &&
+    value.cacheMaxEntries === 256 &&
+    value.cacheMaxBytes === 32 * 1024 * 1024
+  );
+}
+
+function validPreviewRelease(value: unknown): value is { released: true } {
+  return isRecord(value) && value.released === true;
+}
+
+function validVolumeProperties(value: unknown): value is NativeVolumeProperties {
+  return (
+    isRecord(value) &&
+    validFilesystemPath(String(value.path ?? '')) &&
+    isNullableString(value.label) &&
+    typeof value.kind === 'string' &&
+    ROOT_KINDS.has(value.kind as NativeFileRootKind) &&
+    isNullableString(value.fileSystem) &&
+    isNullableSafeNumber(value.totalBytes) &&
+    isNullableSafeNumber(value.freeBytes) &&
+    isNullableSafeNumber(value.usedBytes) &&
+    typeof value.accessible === 'boolean'
+  );
+}
+
+function validPropertyItem(value: unknown): value is NativeFilePropertyItem {
+  const attributes = isRecord(value) && value.attributes;
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    validFilesystemPath(String(value.path ?? '')) &&
+    isNullableString(value.parentPath) &&
+    isNullableString(value.extension) &&
+    typeof value.kind === 'string' &&
+    PROPERTY_ITEM_KINDS.has(value.kind as NativePropertyItemKind) &&
+    isNullableSafeNumber(value.sizeBytes) &&
+    isNullableSafeNumber(value.allocatedBytes) &&
+    isNullableSafeNumber(value.createdAtMs) &&
+    isNullableSafeNumber(value.modifiedAtMs) &&
+    isNullableSafeNumber(value.accessedAtMs) &&
+    isRecord(attributes) &&
+    [
+      'readOnly',
+      'hidden',
+      'system',
+      'archive',
+      'compressed',
+      'encrypted',
+      'sparse',
+      'offline',
+      'temporary',
+      'reparsePoint',
+    ].every((key) => typeof attributes[key] === 'boolean') &&
+    isNullableSafeNumber(value.hardLinkCount) &&
+    isNullableString(value.linkTarget) &&
+    (value.volume === null || validVolumeProperties(value.volume)) &&
+    typeof value.accessible === 'boolean' &&
+    (value.accessError === null || validFilesystemError(value.accessError))
+  );
+}
+
+function validFileProperties(value: unknown): value is NativeFileProperties {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.length > 0 &&
+    value.items.length <= 256 &&
+    value.items.every(validPropertyItem) &&
+    value.itemCount === value.items.length &&
+    Number.isSafeInteger(value.fileCount) &&
+    Number(value.fileCount) >= 0 &&
+    Number.isSafeInteger(value.folderCount) &&
+    Number(value.folderCount) >= 0 &&
+    Number.isSafeInteger(value.driveCount) &&
+    Number(value.driveCount) >= 0 &&
+    isNullableSafeNumber(value.directAllocatedBytes) &&
+    Number.isSafeInteger(value.directFileBytes) &&
+    Number(value.directFileBytes) >= 0 &&
+    typeof value.containsUnmeasuredFolders === 'boolean' &&
+    isNullableString(value.commonParentPath) &&
+    typeof value.mixedKinds === 'boolean' &&
+    isDuration(value.durationMs)
+  );
+}
+
+function validDirectoryMeasurement(value: unknown): value is DirectoryMeasurementSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.id) &&
+    typeof value.state === 'string' &&
+    DIRECTORY_MEASUREMENT_STATES.has(value.state as DirectoryMeasurementState) &&
+    Number.isSafeInteger(value.rootCount) &&
+    Number(value.rootCount) > 0 &&
+    Number(value.rootCount) <= 256 &&
+    [
+      'filesScanned',
+      'directoriesScanned',
+      'logicalBytes',
+      'skippedEntries',
+      'reparsePointsSkipped',
+    ].every((key) => Number.isSafeInteger(value[key]) && Number(value[key]) >= 0) &&
+    isNullableSafeNumber(value.allocatedBytes) &&
+    typeof value.allocationComplete === 'boolean' &&
+    isDuration(value.durationMs) &&
+    (value.error === null || validFilesystemError(value.error))
+  );
+}
+
+function validDirectoryMeasurementDiagnostics(
+  value: unknown,
+): value is DirectoryMeasurementDiagnostics {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.activeJobs) &&
+    Number(value.activeJobs) >= 0 &&
+    Number(value.activeJobs) <= 2 &&
+    Number.isSafeInteger(value.retainedJobs) &&
+    Number(value.retainedJobs) >= 0 &&
+    Number(value.retainedJobs) <= 16 &&
+    value.maxActiveJobs === 2
+  );
+}
+
+function validArchiveEntry(value: unknown): value is NativeArchiveEntry {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    typeof value.path === 'string' &&
+    typeof value.parentPath === 'string' &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    typeof value.kind === 'string' &&
+    ARCHIVE_ENTRY_KINDS.has(value.kind as NativeArchiveEntryKind) &&
+    Number.isSafeInteger(value.compressedSize) &&
+    Number(value.compressedSize) >= 0 &&
+    Number.isSafeInteger(value.uncompressedSize) &&
+    Number(value.uncompressedSize) >= 0 &&
+    isNullableString(value.modified) &&
+    typeof value.compressionMethod === 'string' &&
+    typeof value.encrypted === 'boolean'
+  );
+}
+
+function validArchiveSummary(value: unknown): value is NativeArchiveSummary {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.id) &&
+    typeof value.archivePath === 'string' &&
+    value.archivePath.length > 0 &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    [
+      'entryCount',
+      'fileCount',
+      'directoryCount',
+      'encryptedEntries',
+      'symlinkEntries',
+      'unsupportedEntries',
+      'totalCompressedBytes',
+      'totalUncompressedBytes',
+    ].every((key) => Number.isSafeInteger(value[key]) && Number(value[key]) >= 0) &&
+    Number(value.entryCount) <= 200_000 &&
+    isDuration(value.durationMs)
+  );
+}
+
+function validArchiveListing(value: unknown): value is NativeArchiveListing {
+  return (
+    isRecord(value) &&
+    typeof value.archiveId === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.archiveId) &&
+    typeof value.path === 'string' &&
+    isNullableString(value.parentPath) &&
+    Array.isArray(value.entries) &&
+    value.entries.length <= 500 &&
+    value.entries.every(validArchiveEntry) &&
+    Number.isSafeInteger(value.totalEntries) &&
+    Number(value.totalEntries) >= 0 &&
+    Number.isSafeInteger(value.offset) &&
+    Number(value.offset) >= 0 &&
+    Number.isSafeInteger(value.limit) &&
+    Number(value.limit) > 0 &&
+    Number(value.limit) <= 500 &&
+    typeof value.hasMore === 'boolean'
+  );
+}
+
+function validArchiveOperation(value: unknown): value is NativeArchiveOperationSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    /^[a-f0-9]{32}$/.test(value.id) &&
+    typeof value.operation === 'string' &&
+    ARCHIVE_OPERATION_TYPES.has(value.operation as NativeArchiveOperationType) &&
+    typeof value.state === 'string' &&
+    ARCHIVE_OPERATION_STATES.has(value.state as NativeArchiveOperationState) &&
+    typeof value.archivePath === 'string' &&
+    typeof value.destinationPath === 'string' &&
+    isNullableString(value.currentEntry) &&
+    [
+      'filesCompleted',
+      'directoriesCompleted',
+      'entriesTotal',
+      'bytesProcessed',
+      'bytesTotal',
+      'skippedEntries',
+    ].every((key) => Number.isSafeInteger(value[key]) && Number(value[key]) >= 0) &&
+    Array.isArray(value.failures) &&
+    value.failures.length <= 100_000 &&
+    value.failures.every(
+      (failure) =>
+        isRecord(failure) &&
+        typeof failure.entry === 'string' &&
+        validFilesystemError(failure.error),
+    ) &&
+    (value.error === null || validFilesystemError(value.error))
+  );
+}
+
+function validArchiveDiagnostics(value: unknown): value is NativeArchiveDiagnostics {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.openArchives) &&
+    Number(value.openArchives) >= 0 &&
+    Number(value.openArchives) <= 16 &&
+    Number.isSafeInteger(value.activeJobs) &&
+    Number(value.activeJobs) >= 0 &&
+    Number(value.activeJobs) <= 2 &&
+    Number.isSafeInteger(value.retainedJobs) &&
+    Number(value.retainedJobs) >= 0 &&
+    Number(value.retainedJobs) <= 32 &&
+    value.maxActiveJobs === 2 &&
+    value.maxArchiveEntries === 100_000 &&
+    Number.isSafeInteger(value.maxTotalUncompressedBytes) &&
+    Number(value.maxTotalUncompressedBytes) > 0
+  );
+}
+
+function validArchiveRelease(value: unknown): value is { released: boolean } {
+  return isRecord(value) && typeof value.released === 'boolean';
 }
 
 function decodeFilesystemResponse<T>(
@@ -1210,6 +1816,424 @@ export function createTauriPlatformCapabilities(
             await environment.getNativeDirectoryWatchDiagnostics(),
             validWatchDiagnostics,
           );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async startSearch(
+        query: NativeFileSearchQuery,
+      ): Promise<FilesystemResult<NativeFileSearchSnapshot>> {
+        if (
+          !validFilesystemPath(query.rootPath) ||
+          query.text.length > 256 ||
+          (!query.text.trim() && query.extensions.length === 0) ||
+          !FILE_SEARCH_SCOPES.has(query.scope) ||
+          !FILE_SEARCH_KINDS.has(query.kind) ||
+          query.extensions.length > 16 ||
+          query.extensions.some((extension) => !/^[a-zA-Z0-9_-]{1,24}$/.test(extension))
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.startNativeFileSearch(query),
+            validSearchSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getSearch(
+        id: string,
+        resultOffset: number,
+      ): Promise<FilesystemResult<NativeFileSearchSnapshot>> {
+        if (
+          !/^[a-f0-9]{32}$/.test(id) ||
+          !Number.isSafeInteger(resultOffset) ||
+          resultOffset < 0 ||
+          resultOffset > 5_000
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFileSearch(id, resultOffset),
+            validSearchSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async cancelSearch(id: string): Promise<FilesystemResult<NativeFileSearchSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.cancelNativeFileSearch(id),
+            validSearchSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async releaseSearch(id: string): Promise<FilesystemResult<{ released: true }>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.releaseNativeFileSearch(id),
+            validSearchRelease,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getSearchDiagnostics(): Promise<FilesystemResult<NativeFileSearchDiagnostics>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFileSearchDiagnostics(),
+            validSearchDiagnostics,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async startPreview(
+        request: NativeFilePreviewRequest,
+      ): Promise<FilesystemResult<NativeFilePreviewSnapshot>> {
+        if (!validPreviewRequest(request)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.startNativeFilePreview(request),
+            validPreviewSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getPreview(id: string): Promise<FilesystemResult<NativeFilePreviewSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFilePreview(id),
+            validPreviewSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async takePreviewBytes(id: string): Promise<FilesystemResult<Uint8Array>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          const raw = await environment.takeNativeFilePreviewBytes(id);
+          const bytes =
+            raw instanceof Uint8Array
+              ? raw
+              : raw instanceof ArrayBuffer
+                ? new Uint8Array(raw)
+                : Array.isArray(raw) &&
+                    raw.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)
+                  ? new Uint8Array(raw)
+                  : null;
+          if (!bytes || bytes.byteLength > 8 * 1024 * 1024) return filesystemFailure();
+          return { status: 'success', value: bytes };
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async cancelPreview(id: string): Promise<FilesystemResult<NativeFilePreviewSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.cancelNativeFilePreview(id),
+            validPreviewSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async releasePreview(id: string): Promise<FilesystemResult<{ released: true }>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.releaseNativeFilePreview(id),
+            validPreviewRelease,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getPreviewDiagnostics(): Promise<FilesystemResult<NativeFilePreviewDiagnostics>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFilePreviewDiagnostics(),
+            validPreviewDiagnostics,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getProperties(
+        paths: readonly string[],
+      ): Promise<FilesystemResult<NativeFileProperties>> {
+        if (
+          paths.length === 0 ||
+          paths.length > 256 ||
+          paths.some((path) => !validFilesystemPath(path))
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFileProperties(paths),
+            validFileProperties,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async startDirectoryMeasurement(
+        paths: readonly string[],
+      ): Promise<FilesystemResult<DirectoryMeasurementSnapshot>> {
+        if (
+          paths.length === 0 ||
+          paths.length > 256 ||
+          paths.some((path) => !validFilesystemPath(path))
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.startNativeDirectoryMeasurement(paths),
+            validDirectoryMeasurement,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getDirectoryMeasurement(
+        id: string,
+      ): Promise<FilesystemResult<DirectoryMeasurementSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeDirectoryMeasurement(id),
+            validDirectoryMeasurement,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async cancelDirectoryMeasurement(
+        id: string,
+      ): Promise<FilesystemResult<DirectoryMeasurementSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.cancelNativeDirectoryMeasurement(id),
+            validDirectoryMeasurement,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async releaseDirectoryMeasurement(id: string): Promise<FilesystemResult<{ released: true }>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.releaseNativeDirectoryMeasurement(id),
+            validPreviewRelease,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getDirectoryMeasurementDiagnostics(): Promise<
+        FilesystemResult<DirectoryMeasurementDiagnostics>
+      > {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeDirectoryMeasurementDiagnostics(),
+            validDirectoryMeasurementDiagnostics,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async openArchive(path: string): Promise<FilesystemResult<NativeArchiveSummary>> {
+        if (!validFilesystemPath(path) || !path.toLowerCase().endsWith('.zip')) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.openNativeArchive(path),
+            validArchiveSummary,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async listArchiveEntries(
+        archiveId: string,
+        path: string,
+        offset = 0,
+        limit = 500,
+        query = '',
+      ): Promise<FilesystemResult<NativeArchiveListing>> {
+        if (
+          !/^[a-f0-9]{32}$/.test(archiveId) ||
+          path.includes('\0') ||
+          !Number.isSafeInteger(offset) ||
+          offset < 0 ||
+          !Number.isSafeInteger(limit) ||
+          limit < 1 ||
+          limit > 500 ||
+          query.length > 256
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeArchiveEntries(archiveId, path, offset, limit, query),
+            validArchiveListing,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async releaseArchive(archiveId: string): Promise<FilesystemResult<{ released: boolean }>> {
+        if (!/^[a-f0-9]{32}$/.test(archiveId)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.releaseNativeArchive(archiveId),
+            validArchiveRelease,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async extractArchive(
+        options: Parameters<PlatformCapabilities['filesystem']['extractArchive']>[0],
+      ): Promise<FilesystemResult<NativeArchiveOperationSnapshot>> {
+        if (
+          !/^[a-f0-9]{32}$/.test(options.archiveId) ||
+          !validFilesystemPath(options.destinationPath) ||
+          !['skip', 'keep-both', 'cancel'].includes(options.conflictStrategy) ||
+          (options.selectedEntryIds?.length ?? 0) > 100_000 ||
+          options.selectedEntryIds?.some((id: string) => typeof id !== 'string' || id.length > 128)
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.startNativeArchiveExtract(
+              options.archiveId,
+              options.destinationPath,
+              options.selectedEntryIds ?? [],
+              options.conflictStrategy,
+            ),
+            validArchiveOperation,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async createZip(
+        options: Parameters<PlatformCapabilities['filesystem']['createZip']>[0],
+      ): Promise<FilesystemResult<NativeArchiveOperationSnapshot>> {
+        if (
+          options.sources.length === 0 ||
+          options.sources.length > 1_024 ||
+          options.sources.some((path: string) => !validFilesystemPath(path)) ||
+          !validFilesystemPath(options.destinationPath) ||
+          !options.destinationPath.toLowerCase().endsWith('.zip') ||
+          !['skip', 'keep-both', 'cancel'].includes(options.conflictStrategy)
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.startNativeZipCreate(
+              options.sources,
+              options.destinationPath,
+              options.conflictStrategy,
+            ),
+            validArchiveOperation,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getArchiveOperation(
+        id: string,
+      ): Promise<FilesystemResult<NativeArchiveOperationSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeArchiveOperation(id),
+            validArchiveOperation,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async cancelArchiveOperation(
+        id: string,
+      ): Promise<FilesystemResult<NativeArchiveOperationSnapshot>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.cancelNativeArchiveOperation(id),
+            validArchiveOperation,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async releaseArchiveOperation(id: string): Promise<FilesystemResult<{ released: boolean }>> {
+        if (!/^[a-f0-9]{32}$/.test(id)) return invalidFilesystemPath();
+        try {
+          return decodeFilesystemResponse(
+            await environment.releaseNativeArchiveOperation(id),
+            validArchiveRelease,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getArchiveDiagnostics(): Promise<FilesystemResult<NativeArchiveDiagnostics>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeArchiveDiagnostics(),
+            validArchiveDiagnostics,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async pickArchiveDestination(defaultPath?: string): Promise<FilesystemResult<string | null>> {
+        try {
+          const selected = await environment.pickFile({
+            directory: true,
+            multiple: false,
+            ...(defaultPath ? { defaultPath } : {}),
+          });
+          return {
+            status: 'success',
+            value: typeof selected === 'string' ? selected : null,
+          };
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async pickZipDestination(defaultName: string): Promise<FilesystemResult<string | null>> {
+        if (!defaultName || defaultName.includes('\0')) return invalidFilesystemPath();
+        try {
+          const selected = await environment.saveFile({
+            defaultPath: defaultName.toLowerCase().endsWith('.zip')
+              ? defaultName
+              : `${defaultName}.zip`,
+            filters: [{ name: 'ZIP archive', extensions: ['zip'] }],
+          });
+          return { status: 'success', value: selected };
         } catch {
           return filesystemFailure();
         }

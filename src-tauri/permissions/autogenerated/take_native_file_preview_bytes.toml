@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-take-native-file-preview-bytes"
+description = "Enables the take_native_file_preview_bytes command without any pre-configured scope."
+commands.allow = ["take_native_file_preview_bytes"]
+
+[[permission]]
+identifier = "deny-take-native-file-preview-bytes"
+description = "Denies the take_native_file_preview_bytes command without any pre-configured scope."
+commands.deny = ["take_native_file_preview_bytes"]

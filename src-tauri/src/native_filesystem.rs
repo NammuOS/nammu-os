@@ -31,6 +31,16 @@ pub enum NativeFilesystemErrorCode {
     UndoUnavailable,
     WatchUnsupported,
     WatchFailed,
+    PreviewUnsupported,
+    PdfEncrypted,
+    DecodeFailed,
+    FileChanged,
+    ArchiveUnsupported,
+    ArchiveInvalid,
+    ArchiveEncrypted,
+    ArchiveLimitExceeded,
+    ArchiveEntryUnsafe,
+    ArchiveCorrupt,
     IoError,
 }
 
@@ -112,6 +122,32 @@ impl NativeFilesystemError {
             }
             NativeFilesystemErrorCode::WatchFailed => {
                 "Live filesystem updates are temporarily unavailable for this folder."
+            }
+            NativeFilesystemErrorCode::PreviewUnsupported => {
+                "This file type does not support a safe preview."
+            }
+            NativeFilesystemErrorCode::PdfEncrypted => {
+                "Password-protected PDFs are not previewed in Files."
+            }
+            NativeFilesystemErrorCode::DecodeFailed => "The file could not be decoded safely.",
+            NativeFilesystemErrorCode::FileChanged => {
+                "The file changed while its preview was being prepared."
+            }
+            NativeFilesystemErrorCode::ArchiveUnsupported => {
+                "This archive format or compression method is not supported."
+            }
+            NativeFilesystemErrorCode::ArchiveInvalid => "The ZIP archive is invalid.",
+            NativeFilesystemErrorCode::ArchiveEncrypted => {
+                "Password-protected archives are unavailable in this version."
+            }
+            NativeFilesystemErrorCode::ArchiveLimitExceeded => {
+                "The archive exceeds Nammu's extraction safety limits."
+            }
+            NativeFilesystemErrorCode::ArchiveEntryUnsafe => {
+                "The archive contains an unsafe path or link entry."
+            }
+            NativeFilesystemErrorCode::ArchiveCorrupt => {
+                "The archive is corrupt or failed its integrity check."
             }
             NativeFilesystemErrorCode::IoError => operation,
         };
