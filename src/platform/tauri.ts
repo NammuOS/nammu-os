@@ -24,6 +24,14 @@ import type {
   NativeDeletionOperationType,
   NativeDeletionSuccess,
   NativeFileBreadcrumb,
+  NativeFileClipboardCompletion,
+  NativeFileClipboardDiagnostics,
+  NativeFileClipboardOperation,
+  NativeFileClipboardSnapshot,
+  NativeFileDragDiagnostics,
+  NativeFileDragEvent,
+  NativeFileDragOperation,
+  NativeFileDragResult,
   NativeFileKind,
   NativeFileConflictStrategy,
   NativeFileMetadata,
@@ -99,6 +107,28 @@ export interface TauriWebSurfaceEnvironment {
 }
 
 export interface TauriCapabilityEnvironment {
+  readNativeFileClipboard(): Promise<unknown>;
+  writeNativeFileClipboard(
+    operation: NativeFileClipboardOperation,
+    paths: readonly string[],
+  ): Promise<unknown>;
+  completeNativeFileClipboard(
+    sequence: number,
+    operation: NativeFileClipboardOperation,
+  ): Promise<unknown>;
+  getNativeFileClipboardDiagnostics(): Promise<unknown>;
+  refreshNativeFileDropTargets(): Promise<unknown>;
+  releaseNativeFileDropTargets(): Promise<unknown>;
+  startNativeFileDrag(
+    operation: NativeFileDragOperation,
+    paths: readonly string[],
+  ): Promise<unknown>;
+  setNativeFileDropEffect(
+    session: number,
+    operation: NativeFileClipboardOperation | null,
+  ): Promise<unknown>;
+  getNativeFileDragDropDiagnostics(): Promise<unknown>;
+  listenNativeFileDragEvents(listener: (payload: unknown) => void): Promise<TauriUnlisten>;
   listNativeFileRoots(): Promise<unknown>;
   listNativeDirectory(path: string): Promise<unknown>;
   statNativeFile(path: string): Promise<unknown>;
@@ -216,6 +246,40 @@ const tauriWebSurfaceEnvironment: TauriWebSurfaceEnvironment = {
 };
 
 const tauriCapabilityEnvironment: TauriCapabilityEnvironment = {
+  async readNativeFileClipboard() {
+    return tauriServiceEnvironment.invoke('read_native_file_clipboard');
+  },
+  async writeNativeFileClipboard(operation, paths) {
+    return tauriServiceEnvironment.invoke('write_native_file_clipboard', { operation, paths });
+  },
+  async completeNativeFileClipboard(sequence, operation) {
+    return tauriServiceEnvironment.invoke('complete_native_file_clipboard', {
+      sequence,
+      operation,
+    });
+  },
+  async getNativeFileClipboardDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_file_clipboard_diagnostics');
+  },
+  async refreshNativeFileDropTargets() {
+    return tauriServiceEnvironment.invoke('refresh_native_file_drop_targets');
+  },
+  async releaseNativeFileDropTargets() {
+    return tauriServiceEnvironment.invoke('release_native_file_drop_targets');
+  },
+  async startNativeFileDrag(operation, paths) {
+    return tauriServiceEnvironment.invoke('start_native_file_drag', { operation, paths });
+  },
+  async setNativeFileDropEffect(session, operation) {
+    return tauriServiceEnvironment.invoke('set_native_file_drop_effect', { session, operation });
+  },
+  async getNativeFileDragDropDiagnostics() {
+    return tauriServiceEnvironment.invoke('get_native_file_drag_drop_diagnostics');
+  },
+  async listenNativeFileDragEvents(listener) {
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<unknown>('nammu://native-file-drag-drop', (event) => listener(event.payload));
+  },
   async listNativeFileRoots() {
     return tauriServiceEnvironment.invoke('list_native_file_roots');
   },
@@ -719,6 +783,11 @@ const FILESYSTEM_ERROR_CODES = new Set<FilesystemErrorCode>([
   'ARCHIVE_LIMIT_EXCEEDED',
   'ARCHIVE_ENTRY_UNSAFE',
   'ARCHIVE_CORRUPT',
+  'CLIPBOARD_BUSY',
+  'CLIPBOARD_UNAVAILABLE',
+  'CLIPBOARD_FORMAT_UNSUPPORTED',
+  'CLIPBOARD_TOO_LARGE',
+  'INVALID_CLIPBOARD_DATA',
   'IO_ERROR',
 ]);
 const FILE_OPERATION_TYPES = new Set<NativeFileOperationType>(['copy', 'move', 'duplicate']);
@@ -833,6 +902,87 @@ function validFilesystemError(value: unknown): value is FilesystemError {
     typeof value.message === 'string' &&
     value.message.length > 0 &&
     value.message.length <= 240
+  );
+}
+
+function validFileClipboardSnapshot(value: unknown): value is NativeFileClipboardSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.available === 'boolean' &&
+    (value.operation === null || value.operation === 'copy' || value.operation === 'move') &&
+    Array.isArray(value.paths) &&
+    value.paths.length <= 10_000 &&
+    value.paths.every((path) => typeof path === 'string' && validFilesystemPath(path)) &&
+    Number.isSafeInteger(value.sequence) &&
+    Number(value.sequence) >= 0
+  );
+}
+
+function validFileClipboardCompletion(value: unknown): value is NativeFileClipboardCompletion {
+  return (
+    isRecord(value) &&
+    typeof value.reported === 'boolean' &&
+    Number.isSafeInteger(value.sequence) &&
+    Number(value.sequence) >= 0
+  );
+}
+
+function validFileClipboardDiagnostics(value: unknown): value is NativeFileClipboardDiagnostics {
+  return (
+    isRecord(value) &&
+    ['openClipboardGuards', 'reads', 'writes', 'completions', 'maxPaths', 'maxUtf16Bytes'].every(
+      (key) => Number.isSafeInteger(value[key]) && Number(value[key]) >= 0,
+    )
+  );
+}
+
+function validFileDragEvent(value: unknown): value is NativeFileDragEvent {
+  return (
+    isRecord(value) &&
+    ['enter', 'over', 'drop', 'leave'].includes(String(value.phase)) &&
+    Number.isSafeInteger(value.session) &&
+    Number(value.session) >= 0 &&
+    Array.isArray(value.paths) &&
+    value.paths.length <= 10_000 &&
+    value.paths.every((path) => typeof path === 'string' && validFilesystemPath(path)) &&
+    typeof value.x === 'number' &&
+    Number.isFinite(value.x) &&
+    typeof value.y === 'number' &&
+    Number.isFinite(value.y) &&
+    isRecord(value.modifiers) &&
+    typeof value.modifiers.control === 'boolean' &&
+    typeof value.modifiers.shift === 'boolean' &&
+    (value.operation === null || value.operation === 'copy' || value.operation === 'move')
+  );
+}
+
+function validFileDragResult(value: unknown): value is NativeFileDragResult {
+  return (
+    isRecord(value) &&
+    typeof value.dropped === 'boolean' &&
+    (value.operation === null || value.operation === 'copy' || value.operation === 'move') &&
+    Number.isSafeInteger(value.itemCount) &&
+    Number(value.itemCount) >= 0 &&
+    isDuration(value.prepareDurationMs)
+  );
+}
+
+function validFileDragDiagnostics(value: unknown): value is NativeFileDragDiagnostics {
+  return (
+    isRecord(value) &&
+    [
+      'registeredTargets',
+      'activeInboundSessions',
+      'activeOutboundSessions',
+      'inboundEnters',
+      'inboundDrops',
+      'inboundLeaves',
+      'outboundStarted',
+      'outboundDropped',
+      'outboundCancelled',
+      'maxPaths',
+      'maxUtf16Bytes',
+    ].every((key) => Number.isSafeInteger(value[key]) && Number(value[key]) >= 0)
   );
 }
 
@@ -1501,6 +1651,140 @@ export function createTauriPlatformCapabilities(
     runtime: 'tauri' as const,
     services,
     webSurfaces: createTauriWebSurfaces(),
+    fileClipboard: Object.freeze({
+      supported: true,
+      async read(): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.readNativeFileClipboard(),
+            validFileClipboardSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async write(
+        operation: NativeFileClipboardOperation,
+        paths: readonly string[],
+      ): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {
+        if (
+          !['copy', 'move'].includes(operation) ||
+          paths.some((path) => !validFilesystemPath(path))
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.writeNativeFileClipboard(operation, paths),
+            validFileClipboardSnapshot,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async complete(
+        sequence: number,
+        operation: NativeFileClipboardOperation,
+      ): Promise<FilesystemResult<NativeFileClipboardCompletion>> {
+        if (
+          !Number.isSafeInteger(sequence) ||
+          sequence < 0 ||
+          !['copy', 'move'].includes(operation)
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.completeNativeFileClipboard(sequence, operation),
+            validFileClipboardCompletion,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async getDiagnostics(): Promise<FilesystemResult<NativeFileClipboardDiagnostics>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFileClipboardDiagnostics(),
+            validFileClipboardDiagnostics,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+    }),
+    fileDragDrop: Object.freeze({
+      supported: true,
+      async start(
+        operation: NativeFileDragOperation,
+        paths: readonly string[],
+      ): Promise<FilesystemResult<NativeFileDragResult>> {
+        if (
+          !['auto', 'copy', 'move'].includes(operation) ||
+          paths.length === 0 ||
+          paths.length > 10_000 ||
+          paths.some((path) => !validFilesystemPath(path))
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.startNativeFileDrag(operation, paths),
+            validFileDragResult,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async setDropEffect(
+        session: number,
+        operation: NativeFileClipboardOperation | null,
+      ): Promise<FilesystemResult<boolean>> {
+        if (
+          !Number.isSafeInteger(session) ||
+          session < 0 ||
+          (operation !== null && operation !== 'copy' && operation !== 'move')
+        ) {
+          return invalidFilesystemPath();
+        }
+        try {
+          return decodeFilesystemResponse(
+            await environment.setNativeFileDropEffect(session, operation),
+            (value): value is boolean => typeof value === 'boolean',
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+      async subscribe(listener: (event: NativeFileDragEvent) => void) {
+        try {
+          const refreshed = decodeFilesystemResponse(
+            await environment.refreshNativeFileDropTargets(),
+            (value): value is boolean => typeof value === 'boolean',
+          );
+          if (refreshed.status !== 'success') return () => {};
+          const unlisten = await environment.listenNativeFileDragEvents((payload) => {
+            if (validFileDragEvent(payload)) listener(payload);
+          });
+          return () => {
+            unlisten();
+            void environment.releaseNativeFileDropTargets();
+          };
+        } catch {
+          return () => {};
+        }
+      },
+      async getDiagnostics(): Promise<FilesystemResult<NativeFileDragDiagnostics>> {
+        try {
+          return decodeFilesystemResponse(
+            await environment.getNativeFileDragDropDiagnostics(),
+            validFileDragDiagnostics,
+          );
+        } catch {
+          return filesystemFailure();
+        }
+      },
+    }),
     filesystem: Object.freeze({
       supported: true,
       async listRoots(): Promise<FilesystemResult<NativeFileRoots>> {

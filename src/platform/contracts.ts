@@ -74,6 +74,11 @@ export type FilesystemErrorCode =
   | 'ARCHIVE_LIMIT_EXCEEDED'
   | 'ARCHIVE_ENTRY_UNSAFE'
   | 'ARCHIVE_CORRUPT'
+  | 'CLIPBOARD_BUSY'
+  | 'CLIPBOARD_UNAVAILABLE'
+  | 'CLIPBOARD_FORMAT_UNSUPPORTED'
+  | 'CLIPBOARD_TOO_LARGE'
+  | 'INVALID_CLIPBOARD_DATA'
   | 'IO_ERROR';
 
 export interface FilesystemError {
@@ -555,6 +560,96 @@ export interface PlatformFilesystem {
   pickZipDestination(defaultName: string): Promise<FilesystemResult<string | null>>;
 }
 
+export type NativeFileClipboardOperation = 'copy' | 'move';
+
+export interface NativeFileClipboardSnapshot {
+  available: boolean;
+  operation: NativeFileClipboardOperation | null;
+  paths: readonly string[];
+  sequence: number;
+}
+
+export interface NativeFileClipboardCompletion {
+  reported: boolean;
+  sequence: number;
+}
+
+export interface NativeFileClipboardDiagnostics {
+  openClipboardGuards: number;
+  reads: number;
+  writes: number;
+  completions: number;
+  maxPaths: number;
+  maxUtf16Bytes: number;
+}
+
+export interface PlatformFileClipboard {
+  readonly supported: boolean;
+  read(): Promise<FilesystemResult<NativeFileClipboardSnapshot>>;
+  write(
+    operation: NativeFileClipboardOperation,
+    paths: readonly string[],
+  ): Promise<FilesystemResult<NativeFileClipboardSnapshot>>;
+  complete(
+    sequence: number,
+    operation: NativeFileClipboardOperation,
+  ): Promise<FilesystemResult<NativeFileClipboardCompletion>>;
+  getDiagnostics(): Promise<FilesystemResult<NativeFileClipboardDiagnostics>>;
+}
+
+export type NativeFileDragOperation = 'auto' | NativeFileClipboardOperation;
+export type NativeFileDragPhase = 'enter' | 'over' | 'drop' | 'leave';
+
+export interface NativeFileDragModifiers {
+  control: boolean;
+  shift: boolean;
+}
+
+export interface NativeFileDragEvent {
+  phase: NativeFileDragPhase;
+  session: number;
+  paths: readonly string[];
+  x: number;
+  y: number;
+  modifiers: NativeFileDragModifiers;
+  operation: NativeFileClipboardOperation | null;
+}
+
+export interface NativeFileDragResult {
+  dropped: boolean;
+  operation: NativeFileClipboardOperation | null;
+  itemCount: number;
+  prepareDurationMs: number;
+}
+
+export interface NativeFileDragDiagnostics {
+  registeredTargets: number;
+  activeInboundSessions: number;
+  activeOutboundSessions: number;
+  inboundEnters: number;
+  inboundDrops: number;
+  inboundLeaves: number;
+  outboundStarted: number;
+  outboundDropped: number;
+  outboundCancelled: number;
+  maxPaths: number;
+  maxUtf16Bytes: number;
+}
+
+export interface PlatformFileDragDrop {
+  readonly supported: boolean;
+  start(
+    operation: NativeFileDragOperation,
+    paths: readonly string[],
+  ): Promise<FilesystemResult<NativeFileDragResult>>;
+  setDropEffect(
+    session: number,
+    operation: NativeFileClipboardOperation | null,
+  ): Promise<FilesystemResult<boolean>>;
+  subscribe(listener: (event: NativeFileDragEvent) => void): Promise<() => void>;
+  getDiagnostics(): Promise<FilesystemResult<NativeFileDragDiagnostics>>;
+}
+
 export type PlatformNotificationPermission = 'default' | 'granted' | 'denied';
 
 export interface PlatformNotification {
@@ -632,6 +727,8 @@ export interface PlatformCapabilities {
   readonly services: PlatformServices;
   readonly webSurfaces: PlatformWebSurfaces;
   readonly filesystem: PlatformFilesystem;
+  readonly fileClipboard: PlatformFileClipboard;
+  readonly fileDragDrop: PlatformFileDragDrop;
   readonly files: {
     pick(options?: PickFilesOptions): Promise<CapabilityResult<PickedFiles>>;
     save(options: SaveFileOptions): Promise<CapabilityResult<SavedFile>>;

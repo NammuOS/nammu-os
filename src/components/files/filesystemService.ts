@@ -7,6 +7,14 @@ import type {
   NativeDirectoryWatchSubscription,
   NativeDeletionOperationSnapshot,
   NativeFileMetadata,
+  NativeFileClipboardCompletion,
+  NativeFileClipboardDiagnostics,
+  NativeFileClipboardOperation,
+  NativeFileClipboardSnapshot,
+  NativeFileDragDiagnostics,
+  NativeFileDragEvent,
+  NativeFileDragOperation,
+  NativeFileDragResult,
   NativeFileConflictStrategy,
   NativeFileMutation,
   NativeFileOperationSnapshot,
@@ -21,6 +29,8 @@ import type {
   NativeFileSearchSnapshot,
   NativeFilesystemWatchEvent,
   PlatformFilesystem,
+  PlatformFileClipboard,
+  PlatformFileDragDrop,
   NativeArchiveConflictStrategy,
   NativeArchiveDiagnostics,
   NativeArchiveListing,
@@ -38,6 +48,28 @@ export interface FilesNavigationState {
 
 export interface FilesystemService {
   readonly supported: boolean;
+  readonly fileClipboardSupported: boolean;
+  readonly fileDragDropSupported: boolean;
+  readFileClipboard(): Promise<FilesystemResult<NativeFileClipboardSnapshot>>;
+  writeFileClipboard(
+    operation: NativeFileClipboardOperation,
+    paths: readonly string[],
+  ): Promise<FilesystemResult<NativeFileClipboardSnapshot>>;
+  completeFileClipboard(
+    sequence: number,
+    operation: NativeFileClipboardOperation,
+  ): Promise<FilesystemResult<NativeFileClipboardCompletion>>;
+  getFileClipboardDiagnostics(): Promise<FilesystemResult<NativeFileClipboardDiagnostics>>;
+  startFileDrag(
+    operation: NativeFileDragOperation,
+    paths: readonly string[],
+  ): Promise<FilesystemResult<NativeFileDragResult>>;
+  setFileDropEffect(
+    session: number,
+    operation: NativeFileClipboardOperation | null,
+  ): Promise<FilesystemResult<boolean>>;
+  subscribeFileDrops(listener: (event: NativeFileDragEvent) => void): Promise<() => void>;
+  getFileDragDropDiagnostics(): Promise<FilesystemResult<NativeFileDragDiagnostics>>;
   listRoots(): Promise<FilesystemResult<NativeFileRoots>>;
   listDirectory(path: string): Promise<FilesystemResult<NativeDirectoryListing>>;
   stat(path: string): Promise<FilesystemResult<NativeFileMetadata>>;
@@ -125,11 +157,52 @@ export interface FilesClipboard {
   readonly timestamp: number;
 }
 
+export function windowsVolumeKey(path: string): string | null {
+  const drive = /^([a-z]):[\\/]/i.exec(path);
+  if (drive) return `${drive[1].toUpperCase()}:`;
+  const unc = /^\\\\([^\\/]+)[\\/]([^\\/]+)/.exec(path);
+  return unc ? `\\\\${unc[1].toLowerCase()}\\${unc[2].toLowerCase()}` : null;
+}
+
+export function resolveNativeDropOperation(
+  paths: readonly string[],
+  destinationPath: string,
+  modifiers: { control: boolean; shift: boolean },
+): NativeFileClipboardOperation {
+  if (modifiers.control && modifiers.shift) return 'copy';
+  if (modifiers.control && !modifiers.shift) return 'copy';
+  if (modifiers.shift && !modifiers.control) return 'move';
+  const destinationVolume = windowsVolumeKey(destinationPath);
+  const sourceVolumes = new Set(paths.map(windowsVolumeKey));
+  return destinationVolume !== null &&
+    sourceVolumes.size === 1 &&
+    sourceVolumes.has(destinationVolume)
+    ? 'move'
+    : 'copy';
+}
+
 export function createFilesystemService(
   filesystem: PlatformFilesystem = getPlatformCapabilities().filesystem,
+  fileClipboard: PlatformFileClipboard = getPlatformCapabilities().fileClipboard,
+  fileDragDrop: PlatformFileDragDrop = getPlatformCapabilities().fileDragDrop,
 ): FilesystemService {
   return Object.freeze({
     supported: filesystem.supported,
+    fileClipboardSupported: fileClipboard.supported,
+    fileDragDropSupported: fileDragDrop.supported,
+    readFileClipboard: () => fileClipboard.read(),
+    writeFileClipboard: (operation: NativeFileClipboardOperation, paths: readonly string[]) =>
+      fileClipboard.write(operation, paths),
+    completeFileClipboard: (sequence: number, operation: NativeFileClipboardOperation) =>
+      fileClipboard.complete(sequence, operation),
+    getFileClipboardDiagnostics: () => fileClipboard.getDiagnostics(),
+    startFileDrag: (operation: NativeFileDragOperation, paths: readonly string[]) =>
+      fileDragDrop.start(operation, paths),
+    setFileDropEffect: (session: number, operation: NativeFileClipboardOperation | null) =>
+      fileDragDrop.setDropEffect(session, operation),
+    subscribeFileDrops: (listener: (event: NativeFileDragEvent) => void) =>
+      fileDragDrop.subscribe(listener),
+    getFileDragDropDiagnostics: () => fileDragDrop.getDiagnostics(),
     listRoots: () => filesystem.listRoots(),
     listDirectory: (path: string) => filesystem.listDirectory(path),
     stat: (path: string) => filesystem.stat(path),

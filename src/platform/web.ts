@@ -13,6 +13,11 @@ import type {
   NativeDeletionOperationSnapshot,
   NativeFileMetadata,
   NativeFileMutation,
+  NativeFileClipboardCompletion,
+  NativeFileClipboardDiagnostics,
+  NativeFileClipboardSnapshot,
+  NativeFileDragDiagnostics,
+  NativeFileDragResult,
   NativeFileOperationSnapshot,
   NativeFileProperties,
   NativeFilePreviewDiagnostics,
@@ -169,6 +174,36 @@ export function createWebPlatformCapabilities(
     runtime: 'web' as const,
     services: createWebPlatformServices(environment),
     webSurfaces: webPlatformWebSurfaces,
+    fileClipboard: Object.freeze({
+      supported: false,
+      async read(): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {
+        return unsupportedFilesystem();
+      },
+      async write(): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {
+        return unsupportedFilesystem();
+      },
+      async complete(): Promise<FilesystemResult<NativeFileClipboardCompletion>> {
+        return unsupportedFilesystem();
+      },
+      async getDiagnostics(): Promise<FilesystemResult<NativeFileClipboardDiagnostics>> {
+        return unsupportedFilesystem();
+      },
+    }),
+    fileDragDrop: Object.freeze({
+      supported: false,
+      async start(): Promise<FilesystemResult<NativeFileDragResult>> {
+        return unsupportedFilesystem();
+      },
+      async setDropEffect(): Promise<FilesystemResult<boolean>> {
+        return unsupportedFilesystem();
+      },
+      async subscribe() {
+        return () => {};
+      },
+      async getDiagnostics(): Promise<FilesystemResult<NativeFileDragDiagnostics>> {
+        return unsupportedFilesystem();
+      },
+    }),
     filesystem: Object.freeze({
       supported: false,
       async listRoots(): Promise<FilesystemResult<NativeFileRoots>> {

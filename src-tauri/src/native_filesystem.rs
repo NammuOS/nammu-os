@@ -41,6 +41,11 @@ pub enum NativeFilesystemErrorCode {
     ArchiveLimitExceeded,
     ArchiveEntryUnsafe,
     ArchiveCorrupt,
+    ClipboardBusy,
+    ClipboardUnavailable,
+    ClipboardFormatUnsupported,
+    ClipboardTooLarge,
+    InvalidClipboardData,
     IoError,
 }
 
@@ -148,6 +153,21 @@ impl NativeFilesystemError {
             }
             NativeFilesystemErrorCode::ArchiveCorrupt => {
                 "The archive is corrupt or failed its integrity check."
+            }
+            NativeFilesystemErrorCode::ClipboardBusy => {
+                "The Windows clipboard is busy. Try again in a moment."
+            }
+            NativeFilesystemErrorCode::ClipboardUnavailable => {
+                "The Windows file clipboard is temporarily unavailable."
+            }
+            NativeFilesystemErrorCode::ClipboardFormatUnsupported => {
+                "The clipboard file list uses an unsupported Windows format."
+            }
+            NativeFilesystemErrorCode::ClipboardTooLarge => {
+                "The file selection is too large for the Windows clipboard."
+            }
+            NativeFilesystemErrorCode::InvalidClipboardData => {
+                "The Windows file clipboard contains invalid path data."
             }
             NativeFilesystemErrorCode::IoError => operation,
         };

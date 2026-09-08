@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-complete-native-file-clipboard"
+description = "Enables the complete_native_file_clipboard command without any pre-configured scope."
+commands.allow = ["complete_native_file_clipboard"]
+
+[[permission]]
+identifier = "deny-complete-native-file-clipboard"
+description = "Denies the complete_native_file_clipboard command without any pre-configured scope."
+commands.deny = ["complete_native_file_clipboard"]

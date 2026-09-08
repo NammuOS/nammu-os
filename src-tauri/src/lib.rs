@@ -1,6 +1,8 @@
 mod local_server;
 mod native_archive;
 mod native_directory_watcher;
+mod native_file_clipboard;
+mod native_file_drag_drop;
 mod native_file_operations;
 mod native_file_preview;
 mod native_file_properties;
@@ -93,6 +95,15 @@ pub fn run() {
             native_filesystem::list_native_file_roots,
             native_filesystem::list_native_directory,
             native_filesystem::stat_native_file,
+            native_file_clipboard::read_native_file_clipboard,
+            native_file_clipboard::write_native_file_clipboard,
+            native_file_clipboard::complete_native_file_clipboard,
+            native_file_clipboard::get_native_file_clipboard_diagnostics,
+            native_file_drag_drop::refresh_native_file_drop_targets,
+            native_file_drag_drop::release_native_file_drop_targets,
+            native_file_drag_drop::start_native_file_drag,
+            native_file_drag_drop::set_native_file_drop_effect,
+            native_file_drag_drop::get_native_file_drag_drop_diagnostics,
             native_file_operations::create_native_directory,
             native_file_operations::create_native_file,
             native_file_operations::rename_native_file,
@@ -167,6 +178,7 @@ pub fn run() {
             );
             app.manage(LocalServerState::new(supervisor));
             app.manage(native_file_operations::NativeFileOperationState::default());
+            app.manage(native_file_drag_drop::NativeFileDragDropState::default());
             app.manage(native_file_properties::NativeFilePropertiesState::default());
             app.manage(native_recycle_bin::NativeRecycleBinState::default());
             app.manage(native_directory_watcher::NativeDirectoryWatchState::default());
@@ -181,6 +193,11 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+            if let Some(state) =
+                app_handle.try_state::<native_file_drag_drop::NativeFileDragDropState>()
+            {
+                state.shutdown();
+            }
             if let Some(state) = app_handle.try_state::<LocalServerState>() {
                 state.shutdown();
             }

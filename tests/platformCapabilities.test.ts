@@ -19,6 +19,58 @@ function tauriEnvironment(
   overrides: Partial<TauriCapabilityEnvironment> = {},
 ): TauriCapabilityEnvironment {
   return {
+    readNativeFileClipboard: async () => ({
+      status: 'success',
+      value: { available: false, operation: null, paths: [], sequence: 0 },
+    }),
+    writeNativeFileClipboard: async (operation, paths) => ({
+      status: 'success',
+      value: { available: true, operation, paths, sequence: 1 },
+    }),
+    completeNativeFileClipboard: async (_sequence, _operation) => ({
+      status: 'success',
+      value: { reported: true, sequence: 2 },
+    }),
+    getNativeFileClipboardDiagnostics: async () => ({
+      status: 'success',
+      value: {
+        openClipboardGuards: 0,
+        reads: 0,
+        writes: 0,
+        completions: 0,
+        maxPaths: 10_000,
+        maxUtf16Bytes: 4_194_304,
+      },
+    }),
+    refreshNativeFileDropTargets: async () => ({ status: 'success', value: true }),
+    releaseNativeFileDropTargets: async () => ({ status: 'success', value: true }),
+    startNativeFileDrag: async (operation, paths) => ({
+      status: 'success',
+      value: {
+        dropped: false,
+        operation: operation === 'auto' ? null : operation,
+        itemCount: paths.length,
+        prepareDurationMs: 0,
+      },
+    }),
+    setNativeFileDropEffect: async () => ({ status: 'success', value: true }),
+    getNativeFileDragDropDiagnostics: async () => ({
+      status: 'success',
+      value: {
+        registeredTargets: 1,
+        activeInboundSessions: 0,
+        activeOutboundSessions: 0,
+        inboundEnters: 0,
+        inboundDrops: 0,
+        inboundLeaves: 0,
+        outboundStarted: 0,
+        outboundDropped: 0,
+        outboundCancelled: 0,
+        maxPaths: 10_000,
+        maxUtf16Bytes: 4_194_304,
+      },
+    }),
+    listenNativeFileDragEvents: async () => () => {},
     listNativeFileRoots: async () => ({
       status: 'success',
       value: { roots: [], durationMs: 0 },
@@ -286,6 +338,20 @@ describe('platform capabilities', () => {
       'watchDirectory',
     ]);
     expect(Object.keys(firstWeb.files).sort()).toEqual(['pick', 'save']);
+    expect(Object.keys(firstWeb.fileClipboard).sort()).toEqual([
+      'complete',
+      'getDiagnostics',
+      'read',
+      'supported',
+      'write',
+    ]);
+    expect(Object.keys(firstWeb.fileDragDrop).sort()).toEqual([
+      'getDiagnostics',
+      'setDropEffect',
+      'start',
+      'subscribe',
+      'supported',
+    ]);
     expect(Object.keys(firstWeb.external)).toEqual(['openUrl']);
     expect(Object.keys(firstWeb.clipboard).sort()).toEqual(['readText', 'writeText']);
     expect(Object.keys(firstWeb.notifications).sort()).toEqual(['requestPermission', 'show']);
@@ -407,6 +473,10 @@ describe('platform capabilities', () => {
       reason: 'This PC is available only in the Nammu desktop application.',
     });
     expect(await platform.filesystem.watchDirectory('C:\\', () => undefined)).toEqual({
+      status: 'unsupported',
+      reason: 'This PC is available only in the Nammu desktop application.',
+    });
+    expect(await platform.fileClipboard.read()).toEqual({
       status: 'unsupported',
       reason: 'This PC is available only in the Nammu desktop application.',
     });
@@ -554,6 +624,144 @@ describe('platform capabilities', () => {
     await platform.window.toggleMaximize();
     await platform.window.close();
     expect(windowOperations).toEqual(['minimize', 'toggle-maximize', 'close']);
+  });
+
+  test('keeps Windows file clipboard IPC typed, validated, and separate from text clipboard', async () => {
+    const calls: Array<{ operation: string; value?: unknown }> = [];
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        readNativeFileClipboard: async () => ({
+          status: 'success',
+          value: {
+            available: true,
+            operation: 'move',
+            paths: ['C:\\source folder\\résumé.txt'],
+            sequence: 42,
+          },
+        }),
+        writeNativeFileClipboard: async (operation, paths) => {
+          calls.push({ operation: 'write', value: { operation, paths } });
+          return {
+            status: 'success',
+            value: { available: true, operation, paths, sequence: 43 },
+          };
+        },
+        completeNativeFileClipboard: async (sequence, operation) => {
+          calls.push({ operation: 'complete', value: { sequence, operation } });
+          return { status: 'success', value: { reported: true, sequence: 44 } };
+        },
+      }),
+      getPlatformCapabilities('web').services,
+    );
+
+    expect(await platform.fileClipboard.read()).toEqual({
+      status: 'success',
+      value: {
+        available: true,
+        operation: 'move',
+        paths: ['C:\\source folder\\résumé.txt'],
+        sequence: 42,
+      },
+    });
+    expect(
+      await platform.fileClipboard.write('copy', ['D:\\one.txt', 'D:\\two.txt']),
+    ).toMatchObject({ status: 'success', value: { sequence: 43 } });
+    expect(await platform.fileClipboard.complete(43, 'copy')).toEqual({
+      status: 'success',
+      value: { reported: true, sequence: 44 },
+    });
+    expect(calls).toEqual([
+      {
+        operation: 'write',
+        value: { operation: 'copy', paths: ['D:\\one.txt', 'D:\\two.txt'] },
+      },
+      { operation: 'complete', value: { sequence: 43, operation: 'copy' } },
+    ]);
+
+    const malformed = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        readNativeFileClipboard: async () => ({
+          status: 'success',
+          value: { available: true, operation: 'copy', paths: 'C:\\bad.txt', sequence: 1 },
+        }),
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    expect(await malformed.fileClipboard.read()).toEqual({
+      status: 'error',
+      error: { code: 'IO_ERROR', message: 'The native filesystem returned invalid data.' },
+    });
+  });
+
+  test('keeps Windows file drag/drop typed, event-driven, and unavailable on Web', async () => {
+    const calls: unknown[] = [];
+    const listener: { current: ((payload: unknown) => void) | null } = { current: null };
+    const platform = createTauriPlatformCapabilities(
+      tauriEnvironment({
+        releaseNativeFileDropTargets: async () => {
+          calls.push({ operation: 'release-drop-target' });
+          return { status: 'success', value: true };
+        },
+        startNativeFileDrag: async (operation, paths) => {
+          calls.push({ operation, paths });
+          return {
+            status: 'success',
+            value: {
+              dropped: true,
+              operation: 'copy',
+              itemCount: paths.length,
+              prepareDurationMs: 1.5,
+            },
+          };
+        },
+        setNativeFileDropEffect: async (session, operation) => {
+          calls.push({ session, operation });
+          return { status: 'success', value: true };
+        },
+        listenNativeFileDragEvents: async (next) => {
+          listener.current = next;
+          return () => {
+            listener.current = null;
+          };
+        },
+      }),
+      getPlatformCapabilities('web').services,
+    );
+    const events: unknown[] = [];
+    const unlisten = await platform.fileDragDrop.subscribe((event) => events.push(event));
+    listener.current?.({
+      phase: 'enter',
+      session: 7,
+      paths: ['C:\\资料\\one.txt'],
+      x: 10,
+      y: 20,
+      modifiers: { control: true, shift: false },
+      operation: 'copy',
+    });
+    listener.current?.({ phase: 'drop', paths: 'invalid' });
+    expect(events).toHaveLength(1);
+    expect(await platform.fileDragDrop.start('auto', ['C:\\one.txt'])).toMatchObject({
+      status: 'success',
+      value: { dropped: true, itemCount: 1 },
+    });
+    expect(await platform.fileDragDrop.setDropEffect(7, 'copy')).toEqual({
+      status: 'success',
+      value: true,
+    });
+    expect(calls).toEqual([
+      { operation: 'auto', paths: ['C:\\one.txt'] },
+      { session: 7, operation: 'copy' },
+    ]);
+    unlisten();
+    await Promise.resolve();
+    expect(calls.at(-1)).toEqual({ operation: 'release-drop-target' });
+    expect(getPlatformCapabilities('web').fileDragDrop.supported).toBe(false);
+    expect(
+      await getPlatformCapabilities('web').fileDragDrop.start('copy', ['C:\\one.txt']),
+    ).toEqual({
+      status: 'unsupported',
+      reason: 'This PC is available only in the Nammu desktop application.',
+    });
   });
 
   test('validates native filesystem responses and preserves structured errors', async () => {

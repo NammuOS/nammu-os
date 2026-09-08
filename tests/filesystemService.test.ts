@@ -12,6 +12,8 @@ import {
   currentFilesLocation,
   moveFilesHistory,
   pushFilesLocation,
+  resolveNativeDropOperation,
+  windowsVolumeKey,
   visibleNativeEntries,
   updateNativeSelection,
 } from '../src/components/files/filesystemService';
@@ -333,17 +335,22 @@ describe('Files native filesystem service', () => {
       'cancelOperation',
       'cancelPreview',
       'cancelSearch',
+      'completeFileClipboard',
       'copy',
       'createDirectory',
       'createFile',
       'createZip',
       'duplicate',
       'extractArchive',
+      'fileClipboardSupported',
+      'fileDragDropSupported',
       'getArchiveDiagnostics',
       'getArchiveOperation',
       'getDeletionOperation',
       'getDirectoryMeasurement',
       'getDirectoryMeasurementDiagnostics',
+      'getFileClipboardDiagnostics',
+      'getFileDragDropDiagnostics',
       'getOperation',
       'getPreview',
       'getPreviewDiagnostics',
@@ -359,6 +366,7 @@ describe('Files native filesystem service', () => {
       'permanentlyDelete',
       'pickArchiveDestination',
       'pickZipDestination',
+      'readFileClipboard',
       'releaseArchive',
       'releaseArchiveOperation',
       'releaseDirectoryMeasurement',
@@ -366,18 +374,57 @@ describe('Files native filesystem service', () => {
       'releaseSearch',
       'rename',
       'restore',
+      'setFileDropEffect',
       'startDirectoryMeasurement',
+      'startFileDrag',
       'startPreview',
       'startSearch',
       'stat',
+      'subscribeFileDrops',
       'supported',
       'takePreviewBytes',
       'trash',
       'watchDirectory',
+      'writeFileClipboard',
     ]);
   });
 
-  test('keeps the Files clipboard internal, deduplicated, and navigation-independent', () => {
+  test('resolves Windows drag intent by modifiers and source/destination volume', () => {
+    expect(windowsVolumeKey('C:\\Work\\one.txt')).toBe('C:');
+    expect(windowsVolumeKey('\\\\Server\\Share\\one.txt')).toBe('\\\\server\\share');
+    expect(
+      resolveNativeDropOperation(['C:\\one.txt'], 'C:\\Target', {
+        control: false,
+        shift: false,
+      }),
+    ).toBe('move');
+    expect(
+      resolveNativeDropOperation(['C:\\one.txt'], 'D:\\Target', {
+        control: false,
+        shift: false,
+      }),
+    ).toBe('copy');
+    expect(
+      resolveNativeDropOperation(['C:\\one.txt'], 'C:\\Target', {
+        control: true,
+        shift: false,
+      }),
+    ).toBe('copy');
+    expect(
+      resolveNativeDropOperation(['C:\\one.txt'], 'D:\\Target', {
+        control: false,
+        shift: true,
+      }),
+    ).toBe('move');
+    expect(
+      resolveNativeDropOperation(['C:\\one.txt'], 'C:\\Target', {
+        control: true,
+        shift: true,
+      }),
+    ).toBe('copy');
+  });
+
+  test('keeps the Web fallback clipboard deduplicated and navigation-independent', () => {
     const clipboard = createFilesClipboard(
       'copy',
       ['C:\\one.txt', 'C:\\one.txt', 'C:\\two.txt'],
@@ -426,6 +473,10 @@ describe('Files native filesystem service', () => {
     expect(capability.permissions).toContain('allow-list-native-file-roots');
     expect(capability.permissions).toContain('allow-list-native-directory');
     expect(capability.permissions).toContain('allow-stat-native-file');
+    expect(capability.permissions).toContain('allow-read-native-file-clipboard');
+    expect(capability.permissions).toContain('allow-write-native-file-clipboard');
+    expect(capability.permissions).toContain('allow-complete-native-file-clipboard');
+    expect(capability.permissions).toContain('allow-get-native-file-clipboard-diagnostics');
     expect(capability.permissions).toContain('allow-create-native-directory');
     expect(capability.permissions).toContain('allow-create-native-file');
     expect(capability.permissions).toContain('allow-rename-native-file');
@@ -506,6 +557,13 @@ describe('Files native filesystem service', () => {
       '#[cfg(test)]',
     )[0];
     const archiveSource = `${readFileSync('src-tauri/src/native_archive/mod.rs', 'utf8').split('#[cfg(test)]')[0]}\n${readFileSync('src-tauri/src/native_archive/safety.rs', 'utf8').split('#[cfg(test)]')[0]}`;
+    const clipboardSource = readFileSync('src-tauri/src/native_file_clipboard.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
+    const dragDropSource = readFileSync('src-tauri/src/native_file_drag_drop.rs', 'utf8').split(
+      '#[cfg(test)]',
+    )[0];
+    const tauriLibrarySource = readFileSync('src-tauri/src/lib.rs', 'utf8');
     const readCommands = [
       ...readSource.matchAll(/#\[tauri::command\][\s\S]*?pub async fn (\w+)/g),
     ].map((match) => match[1]);
@@ -529,6 +587,12 @@ describe('Files native filesystem service', () => {
     ].map((match) => match[1]);
     const archiveCommands = [
       ...archiveSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const clipboardCommands = [
+      ...clipboardSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
+    ].map((match) => match[1]);
+    const dragDropCommands = [
+      ...dragDropSource.matchAll(/#\[tauri::command\][\s\S]*?pub (?:async )?fn (\w+)/g),
     ].map((match) => match[1]);
     expect(readCommands).toEqual([
       'list_native_file_roots',
@@ -591,6 +655,19 @@ describe('Files native filesystem service', () => {
       'release_native_archive_operation',
       'get_native_archive_diagnostics',
     ]);
+    expect(clipboardCommands).toEqual([
+      'read_native_file_clipboard',
+      'write_native_file_clipboard',
+      'complete_native_file_clipboard',
+      'get_native_file_clipboard_diagnostics',
+    ]);
+    expect(dragDropCommands).toEqual([
+      'refresh_native_file_drop_targets',
+      'release_native_file_drop_targets',
+      'start_native_file_drag',
+      'set_native_file_drop_effect',
+      'get_native_file_drag_drop_diagnostics',
+    ]);
     for (const source of [
       readSource,
       writeSource,
@@ -600,6 +677,8 @@ describe('Files native filesystem service', () => {
       previewSource,
       propertiesSource,
       archiveSource,
+      clipboardSource,
+      dragDropSource,
     ]) {
       expect(source).not.toContain('std::process::Command');
       expect(source).not.toContain('Command::new');
@@ -687,5 +766,41 @@ describe('Files native filesystem service', () => {
     for (const command of archiveCommands) {
       expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
     }
+    for (const command of clipboardCommands) {
+      expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
+    }
+    for (const command of dragDropCommands) {
+      expect(capability.permissions).toContain(`allow-${command.replaceAll('_', '-')}`);
+    }
+    expect(clipboardSource).toContain('MAX_CLIPBOARD_PATHS: usize = 10_000');
+    expect(clipboardSource).toContain('MAX_CLIPBOARD_UTF16_BYTES: usize = 4 * 1024 * 1024');
+    expect(clipboardSource).toContain('require_trusted_caller');
+    expect(clipboardSource).toContain('data.SetData(&format, &medium, true)');
+    expect(clipboardSource).toContain('reported: false');
+    expect(clipboardSource).not.toContain('std::process::Command');
+    expect(clipboardSource).not.toContain('powershell');
+    expect(dragDropSource).toContain('require_trusted_caller');
+    expect(dragDropSource).toContain('DoDragDrop');
+    expect(dragDropSource).toContain('run_on_main_thread');
+    expect(dragDropSource).toContain('RegisterDragDrop');
+    expect(dragDropSource).toContain('RevokeDragDrop');
+    expect(dragDropSource).toContain('DRAGDROP_E_NOTREGISTERED');
+    expect(dragDropSource).not.toContain('DRAGDROP_E_INVALIDHWND');
+    expect(tauriLibrarySource).not.toContain('refresh_main_file_drop_targets');
+    expect(readFileSync('src-tauri/tauri.conf.json', 'utf8')).toContain(
+      '"dragDropEnabled": false',
+    );
+    expect(dragDropSource).toContain('CF_HDROP');
+    expect(dragDropSource).toContain('CFSTR_PREFERREDDROPEFFECT');
+    expect(dragDropSource).not.toContain('SetClipboardData');
+    expect(dragDropSource).not.toContain('OpenClipboard');
+    expect(dragDropSource).not.toContain('std::process::Command');
+    expect(dragDropSource).not.toContain('powershell');
+    expect(uiSource).toContain('data-native-file-drop-root');
+    expect(uiSource).toContain('data-native-file-drop-target');
+    expect(uiSource).toContain('distance < 6');
+    expect(uiSource).toContain('target.closest(\'input, textarea, [contenteditable="true"]\')');
+    expect(uiSource).toContain('if (openArchive) return;');
+    expect(uiSource).toContain('filesystem.fileClipboardSupported');
   });
 });

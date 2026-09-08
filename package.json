@@ -24,6 +24,8 @@
     "desktop:files:video:accept": "node scripts/accept-files-f4c.mjs",
     "desktop:files:properties:accept": "node scripts/accept-files-f5a.mjs",
     "desktop:files:archive:accept": "node scripts/accept-files-f5b.mjs",
+    "desktop:files:clipboard:accept": "node scripts/accept-files-f5c.mjs",
+    "desktop:files:drag:accept": "node scripts/accept-files-f5d.mjs",
     "desktop:release:prepare": "bun run build && bun run desktop:server:prepare && bun run desktop:server:smoke",
     "desktop:release:verify": "node scripts/verify-desktop-release.mjs",
     "firefox:patch": "node scripts/patch-firefox-wasm-release.mjs",

@@ -43,6 +43,7 @@ import {
   useState,
   type ComponentType,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
 import type {
@@ -53,6 +54,10 @@ import type {
   NativeDeletionOperationSnapshot,
   NativeDirectoryListing,
   NativeFileMetadata,
+  NativeFileClipboardOperation,
+  NativeFileClipboardSnapshot,
+  NativeFileDragEvent,
+  NativeFileDragOperation,
   NativeFileOperationSnapshot,
   NativeFileRoot,
   NativeFileSearchScope,
@@ -72,6 +77,7 @@ import {
   currentFilesLocation,
   moveFilesHistory,
   pushFilesLocation,
+  resolveNativeDropOperation,
   updateNativeSelection,
   visibleNativeEntries,
   type FilesClipboard,
@@ -187,6 +193,21 @@ type PendingConflict = {
 
 type PermanentDeleteDialog = {
   sources: readonly string[];
+};
+
+type NativeDropFeedback = {
+  session: number;
+  path: string;
+  label: string;
+  operation: 'copy' | 'move';
+};
+
+type PendingNativeDrag = {
+  path: string;
+  paths: readonly string[];
+  x: number;
+  y: number;
+  operation: NativeFileDragOperation;
 };
 
 type LoadLocationOptions = {
@@ -594,8 +615,13 @@ export default function FilesApp() {
   const mounted = useRef(true);
   const locationRef = useRef<FilesLocation>({ kind: 'roots' });
   const jobClipboard = useRef<FilesClipboard | null>(null);
+  const jobNativeClipboard = useRef<NativeFileClipboardSnapshot | null>(null);
+  const ownedNativeClipboardSequence = useRef<number | null>(null);
   const transferHistoryMode = useRef<'record' | 'undo' | null>(null);
   const selectedPathsRef = useRef<ReadonlySet<string>>(new Set());
+  const filesRoot = useRef<HTMLDivElement>(null);
+  const pendingNativeDrag = useRef<PendingNativeDrag | null>(null);
+  const suppressNativeClick = useRef<string | null>(null);
   const [source, setSource] = useState<'nammu' | 'computer'>('nammu');
   const [mockLocation, setMockLocation] = useState<(typeof MOCK_LOCATIONS)[number]>('Home');
   const [query, setQuery] = useState('');
@@ -610,6 +636,8 @@ export default function FilesApp() {
   const [nativeSelectedPaths, setNativeSelectedPaths] = useState<ReadonlySet<string>>(new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const [fileClipboard, setFileClipboard] = useState<FilesClipboard | null>(null);
+  const [nativeFileClipboard, setNativeFileClipboard] =
+    useState<NativeFileClipboardSnapshot | null>(null);
   const [namingDialog, setNamingDialog] = useState<NamingDialog | null>(null);
   const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
   const [activeOperation, setActiveOperation] = useState<NativeFileOperationSnapshot | null>(null);
@@ -633,6 +661,7 @@ export default function FilesApp() {
   const [actionError, setActionError] = useState<FilesystemError | null>(null);
   const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_LIMIT);
   const [uiDuration, setUiDuration] = useState<number | null>(null);
+  const [nativeDropFeedback, setNativeDropFeedback] = useState<NativeDropFeedback | null>(null);
 
   const mockVisible = useMemo(
     () =>
@@ -665,6 +694,29 @@ export default function FilesApp() {
     () => nativeEntries.filter((entry) => nativeSelectedPaths.has(entry.path)),
     [nativeEntries, nativeSelectedPaths],
   );
+  const pasteAvailable = filesystem.fileClipboardSupported
+    ? Boolean(nativeFileClipboard?.available && nativeFileClipboard.paths.length > 0)
+    : Boolean(fileClipboard);
+
+  const refreshNativeFileClipboard = useCallback(async () => {
+    if (!filesystem.fileClipboardSupported) return;
+    const result = await filesystem.readFileClipboard();
+    if (!mounted.current) return;
+    if (result.status === 'success') {
+      if (
+        ownedNativeClipboardSequence.current !== null &&
+        result.value.sequence !== ownedNativeClipboardSequence.current
+      ) {
+        ownedNativeClipboardSequence.current = null;
+        setFileClipboard(null);
+      }
+      setNativeFileClipboard(result.value);
+      return;
+    }
+    if (result.status === 'error' && result.error.code !== 'CLIPBOARD_BUSY') {
+      setNativeFileClipboard(null);
+    }
+  }, [filesystem]);
 
   const loadLocation = useCallback(
     async (
@@ -767,6 +819,18 @@ export default function FilesApp() {
       previewScheduler.dispose();
     };
   }, [previewScheduler]);
+
+  useEffect(() => {
+    if (!filesystem.fileClipboardSupported) return;
+    const refresh = () => void refreshNativeFileClipboard();
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [filesystem.fileClipboardSupported, refreshNativeFileClipboard]);
 
   const watchPath =
     source === 'computer' && currentLocation.kind === 'directory' && !searchMode
@@ -995,6 +1059,72 @@ export default function FilesApp() {
     [nativeSelectedPaths, selectedNativeEntries],
   );
 
+  const armNativeDrag = useCallback(
+    (event: ReactPointerEvent, entry: NativeFileMetadata) => {
+      if (
+        !filesystem.fileDragDropSupported ||
+        event.button !== 0 ||
+        event.pointerType !== 'mouse' ||
+        source !== 'computer' ||
+        openArchive
+      ) {
+        return;
+      }
+      const paths = selectedPaths(entry);
+      if (paths.length === 0) return;
+      const operation: NativeFileDragOperation =
+        event.ctrlKey && !event.shiftKey
+          ? 'copy'
+          : event.shiftKey && !event.ctrlKey
+            ? 'move'
+            : 'auto';
+      pendingNativeDrag.current = {
+        path: entry.path,
+        paths,
+        x: event.clientX,
+        y: event.clientY,
+        operation,
+      };
+    },
+    [filesystem.fileDragDropSupported, openArchive, selectedPaths, source],
+  );
+
+  useEffect(() => {
+    if (!filesystem.fileDragDropSupported) return;
+    const move = (event: PointerEvent) => {
+      const pending = pendingNativeDrag.current;
+      if (!pending) return;
+      if (event.buttons & 1) {
+        const distance = Math.hypot(event.clientX - pending.x, event.clientY - pending.y);
+        if (distance < 6) return;
+        pendingNativeDrag.current = null;
+        suppressNativeClick.current = pending.path;
+        void filesystem.startFileDrag(pending.operation, pending.paths).then((result) => {
+          if (result.status === 'error') setActionError(result.error);
+          else if (result.status === 'unsupported') {
+            setNotice('Native drag and drop is unavailable in this runtime.');
+          }
+          window.setTimeout(() => {
+            if (suppressNativeClick.current === pending.path) suppressNativeClick.current = null;
+          }, 250);
+        });
+        return;
+      }
+      pendingNativeDrag.current = null;
+    };
+    const release = () => {
+      pendingNativeDrag.current = null;
+    };
+    window.addEventListener('pointermove', move, { capture: true });
+    window.addEventListener('pointerup', release, { capture: true });
+    window.addEventListener('pointercancel', release, { capture: true });
+    return () => {
+      window.removeEventListener('pointermove', move, { capture: true });
+      window.removeEventListener('pointerup', release, { capture: true });
+      window.removeEventListener('pointercancel', release, { capture: true });
+    };
+  }, [filesystem]);
+
   const openProperties = useCallback(
     (fallback?: NativeFileMetadata) => {
       const paths = selectedPaths(fallback);
@@ -1037,7 +1167,23 @@ export default function FilesApp() {
         const remaining = jobClipboard.current.sources.filter((path) => !completed.has(path));
         setFileClipboard(remaining.length > 0 ? createFilesClipboard('cut', remaining) : null);
       }
+      const nativeClipboard = jobNativeClipboard.current;
+      if (
+        nativeClipboard?.operation &&
+        operation.state === 'completed' &&
+        operation.failures.length === 0 &&
+        operation.successes.length === nativeClipboard.paths.length
+      ) {
+        void filesystem
+          .completeFileClipboard(nativeClipboard.sequence, nativeClipboard.operation)
+          .then(() => {
+            ownedNativeClipboardSequence.current = null;
+            setFileClipboard(null);
+            return refreshNativeFileClipboard();
+          });
+      }
       jobClipboard.current = null;
+      jobNativeClipboard.current = null;
       if (operation.operation === 'move') {
         if (transferHistoryMode.current === 'undo' && operation.failures.length === 0) {
           setRecentUndo(null);
@@ -1068,12 +1214,17 @@ export default function FilesApp() {
         );
       }
     },
-    [loadLocation, searchMode],
+    [filesystem, loadLocation, refreshNativeFileClipboard, searchMode],
   );
 
   const monitorOperation = useCallback(
-    async (started: NativeFileOperationSnapshot, clipboard: FilesClipboard | null = null) => {
+    async (
+      started: NativeFileOperationSnapshot,
+      clipboard: FilesClipboard | null = null,
+      nativeClipboard: NativeFileClipboardSnapshot | null = null,
+    ) => {
       jobClipboard.current = clipboard;
+      jobNativeClipboard.current = nativeClipboard;
       setActiveOperation(started);
       let snapshot = started;
       while (!terminalOperation(snapshot) && mounted.current) {
@@ -1082,6 +1233,7 @@ export default function FilesApp() {
         if (!mounted.current) return;
         if (result.status !== 'success') {
           jobClipboard.current = null;
+          jobNativeClipboard.current = null;
           setActionError(
             result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
           );
@@ -1103,6 +1255,7 @@ export default function FilesApp() {
       keepBoth = false,
       clipboard: FilesClipboard | null = null,
       historyMode: 'record' | 'undo' | null = operation === 'move' ? 'record' : null,
+      nativeClipboard: NativeFileClipboardSnapshot | null = null,
     ) => {
       if (
         (activeOperation && !terminalOperation(activeOperation)) ||
@@ -1124,9 +1277,10 @@ export default function FilesApp() {
         keepBoth ? 'keep-both' : 'cancel',
       );
       if (result.status === 'success') {
-        void monitorOperation(result.value, clipboard);
+        void monitorOperation(result.value, clipboard, nativeClipboard);
       } else {
         transferHistoryMode.current = null;
+        jobNativeClipboard.current = null;
         setActionError(
           result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
         );
@@ -1134,6 +1288,105 @@ export default function FilesApp() {
     },
     [activeDeletion, activeOperation, filesystem, monitorOperation],
   );
+
+  const nativeDropTargetAt = useCallback(
+    (event: NativeFileDragEvent): NativeDropFeedback | null => {
+      if (
+        source !== 'computer' ||
+        openArchive ||
+        searchMode ||
+        currentLocation.kind !== 'directory' ||
+        event.paths.length === 0
+      ) {
+        return null;
+      }
+      const scale = window.devicePixelRatio || 1;
+      const element = document.elementFromPoint(
+        event.x / scale,
+        event.y / scale,
+      ) as HTMLElement | null;
+      if (!element || !filesRoot.current?.contains(element)) return null;
+      const folder = element.closest<HTMLElement>('[data-native-file-drop-target]');
+      const area = element.closest<HTMLElement>('[data-native-file-drop-root]');
+      const path = folder?.dataset.nativeFileDropTarget ?? area?.dataset.nativeFileDropRoot;
+      if (
+        !path ||
+        event.paths.some((sourcePath) => sourcePath.toLowerCase() === path.toLowerCase())
+      ) {
+        return null;
+      }
+      return {
+        session: event.session,
+        path,
+        label: folder?.dataset.nativeFileDropLabel ?? leafName(path),
+        operation: resolveNativeDropOperation(event.paths, path, event.modifiers),
+      };
+    },
+    [currentLocation, openArchive, searchMode, source],
+  );
+
+  const nativeDropTargetAtRef = useRef(nativeDropTargetAt);
+  const startNativeDropTransferRef = useRef(startTransfer);
+  const nativeDropEffectRef = useRef<{
+    session: number;
+    path: string | null;
+    operation: NativeFileClipboardOperation | null;
+  } | null>(null);
+  useEffect(() => {
+    nativeDropTargetAtRef.current = nativeDropTargetAt;
+    startNativeDropTransferRef.current = startTransfer;
+  }, [nativeDropTargetAt, startTransfer]);
+
+  useEffect(() => {
+    if (!filesystem.fileDragDropSupported) return;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void filesystem
+      .subscribeFileDrops((event) => {
+        if (disposed) return;
+        if (event.phase === 'leave') {
+          setNativeDropFeedback(null);
+          if (
+            nativeDropEffectRef.current?.session !== event.session ||
+            nativeDropEffectRef.current.operation !== null
+          ) {
+            nativeDropEffectRef.current = { session: event.session, path: null, operation: null };
+            void filesystem.setFileDropEffect(event.session, null);
+          }
+          return;
+        }
+        const target = nativeDropTargetAtRef.current(event);
+        setNativeDropFeedback(target);
+        const operation = target?.operation ?? null;
+        const path = target?.path ?? null;
+        if (
+          nativeDropEffectRef.current?.session !== event.session ||
+          nativeDropEffectRef.current.path !== path ||
+          nativeDropEffectRef.current.operation !== operation
+        ) {
+          nativeDropEffectRef.current = { session: event.session, path, operation };
+          void filesystem.setFileDropEffect(event.session, operation);
+        }
+        if (event.phase !== 'drop') return;
+        nativeDropEffectRef.current = null;
+        setNativeDropFeedback(null);
+        if (!target) {
+          setNotice('This location cannot accept native file drops.');
+          return;
+        }
+        void startNativeDropTransferRef.current(target.operation, event.paths, target.path);
+      })
+      .then((dispose) => {
+        if (disposed) dispose();
+        else unlisten = dispose;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+      nativeDropEffectRef.current = null;
+      setNativeDropFeedback(null);
+    };
+  }, [filesystem]);
 
   const duplicateSelection = useCallback(
     async (fallback?: NativeFileMetadata) => {
@@ -1161,19 +1414,66 @@ export default function FilesApp() {
   );
 
   const copySelection = useCallback(
-    (operation: 'copy' | 'cut', fallback?: NativeFileMetadata) => {
+    async (operation: 'copy' | 'cut', fallback?: NativeFileMetadata) => {
+      if (openArchive) return;
       const next = createFilesClipboard(operation, selectedPaths(fallback));
       if (!next) return;
+      if (filesystem.fileClipboardSupported) {
+        const result = await filesystem.writeFileClipboard(
+          operation === 'cut' ? 'move' : 'copy',
+          next.sources,
+        );
+        if (result.status !== 'success') {
+          setActionError(
+            result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
+          );
+          return;
+        }
+        setNativeFileClipboard(result.value);
+        ownedNativeClipboardSequence.current = result.value.sequence;
+      }
       setFileClipboard(next);
       setNotice(
         `${next.sources.length} item${next.sources.length === 1 ? '' : 's'} ready to ${operation}.`,
       );
     },
-    [selectedPaths],
+    [filesystem, openArchive, selectedPaths],
   );
 
-  const paste = useCallback(() => {
-    if (!fileClipboard || currentLocation.kind !== 'directory') return;
+  const paste = useCallback(async () => {
+    if (openArchive || searchMode || currentLocation.kind !== 'directory') return;
+    if (filesystem.fileClipboardSupported) {
+      const result = await filesystem.readFileClipboard();
+      if (result.status !== 'success') {
+        setActionError(
+          result.status === 'error' ? result.error : { code: 'IO_ERROR', message: result.reason },
+        );
+        return;
+      }
+      if (
+        ownedNativeClipboardSequence.current !== null &&
+        result.value.sequence !== ownedNativeClipboardSequence.current
+      ) {
+        ownedNativeClipboardSequence.current = null;
+        setFileClipboard(null);
+      }
+      setNativeFileClipboard(result.value);
+      if (!result.value.available || !result.value.operation || result.value.paths.length === 0) {
+        setNotice('The Windows clipboard does not contain files or folders.');
+        return;
+      }
+      void startTransfer(
+        result.value.operation,
+        result.value.paths,
+        currentLocation.path,
+        false,
+        null,
+        result.value.operation === 'move' ? 'record' : null,
+        result.value,
+      );
+      return;
+    }
+    if (!fileClipboard) return;
     void startTransfer(
       fileClipboard.operation === 'cut' ? 'move' : 'copy',
       fileClipboard.sources,
@@ -1181,7 +1481,7 @@ export default function FilesApp() {
       false,
       fileClipboard,
     );
-  }, [currentLocation, fileClipboard, startTransfer]);
+  }, [currentLocation, fileClipboard, filesystem, openArchive, searchMode, startTransfer]);
 
   const submitNaming = useCallback(async () => {
     if (!namingDialog || currentLocation.kind !== 'directory') return;
@@ -1619,13 +1919,13 @@ export default function FilesApp() {
       id: 'native-file-cut',
       label: 'Cut',
       icon: Scissors,
-      action: () => copySelection('cut', entry),
+      action: () => void copySelection('cut', entry),
     },
     {
       id: 'native-file-copy',
       label: 'Copy',
       icon: Copy,
-      action: () => copySelection('copy', entry),
+      action: () => void copySelection('copy', entry),
     },
     {
       id: 'native-file-rename',
@@ -1682,7 +1982,7 @@ export default function FilesApp() {
           : `${mockLocation} · Nammu`,
     },
     { id: 'files-refresh', label: 'Refresh', icon: RefreshCw, action: refresh },
-    ...(source === 'computer' && currentLocation.kind === 'directory'
+    ...(source === 'computer' && currentLocation.kind === 'directory' && !searchMode && !openArchive
       ? [
           {
             id: 'files-new-folder',
@@ -1700,8 +2000,8 @@ export default function FilesApp() {
             id: 'files-paste',
             label: 'Paste',
             icon: ClipboardPaste,
-            disabled: !fileClipboard,
-            action: paste,
+            disabled: !pasteAvailable,
+            action: () => void paste(),
           } satisfies ContextMenuEntry,
         ]
       : []),
@@ -1749,7 +2049,7 @@ export default function FilesApp() {
   const handleFilesKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest('input, textarea, [contenteditable="true"]')) return;
-    if (source !== 'computer' || currentLocation.kind !== 'directory') return;
+    if (source !== 'computer' || currentLocation.kind !== 'directory' || openArchive) return;
     const key = event.key.toLowerCase();
     if (event.altKey && event.key === 'Enter') {
       event.preventDefault();
@@ -1759,13 +2059,13 @@ export default function FilesApp() {
       showNamingDialog({ kind: 'folder', value: 'New folder', target: null });
     } else if (event.ctrlKey && key === 'c') {
       event.preventDefault();
-      copySelection('copy');
+      void copySelection('copy');
     } else if (event.ctrlKey && key === 'x') {
       event.preventDefault();
-      copySelection('cut');
-    } else if (event.ctrlKey && key === 'v') {
+      void copySelection('cut');
+    } else if (event.ctrlKey && key === 'v' && !searchMode) {
       event.preventDefault();
-      paste();
+      void paste();
     } else if (event.ctrlKey && key === 'd') {
       event.preventDefault();
       void duplicateSelection();
@@ -1781,6 +2081,7 @@ export default function FilesApp() {
 
   return (
     <div
+      ref={filesRoot}
       className="relative flex h-full min-h-0 bg-[#05080d] text-[11px] outline-none"
       tabIndex={0}
       onKeyDown={handleFilesKeyDown}
@@ -2054,7 +2355,7 @@ export default function FilesApp() {
               <span className="mx-1 h-4 w-px bg-white/[0.06]" />
               <button
                 type="button"
-                onClick={() => copySelection('cut')}
+                onClick={() => void copySelection('cut')}
                 disabled={selectedNativeEntries.length === 0}
                 className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
                 aria-label="Cut selected items"
@@ -2064,7 +2365,7 @@ export default function FilesApp() {
               </button>
               <button
                 type="button"
-                onClick={() => copySelection('copy')}
+                onClick={() => void copySelection('copy')}
                 disabled={selectedNativeEntries.length === 0}
                 className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
                 aria-label="Copy selected items"
@@ -2074,8 +2375,8 @@ export default function FilesApp() {
               </button>
               <button
                 type="button"
-                onClick={paste}
-                disabled={!fileClipboard}
+                onClick={() => void paste()}
+                disabled={!pasteAvailable}
                 className="p-1.5 text-[#71889d] hover:bg-white/[0.035] hover:text-[#d4e5f2] disabled:opacity-25"
                 aria-label="Paste items"
                 title="Paste (Ctrl+V)"
@@ -2144,6 +2445,14 @@ export default function FilesApp() {
         <div className="flex min-h-0 flex-1">
           <main
             ref={nativeScrollRoot}
+            data-native-file-drop-root={
+              source === 'computer' &&
+              currentLocation.kind === 'directory' &&
+              !searchMode &&
+              !openArchive
+                ? currentLocation.path
+                : undefined
+            }
             className="relative min-w-0 flex-1 overflow-auto p-1.5 os-scrollbar"
           >
             {openArchive && (
@@ -2155,6 +2464,12 @@ export default function FilesApp() {
                   onOperation={(operation) => void monitorArchiveOperation(operation)}
                   onError={setActionError}
                 />
+              </div>
+            )}
+            {nativeDropFeedback && (
+              <div className="pointer-events-none sticky top-2 z-30 ml-auto mr-2 w-fit border border-[#4aa3ff]/35 bg-[#07111b]/95 px-3 py-2 font-mono text-[9px] text-[#b9d9f5] shadow-xl backdrop-blur-xl">
+                {nativeDropFeedback.operation === 'move' ? 'Move' : 'Copy'} to{' '}
+                <span className="text-[#4aa3ff]">{nativeDropFeedback.label}</span>
               </div>
             )}
             {source === 'computer' && loading && (
@@ -2287,11 +2602,18 @@ export default function FilesApp() {
                 {nativeVisible.map((entry) => {
                   const selected = nativeSelectedPaths.has(entry.path);
                   const common = {
-                    onClick: (event: ReactMouseEvent) =>
+                    onPointerDown: (event: ReactPointerEvent) => armNativeDrag(event, entry),
+                    onClick: (event: ReactMouseEvent) => {
+                      if (suppressNativeClick.current === entry.path) {
+                        suppressNativeClick.current = null;
+                        event.preventDefault();
+                        return;
+                      }
                       selectNativeEntry(entry, {
                         toggle: event.ctrlKey || event.metaKey,
                         range: event.shiftKey,
-                      }),
+                      });
+                    },
                     onDoubleClick: () => openNativeEntry(entry),
                     onContextMenu: (event: ReactMouseEvent) => {
                       if (!nativeSelectedPaths.has(entry.path)) {
@@ -2307,7 +2629,12 @@ export default function FilesApp() {
                       key={entry.path}
                       type="button"
                       {...common}
-                      className={`flex min-h-24 flex-col items-center justify-center gap-2 border p-2 ${selected ? 'border-[#4aa3ff]/35 bg-[#4aa3ff]/8' : 'border-white/[0.04] hover:bg-white/[0.025]'}`}
+                      data-native-file-drag-source={entry.path}
+                      data-native-file-drop-target={
+                        entry.kind === 'directory' && !entry.readOnly ? entry.path : undefined
+                      }
+                      data-native-file-drop-label={entry.name}
+                      className={`flex min-h-24 flex-col items-center justify-center gap-2 border p-2 ${nativeDropFeedback?.path === entry.path ? 'border-[#4aa3ff]/70 bg-[#4aa3ff]/15' : selected ? 'border-[#4aa3ff]/35 bg-[#4aa3ff]/8' : 'border-white/[0.04] hover:bg-white/[0.025]'}`}
                     >
                       <NativeThumbnail
                         key={previewIdentity(entry)}
@@ -2333,7 +2660,12 @@ export default function FilesApp() {
                       key={entry.path}
                       type="button"
                       {...common}
-                      className={`grid w-full items-center px-2 py-1.5 text-left ${searchMode ? 'grid-cols-[22px_minmax(120px,1fr)_minmax(140px,1fr)_86px_82px_78px]' : 'grid-cols-[22px_minmax(120px,1fr)_100px_92px_78px]'} ${selected ? 'bg-[#4aa3ff]/8' : 'hover:bg-white/[0.025]'}`}
+                      data-native-file-drag-source={entry.path}
+                      data-native-file-drop-target={
+                        entry.kind === 'directory' && !entry.readOnly ? entry.path : undefined
+                      }
+                      data-native-file-drop-label={entry.name}
+                      className={`grid w-full items-center px-2 py-1.5 text-left ${searchMode ? 'grid-cols-[22px_minmax(120px,1fr)_minmax(140px,1fr)_86px_82px_78px]' : 'grid-cols-[22px_minmax(120px,1fr)_100px_92px_78px]'} ${nativeDropFeedback?.path === entry.path ? 'bg-[#4aa3ff]/15 ring-1 ring-inset ring-[#4aa3ff]/55' : selected ? 'bg-[#4aa3ff]/8' : 'hover:bg-white/[0.025]'}`}
                     >
                       <NativeThumbnail
                         key={previewIdentity(entry)}
