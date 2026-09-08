@@ -27,6 +27,7 @@ import type {
   NativeFileSearchSnapshot,
   PickFilesOptions,
   PickedFiles,
+  PickedPlatformFile,
   PlatformCapabilities,
   PlatformNotification,
   PlatformNotificationPermission,
@@ -398,6 +399,10 @@ export function createWebPlatformCapabilities(
           (documentObject.body ?? documentObject.documentElement)?.append(input);
           input.click();
         });
+      },
+
+      async readPdf(): Promise<CapabilityResult<PickedPlatformFile>> {
+        return unsupported('Opening a native PDF path is available only in Nammu Desktop.');
       },
 
       async save(options: SaveFileOptions): Promise<CapabilityResult<SavedFile>> {

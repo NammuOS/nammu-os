@@ -20,6 +20,7 @@ import LockScreen from '../os/LockScreen';
 import { OS_LOCK_STATE_KEY, getStoredLockState, saveLockState } from '../../lib/osLock';
 import { applyIconSettings } from '../../lib/iconSettings';
 import { getPlatformCapabilities } from '../../platform';
+import { NAMMU_OPEN_DOCUMENT_EVENT, type NammuOpenDocumentDetail } from '../../lib/appLaunch';
 
 const DEFAULT_PINS = ['browser', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
 const platformServices = getPlatformCapabilities().services;
@@ -138,6 +139,24 @@ export default function DesktopApp() {
     },
     [focusWindow, minimizeWindow, musicOpen, openWindow, restoreWindow, windows],
   );
+
+  useEffect(() => {
+    const handleOpenDocument = (event: Event) => {
+      const detail = (event as CustomEvent<NammuOpenDocumentDetail>).detail;
+      if (detail?.appId !== 'pdf') return;
+      const app = findSystemApp('pdf');
+      if (!app) return;
+      const existing = windows.find((windowState) => windowState.toolId === app.windowId);
+      if (existing) {
+        if (existing.isMinimized) restoreWindow(existing.id);
+        else focusWindow(existing.id);
+        return;
+      }
+      openWindow(app.windowId, app.title, { openRequest: detail.request }, musicOpen ? 292 : 0);
+    };
+    window.addEventListener(NAMMU_OPEN_DOCUMENT_EVENT, handleOpenDocument);
+    return () => window.removeEventListener(NAMMU_OPEN_DOCUMENT_EVENT, handleOpenDocument);
+  }, [focusWindow, musicOpen, openWindow, restoreWindow, windows]);
 
   useEffect(() => {
     fitWindows(musicOpen ? 292 : 0);
@@ -449,7 +468,7 @@ export default function DesktopApp() {
               shellOverlayActive={launcherOpen || startMenuOpen || taskbarFlyoutOpen}
             >
               {systemApp ? (
-                <SystemAppContent appId={systemApp.id} />
+                <SystemAppContent appId={systemApp.id} initialData={win.data} />
               ) : Component ? (
                 <Suspense
                   fallback={

@@ -7,6 +7,7 @@ describe('window runtime lifecycle policy', () => {
     expect(shouldKeepWindowRuntimeAlive('system:whatsapp')).toBe(true);
     expect(shouldKeepWindowRuntimeAlive('system:telegram')).toBe(true);
     expect(shouldKeepWindowRuntimeAlive('system:youtube-music')).toBe(true);
+    expect(shouldKeepWindowRuntimeAlive('system:pdf')).toBe(true);
   });
 
   test('still releases ordinary application trees when minimized', () => {

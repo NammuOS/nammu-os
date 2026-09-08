@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Calculator,
   QrCode,
+  FileText,
   Music2,
   Send,
   type LucideIcon,
@@ -36,7 +37,8 @@ export type SystemAppId =
   | 'ai'
   | 'calculator'
   | 'qr-gen'
-  | 'youtube-music';
+  | 'youtube-music'
+  | 'pdf';
 
 export interface SystemAppDefinition {
   id: SystemAppId;
@@ -124,6 +126,14 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     title: 'Files',
     icon: Folder,
     keywords: ['files', 'explorer', 'folder', 'directories', 'file manager', 'storage'],
+  },
+  {
+    id: 'pdf',
+    windowId: 'system:pdf',
+    title: 'Nammu PDF',
+    icon: FileText,
+    startMenu: true,
+    keywords: ['pdf', 'document', 'reader', 'editor', 'acrobat', 'pages', 'forms', 'annotate'],
   },
   {
     id: 'cloud',

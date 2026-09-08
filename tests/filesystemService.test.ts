@@ -519,6 +519,33 @@ describe('Files native filesystem service', () => {
     expect(source).not.toContain('setInterval(');
   });
 
+  test('keeps Windows Shell integrations off the Files startup path', () => {
+    const source = readFileSync('src/components/files/FilesApp.tsx', 'utf8');
+    const clipboardSource = readFileSync('src-tauri/src/native_file_clipboard.rs', 'utf8');
+    expect(source).toContain(
+      "if (source !== 'computer' || !filesystem.fileClipboardSupported) return;",
+    );
+    expect(source).toContain(
+      "if (source !== 'computer' || !filesystem.fileDragDropSupported) return;",
+    );
+    expect(
+      source.match(
+        /if \(source !== 'computer' \|\| !filesystem\.fileDragDropSupported\) return;/g,
+      ),
+    ).toHaveLength(2);
+    expect(source).toContain(
+      "if (document.visibilityState === 'visible') void refreshNativeFileClipboard();",
+    );
+    expect(clipboardSource).toContain('pub async fn read_native_file_clipboard(');
+    expect(clipboardSource).toContain('pub async fn write_native_file_clipboard(');
+    expect(clipboardSource).toContain('pub async fn complete_native_file_clipboard(');
+    expect(clipboardSource.match(/tauri::async_runtime::spawn_blocking/g)).toHaveLength(3);
+    const dragSource = readFileSync('src-tauri/src/native_file_drag_drop.rs', 'utf8');
+    expect(dragSource).toContain('WS_POPUP,');
+    expect(dragSource).not.toContain('WS_POPUP | WS_VISIBLE');
+    expect(dragSource).toContain('let _ = ShowWindow(hwnd, SW_HIDE);');
+  });
+
   test('keeps search generation-scoped, cancellable, progressively bounded, and separate from watchers', () => {
     const source = readFileSync('src/components/files/FilesApp.tsx', 'utf8');
     expect(source).toContain('const searchGate = useRef(createLatestRequestGate())');
@@ -787,9 +814,7 @@ describe('Files native filesystem service', () => {
     expect(dragDropSource).toContain('DRAGDROP_E_NOTREGISTERED');
     expect(dragDropSource).not.toContain('DRAGDROP_E_INVALIDHWND');
     expect(tauriLibrarySource).not.toContain('refresh_main_file_drop_targets');
-    expect(readFileSync('src-tauri/tauri.conf.json', 'utf8')).toContain(
-      '"dragDropEnabled": false',
-    );
+    expect(readFileSync('src-tauri/tauri.conf.json', 'utf8')).toContain('"dragDropEnabled": false');
     expect(dragDropSource).toContain('CF_HDROP');
     expect(dragDropSource).toContain('CFSTR_PREFERREDDROPEFFECT');
     expect(dragDropSource).not.toContain('SetClipboardData');

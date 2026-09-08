@@ -64,6 +64,8 @@ pub struct NativeFileDragResult {
 #[serde(rename_all = "camelCase")]
 pub struct NativeFileDragDiagnostics {
     pub registered_targets: usize,
+    pub drop_shield_visible: bool,
+    pub drop_shield_expanded: bool,
     pub active_inbound_sessions: usize,
     pub active_outbound_sessions: usize,
     pub inbound_enters: u64,
@@ -204,8 +206,14 @@ impl NativeFileDragDropState {
     pub fn shutdown(&self) {}
 
     fn diagnostics(&self) -> NativeFileDragDiagnostics {
+        #[cfg(windows)]
+        let (drop_shield_visible, drop_shield_expanded) = windows_impl::shield_diagnostics();
+        #[cfg(not(windows))]
+        let (drop_shield_visible, drop_shield_expanded) = (false, false);
         NativeFileDragDiagnostics {
             registered_targets: self.counters.registered_targets.load(Ordering::Acquire),
+            drop_shield_visible,
+            drop_shield_expanded,
             active_inbound_sessions: self
                 .counters
                 .active_inbound_sessions
@@ -400,12 +408,13 @@ mod windows_impl {
                 },
                 WindowsAndMessaging::{
                     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
-                    DispatchMessageW, GetAncestor, GetClientRect, GetMessageW, PostMessageW,
-                    PostQuitMessage, RegisterClassW, SetTimer, SetWindowPos, SetWindowsHookExW,
-                    TranslateMessage, UnhookWindowsHookEx, WindowFromPoint, GA_ROOT, HTCLIENT,
-                    HTTRANSPARENT, HWND_TOP, MSG, MSLLHOOKSTRUCT, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-                    WH_MOUSE_LL, WM_CLOSE, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST,
-                    WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP, WS_VISIBLE,
+                    DispatchMessageW, GetAncestor, GetClientRect, GetMessageW, IsWindowVisible,
+                    PostMessageW, PostQuitMessage, RegisterClassW, SetTimer, SetWindowPos,
+                    SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
+                    WindowFromPoint, GA_ROOT, HTCLIENT, HTTRANSPARENT, HWND_TOP, MSG,
+                    MSLLHOOKSTRUCT, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, WH_MOUSE_LL, WM_CLOSE,
+                    WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST, WM_TIMER, WNDCLASSW,
+                    WS_EX_TOOLWINDOW, WS_POPUP,
                 },
             },
         },
@@ -890,6 +899,12 @@ mod windows_impl {
     static ACTIVE_INBOUND_DRAG: AtomicBool = AtomicBool::new(false);
     static OUTBOUND_DRAG_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
+    pub fn shield_diagnostics() -> (bool, bool) {
+        let hwnd = HWND(ACTIVE_DROP_SHIELD.load(Ordering::Acquire) as *mut _);
+        let visible = !hwnd.0.is_null() && unsafe { IsWindowVisible(hwnd) }.as_bool();
+        (visible, ACTIVE_DROP_SHIELD_EXPANDED.load(Ordering::Acquire))
+    }
+
     unsafe extern "system" fn drop_shield_mouse_hook(
         code: i32,
         wparam: WPARAM,
@@ -1000,7 +1015,13 @@ mod windows_impl {
         if ACTIVE_DROP_SHIELD.load(Ordering::Acquire) == hwnd.0 as isize {
             ACTIVE_DROP_SHIELD_EXPANDED.store(expanded, Ordering::Release);
         }
-        resize_overlay(hwnd)?;
+        if expanded {
+            resize_overlay(hwnd)?;
+        } else {
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            }
+        }
         Ok(())
     }
 
@@ -1066,7 +1087,7 @@ mod windows_impl {
                             WS_EX_TOOLWINDOW,
                             w!("NammuNativeFileDropShield"),
                             w!(""),
-                            WS_POPUP | WS_VISIBLE,
+                            WS_POPUP,
                             0,
                             0,
                             1,

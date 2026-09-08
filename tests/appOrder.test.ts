@@ -5,6 +5,7 @@ describe('Start Menu ordering', () => {
   test('uses the product-defined default application order', () => {
     expect(DEFAULT_START_MENU_ORDER).toEqual([
       'files',
+      'pdf',
       'browser',
       'youtube-music',
       'cloud',

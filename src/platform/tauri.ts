@@ -65,6 +65,7 @@ import type {
   NativeVolumeProperties,
   PickFilesOptions,
   PickedFiles,
+  PickedPlatformFile,
   PlatformCapabilities,
   PlatformNotification,
   PlatformNotificationPermission,
@@ -970,6 +971,8 @@ function validFileDragResult(value: unknown): value is NativeFileDragResult {
 function validFileDragDiagnostics(value: unknown): value is NativeFileDragDiagnostics {
   return (
     isRecord(value) &&
+    typeof value.dropShieldVisible === 'boolean' &&
+    typeof value.dropShieldExpanded === 'boolean' &&
     [
       'registeredTargets',
       'activeInboundSessions',
@@ -2550,6 +2553,24 @@ export function createTauriPlatformCapabilities(
           return success({ files });
         } catch (error) {
           return tauriFailure(error, 'The selected file could not be read.');
+        }
+      },
+
+      async readPdf(path: string): Promise<CapabilityResult<PickedPlatformFile>> {
+        if (!path || path.includes('\0') || !path.toLowerCase().endsWith('.pdf')) {
+          return invalidInput('A valid native PDF path is required.');
+        }
+        try {
+          const bytes = await environment.readFile(path);
+          const name = fileNameFromPath(path, 'Document.pdf');
+          return success({
+            name,
+            mimeType: 'application/pdf',
+            size: bytes.byteLength,
+            bytes,
+          });
+        } catch (error) {
+          return tauriFailure(error, 'The PDF could not be read.');
         }
       },
 

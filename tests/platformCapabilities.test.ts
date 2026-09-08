@@ -58,6 +58,8 @@ function tauriEnvironment(
       status: 'success',
       value: {
         registeredTargets: 1,
+        dropShieldVisible: false,
+        dropShieldExpanded: false,
         activeInboundSessions: 0,
         activeOutboundSessions: 0,
         inboundEnters: 0,
@@ -337,7 +339,7 @@ describe('platform capabilities', () => {
       'trash',
       'watchDirectory',
     ]);
-    expect(Object.keys(firstWeb.files).sort()).toEqual(['pick', 'save']);
+    expect(Object.keys(firstWeb.files).sort()).toEqual(['pick', 'readPdf', 'save']);
     expect(Object.keys(firstWeb.fileClipboard).sort()).toEqual([
       'complete',
       'getDiagnostics',
@@ -456,6 +458,10 @@ describe('platform capabilities', () => {
       status: 'unsupported',
       reason: 'File selection requires a browser document.',
     });
+    expect(await platform.files.readPdf('C:\\fixture.pdf')).toEqual({
+      status: 'unsupported',
+      reason: 'Opening a native PDF path is available only in Nammu Desktop.',
+    });
     expect(await platform.filesystem.listRoots()).toEqual({
       status: 'unsupported',
       reason: 'This PC is available only in the Nammu desktop application.',
@@ -554,6 +560,23 @@ describe('platform capabilities', () => {
       ]);
       expect(JSON.stringify(picked.value)).not.toContain('C:\\Users');
     }
+
+    const nativePdf = await platform.files.readPdf('C:\\Users\\Test\\document.pdf');
+    expect(nativePdf.status).toBe('success');
+    if (nativePdf.status === 'success') {
+      expect(nativePdf.value).toEqual({
+        name: 'document.pdf',
+        mimeType: 'application/pdf',
+        size: 2,
+        bytes: new Uint8Array([4, 5]),
+      });
+      expect(JSON.stringify(nativePdf.value)).not.toContain('C:\\Users');
+    }
+    expect(await platform.files.readPdf('C:\\Users\\Test\\document.txt')).toEqual({
+      status: 'error',
+      code: 'invalid-input',
+      message: 'A valid native PDF path is required.',
+    });
     expect(pickedOptions).toEqual([
       {
         directory: false,

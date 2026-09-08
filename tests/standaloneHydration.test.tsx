@@ -10,6 +10,7 @@ describe('standalone app hydration boundary', () => {
     ['whatsapp', 'WhatsApp'],
     ['telegram', 'Telegram'],
     ['youtube-music', 'YouTube Music'],
+    ['pdf', 'Nammu PDF'],
   ])('renders a deterministic shell for %s before browser state is available', (id, title) => {
     const markup = renderToString(<StandaloneWindowContent kind="app" id={id} />);
     expect(markup.replaceAll('<!-- -->', '')).toContain(`Opening ${title}`);

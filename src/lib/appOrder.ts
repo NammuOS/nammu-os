@@ -6,6 +6,7 @@ export const START_MENU_ORDER_CHANGE_EVENT = 'nammu-start-menu-order-change';
 
 export const DEFAULT_START_MENU_ORDER: SystemAppId[] = [
   'files',
+  'pdf',
   'browser',
   'youtube-music',
   'cloud',

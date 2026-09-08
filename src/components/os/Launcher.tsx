@@ -57,6 +57,7 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   'youtube-music': 'YouTube Music with native playback controls, lyrics and extensions',
   browser: 'Proxy web browser with multi-tab browsing',
   files: 'File manager, workspace browser and cloud storage',
+  pdf: 'Professional local-first PDF document workspace',
   cloud: 'Multi-cloud storage connector and account manager',
   terminal: 'Interactive command-line terminal shell',
   editor: 'Code and text editor with syntax highlighting',

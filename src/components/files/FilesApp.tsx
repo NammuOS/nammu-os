@@ -65,6 +65,7 @@ import type {
 } from '../../platform';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 import { useContextMenu } from '../context-menu/useContextMenu';
+import { requestOpenPdf } from '../../lib/appLaunch';
 import {
   categorizeNativeFile,
   buildNativeSearchQuery,
@@ -821,8 +822,10 @@ export default function FilesApp() {
   }, [previewScheduler]);
 
   useEffect(() => {
-    if (!filesystem.fileClipboardSupported) return;
-    const refresh = () => void refreshNativeFileClipboard();
+    if (source !== 'computer' || !filesystem.fileClipboardSupported) return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void refreshNativeFileClipboard();
+    };
     refresh();
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
@@ -830,7 +833,7 @@ export default function FilesApp() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [filesystem.fileClipboardSupported, refreshNativeFileClipboard]);
+  }, [filesystem.fileClipboardSupported, refreshNativeFileClipboard, source]);
 
   const watchPath =
     source === 'computer' && currentLocation.kind === 'directory' && !searchMode
@@ -1028,6 +1031,10 @@ export default function FilesApp() {
       openLocation({ kind: 'directory', path: entry.path });
       return;
     }
+    if (entry.kind === 'file' && entry.extension?.toLowerCase() === 'pdf') {
+      requestOpenPdf(entry.path, entry.name);
+      return;
+    }
     if (entry.kind === 'file' && entry.extension?.toLowerCase() === 'zip') {
       setActionError(null);
       const result = await filesystem.openArchive(entry.path);
@@ -1090,7 +1097,7 @@ export default function FilesApp() {
   );
 
   useEffect(() => {
-    if (!filesystem.fileDragDropSupported) return;
+    if (source !== 'computer' || !filesystem.fileDragDropSupported) return;
     const move = (event: PointerEvent) => {
       const pending = pendingNativeDrag.current;
       if (!pending) return;
@@ -1123,7 +1130,7 @@ export default function FilesApp() {
       window.removeEventListener('pointerup', release, { capture: true });
       window.removeEventListener('pointercancel', release, { capture: true });
     };
-  }, [filesystem]);
+  }, [filesystem, source]);
 
   const openProperties = useCallback(
     (fallback?: NativeFileMetadata) => {
@@ -1338,7 +1345,7 @@ export default function FilesApp() {
   }, [nativeDropTargetAt, startTransfer]);
 
   useEffect(() => {
-    if (!filesystem.fileDragDropSupported) return;
+    if (source !== 'computer' || !filesystem.fileDragDropSupported) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void filesystem
@@ -1386,7 +1393,7 @@ export default function FilesApp() {
       nativeDropEffectRef.current = null;
       setNativeDropFeedback(null);
     };
-  }, [filesystem]);
+  }, [filesystem, source]);
 
   const duplicateSelection = useCallback(
     async (fallback?: NativeFileMetadata) => {
@@ -1881,6 +1888,16 @@ export default function FilesApp() {
           } satisfies ContextMenuEntry,
         ]
       : []),
+    ...(entry.kind === 'file' && entry.extension?.toLowerCase() === 'pdf'
+      ? [
+          {
+            id: 'native-pdf-open',
+            label: 'Open in Nammu PDF',
+            icon: FileText,
+            action: () => void openNativeEntry(entry),
+          } satisfies ContextMenuEntry,
+        ]
+      : []),
     ...(entry.kind === 'file' && entry.extension?.toLowerCase() === 'zip'
       ? [
           {
@@ -2082,6 +2099,8 @@ export default function FilesApp() {
   return (
     <div
       ref={filesRoot}
+      data-testid="nammu-files-app"
+      data-files-source={source}
       className="relative flex h-full min-h-0 bg-[#05080d] text-[11px] outline-none"
       tabIndex={0}
       onKeyDown={handleFilesKeyDown}

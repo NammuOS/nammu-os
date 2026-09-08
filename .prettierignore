@@ -16,3 +16,4 @@ drizzle
 *.min.js
 *.min.css
 tsconfig.tsbuildinfo
+bentopdf

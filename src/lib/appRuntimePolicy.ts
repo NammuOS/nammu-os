@@ -1,4 +1,10 @@
-const KEEP_ALIVE_WINDOW_IDS = new Set(['browser', 'whatsapp', 'telegram', 'youtube-music']);
+const KEEP_ALIVE_WINDOW_IDS = new Set([
+  'browser',
+  'whatsapp',
+  'telegram',
+  'youtube-music',
+  'pdf',
+]);
 
 /**
  * Stateful engines must survive a visual minimize. Closing the window still

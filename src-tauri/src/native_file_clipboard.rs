@@ -704,13 +704,16 @@ pub(crate) mod windows_impl {
 }
 
 #[tauri::command]
-pub fn read_native_file_clipboard(
+pub async fn read_native_file_clipboard(
     caller: Webview,
 ) -> Result<NativeFilesystemResponse<NativeFileClipboardSnapshot>, String> {
     require_trusted_caller(&caller)?;
     #[cfg(windows)]
     {
-        Ok(NativeFilesystemResponse::from_result(windows_impl::read()))
+        let result = tauri::async_runtime::spawn_blocking(windows_impl::read)
+            .await
+            .map_err(|_| "The native file clipboard worker stopped unexpectedly.".to_string())?;
+        Ok(NativeFilesystemResponse::from_result(result))
     }
     #[cfg(not(windows))]
     {
@@ -719,7 +722,7 @@ pub fn read_native_file_clipboard(
 }
 
 #[tauri::command]
-pub fn write_native_file_clipboard(
+pub async fn write_native_file_clipboard(
     operation: NativeFileClipboardOperation,
     paths: Vec<String>,
     caller: Webview,
@@ -731,10 +734,17 @@ pub fn write_native_file_clipboard(
             .window()
             .hwnd()
             .map_err(|_| "The trusted Nammu window handle is unavailable.".to_string())?;
-        let owner = windows::Win32::Foundation::HWND(owner.0);
-        Ok(NativeFilesystemResponse::from_result(windows_impl::write(
-            owner, operation, paths,
-        )))
+        let owner = owner.0 as usize;
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            windows_impl::write(
+                windows::Win32::Foundation::HWND(owner as *mut core::ffi::c_void),
+                operation,
+                paths,
+            )
+        })
+        .await
+        .map_err(|_| "The native file clipboard worker stopped unexpectedly.".to_string())?;
+        Ok(NativeFilesystemResponse::from_result(result))
     }
     #[cfg(not(windows))]
     {
@@ -744,7 +754,7 @@ pub fn write_native_file_clipboard(
 }
 
 #[tauri::command]
-pub fn complete_native_file_clipboard(
+pub async fn complete_native_file_clipboard(
     sequence: u32,
     operation: NativeFileClipboardOperation,
     caller: Webview,
@@ -752,9 +762,12 @@ pub fn complete_native_file_clipboard(
     require_trusted_caller(&caller)?;
     #[cfg(windows)]
     {
-        Ok(NativeFilesystemResponse::from_result(
-            windows_impl::complete(sequence, operation),
-        ))
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            windows_impl::complete(sequence, operation)
+        })
+        .await
+        .map_err(|_| "The native file clipboard worker stopped unexpectedly.".to_string())?;
+        Ok(NativeFilesystemResponse::from_result(result))
     }
     #[cfg(not(windows))]
     {

@@ -13,6 +13,7 @@ const CloudApp = lazy(() => import('../cloud/CloudApp'));
 const FilesApp = lazy(() => import('../files/FilesApp'));
 const MapApp = lazy(() => import('../maps/MapApp'));
 const NotesApp = lazy(() => import('./NotesApp').then((module) => ({ default: module.NotesApp })));
+const PdfApp = lazy(() => import('../pdf/PdfApp'));
 const ProjectsApp = lazy(() =>
   import('./ProjectsApp').then((module) => ({ default: module.ProjectsApp })),
 );
@@ -166,7 +167,13 @@ function MailApp() {
   );
 }
 
-export function SystemAppContent({ appId }: { appId: SystemAppId }) {
+export function SystemAppContent({
+  appId,
+  initialData,
+}: {
+  appId: SystemAppId;
+  initialData?: unknown;
+}) {
   let content: ReactNode = null;
   switch (appId) {
     case 'calculator':
@@ -189,6 +196,9 @@ export function SystemAppContent({ appId }: { appId: SystemAppId }) {
       break;
     case 'files':
       content = <FilesApp />;
+      break;
+    case 'pdf':
+      content = <PdfApp initialData={initialData as import('../pdf/model').PdfAppInitialData} />;
       break;
     case 'cloud':
       content = <CloudApp />;

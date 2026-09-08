@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { getDefaultWindowBounds } from '../lib/windowGeometry';
+import { requestManagedWindowClose } from '../lib/windowCloseGuards';
 
 export type SnapEdge =
   'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -61,7 +62,7 @@ export function useWindowManager() {
     return id;
   }, []);
 
-  const closeWindow = useCallback((id: string) => {
+  const removeWindow = useCallback((id: string) => {
     setWindows((prev) => {
       const closing = prev.find((w) => w.id === id);
       let filtered = prev.filter((w) => w.id !== id);
@@ -85,6 +86,13 @@ export function useWindowManager() {
       return filtered;
     });
   }, []);
+
+  const closeWindow = useCallback(
+    (id: string) => {
+      void requestManagedWindowClose(id, () => removeWindow(id));
+    },
+    [removeWindow],
+  );
 
   const focusWindow = useCallback((id: string) => {
     if (activeIdRef.current === id) return;

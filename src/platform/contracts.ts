@@ -624,6 +624,8 @@ export interface NativeFileDragResult {
 
 export interface NativeFileDragDiagnostics {
   registeredTargets: number;
+  dropShieldVisible: boolean;
+  dropShieldExpanded: boolean;
   activeInboundSessions: number;
   activeOutboundSessions: number;
   inboundEnters: number;
@@ -731,6 +733,8 @@ export interface PlatformCapabilities {
   readonly fileDragDrop: PlatformFileDragDrop;
   readonly files: {
     pick(options?: PickFilesOptions): Promise<CapabilityResult<PickedFiles>>;
+    /** Read a user-selected PDF path handed off by the trusted Nammu Files app. */
+    readPdf(path: string): Promise<CapabilityResult<PickedPlatformFile>>;
     save(options: SaveFileOptions): Promise<CapabilityResult<SavedFile>>;
   };
   readonly external: {

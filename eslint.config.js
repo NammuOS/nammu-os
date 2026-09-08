@@ -17,6 +17,7 @@ export default defineConfig([
     'coverage/**',
     'public/**',
     'firefox-wasm/**',
+    'bentopdf/**',
   ]),
   {
     files: ['**/*.{ts,tsx,js,mjs}'],
