@@ -44,6 +44,546 @@ html[data-theme='horizon'][data-appearance='light'] {
   --hz-shadow-card: inset 0 1px rgba(255, 255, 255, 0.76), 0 10px 30px rgba(53, 35, 23, 0.09);
 }
 
+/* Compact, neutral scrollbars belong to the OS chrome rather than the accent system. */
+html,
+html * {
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+  scrollbar-width: thin;
+}
+
+html[data-appearance='light'],
+html[data-appearance='light'] * {
+  scrollbar-color: rgba(24, 20, 17, 0.25) transparent !important;
+}
+
+::-webkit-scrollbar,
+.os-scrollbar::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+::-webkit-scrollbar-track,
+.os-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb,
+.os-scrollbar::-webkit-scrollbar-thumb {
+  min-height: 24px;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  background-clip: padding-box !important;
+}
+
+[data-appearance='light'] ::-webkit-scrollbar-thumb,
+[data-appearance='light'] .os-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(24, 20, 17, 0.25) !important;
+}
+
+::-webkit-scrollbar-thumb:hover,
+.os-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4) !important;
+}
+
+[data-appearance='light'] ::-webkit-scrollbar-thumb:hover,
+[data-appearance='light'] .os-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(24, 20, 17, 0.4) !important;
+}
+
+/* Horizon starts with the warm Horizon 21 artwork. Wallpaper selection owns the
+   live accent, so legacy electric blue never becomes a second theme color. */
+[data-theme='horizon'] .os-desktop {
+  background: #130d09 url('/wallpapers/horizon/21.avif') center / cover no-repeat fixed;
+}
+
+[data-theme='horizon'] .desktop-grid {
+  display: none !important;
+}
+
+/* Translate Cyber-era blue utility classes across the complete trusted shell,
+   including Start, desktop widgets, window chrome, apps, and tools. */
+[data-theme='horizon']
+  .nammu-os-shell
+  :is(
+    [class*='text-[#4aa3ff]'],
+    [class*='text-[#8ec4ff]'],
+    [class*='text-[#91c5ff]'],
+    [class*='text-[#9ecaff]'],
+    [class*='text-[#a8d3ff]'],
+    [class*='text-[#acd5ff]'],
+    [class*='text-[#72b5ff]'],
+    [class*='text-[#2aabee]'],
+    [class*='text-[#38bdf8]'],
+    [class*='text-[#64b5f6]'],
+    [class*='text-electric'],
+    [class*='text-cyan'],
+    [class*='text-blue'],
+    [class*='text-sky']
+  ) {
+  color: var(--color-os-accent) !important;
+}
+
+[data-theme='horizon']
+  .nammu-os-shell
+  :is(
+    [class*='bg-[#4aa3ff]'],
+    [class*='bg-[#2aabee]'],
+    [class*='bg-electric'],
+    [class*='bg-cyan'],
+    [class*='bg-blue'],
+    [class*='bg-sky']
+  ) {
+  background-color: color-mix(in srgb, var(--color-os-accent) 18%, transparent) !important;
+}
+
+[data-theme='horizon']
+  .nammu-os-shell
+  :is(
+    [class*='border-[#4aa3ff]'],
+    [class*='border-[#2aabee]'],
+    [class*='border-electric'],
+    [class*='border-cyan'],
+    [class*='border-blue'],
+    [class*='border-sky']
+  ) {
+  border-color: color-mix(in srgb, var(--color-os-accent) 40%, transparent) !important;
+}
+
+/* Horizon has a floating dock, not reserved desktop chrome. Snapped windows and
+   their previews meet the true workspace edges while respecting Music at right. */
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='left'],
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='right'] {
+  top: 0 !important;
+  width: calc((100vw - var(--window-right-inset, 0px)) / 2) !important;
+  height: 100vh !important;
+}
+
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='left'] {
+  left: 0 !important;
+}
+
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='right'] {
+  left: calc((100vw - var(--window-right-inset, 0px)) / 2) !important;
+}
+
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='top'],
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='bottom'] {
+  left: 0 !important;
+  width: calc(100vw - var(--window-right-inset, 0px)) !important;
+  height: 50vh !important;
+}
+
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='top'] {
+  top: 0 !important;
+}
+
+[data-theme='horizon'] :is(.os-window-docked, .os-snap-preview)[data-snap='bottom'] {
+  top: 50vh !important;
+}
+
+[data-theme='horizon']
+  :is(.os-window-docked, .os-snap-preview):is(
+    [data-snap='top-left'],
+    [data-snap='top-right'],
+    [data-snap='bottom-left'],
+    [data-snap='bottom-right']
+  ) {
+  width: calc((100vw - var(--window-right-inset, 0px)) / 2) !important;
+  height: 50vh !important;
+}
+
+[data-theme='horizon']
+  :is(.os-window-docked, .os-snap-preview):is([data-snap='top-left'], [data-snap='bottom-left']) {
+  left: 0 !important;
+}
+
+[data-theme='horizon']
+  :is(.os-window-docked, .os-snap-preview):is([data-snap='top-right'], [data-snap='bottom-right']) {
+  left: calc((100vw - var(--window-right-inset, 0px)) / 2) !important;
+}
+
+[data-theme='horizon']
+  :is(.os-window-docked, .os-snap-preview):is([data-snap='top-left'], [data-snap='top-right']) {
+  top: 0 !important;
+}
+
+[data-theme='horizon']
+  :is(.os-window-docked, .os-snap-preview):is(
+    [data-snap='bottom-left'],
+    [data-snap='bottom-right']
+  ) {
+  top: 50vh !important;
+}
+
+[data-theme='horizon'] .os-snap-preview {
+  border-color: color-mix(in srgb, var(--color-os-accent) 48%, transparent) !important;
+  border-radius: 0 !important;
+  background: color-mix(in srgb, var(--color-os-accent) 11%, transparent) !important;
+  box-shadow: inset 0 0 28px color-mix(in srgb, var(--color-os-accent) 9%, transparent) !important;
+}
+
+/* Spotlight-style desktop command surface. Horizon intentionally removes the
+   old telemetry wordmark and shortcut chips so the search field is the anchor. */
+[data-theme='horizon'] .nammu-identity {
+  top: 14px !important;
+  right: 0 !important;
+  left: 0 !important;
+}
+
+[data-theme='horizon'] .nammu-identity > div {
+  padding: 0 !important;
+}
+
+[data-theme='horizon']
+  .nammu-identity
+  :is(
+    .identity-meta,
+    .identity-greeting,
+    .identity-wordmark,
+    .identity-coordinates,
+    .identity-actions
+  ) {
+  display: none !important;
+}
+
+[data-theme='horizon'] .identity-search-wrap {
+  width: min(520px, calc(100vw - 48px)) !important;
+  max-width: none !important;
+  margin-top: 0 !important;
+}
+
+[data-theme='horizon'] .desktop-search-field {
+  height: 50px !important;
+  gap: 12px !important;
+  padding: 0 12px 0 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important;
+  border-radius: 999px !important;
+  color: var(--hz-text);
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.025) 42%),
+    color-mix(in srgb, rgba(12, 9, 8, 0.72) 86%, var(--color-os-accent) 14%) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.17),
+    inset 0 -1px rgba(0, 0, 0, 0.3),
+    0 13px 34px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(30px) saturate(145%) brightness(88%);
+}
+
+[data-theme='horizon'] .desktop-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--color-os-accent) 48%, rgba(255, 255, 255, 0.3)) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.2),
+    0 18px 48px rgba(0, 0, 0, 0.4),
+    0 0 0 3px color-mix(in srgb, var(--color-os-accent) 14%, transparent);
+}
+
+[data-theme='horizon'] .identity-search-icon {
+  display: block !important;
+  width: 18px;
+  height: 18px;
+  color: var(--hz-text-soft) !important;
+}
+
+[data-theme='horizon'] .identity-command-icon,
+[data-theme='horizon'] .desktop-search-submit {
+  display: none !important;
+}
+
+[data-theme='horizon'] .desktop-search-field .cmd-input {
+  color: var(--hz-text) !important;
+  font-size: 14px !important;
+  font-weight: 450;
+  letter-spacing: -0.01em !important;
+}
+
+[data-theme='horizon'] .desktop-search-field .cmd-input::placeholder {
+  color: var(--hz-text-muted) !important;
+  opacity: 1;
+}
+
+[data-theme='horizon'] .desktop-search-key {
+  display: flex !important;
+  height: 28px;
+  align-items: center;
+  padding: 0 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 12px !important;
+  color: var(--hz-text-soft) !important;
+  background: rgba(255, 255, 255, 0.085) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  font-weight: 550;
+  letter-spacing: 0 !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='horizon'][data-appearance='light'] .desktop-search-field {
+  border-color: rgba(255, 255, 255, 0.62) !important;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.22) 48%),
+    rgba(243, 235, 227, 0.68) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.86),
+    0 16px 42px rgba(61, 37, 23, 0.2),
+    0 0 0 1px rgba(49, 29, 18, 0.12);
+  backdrop-filter: blur(30px) saturate(135%);
+}
+
+[data-theme='horizon'] .search-launcher-shell {
+  top: 76px !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+}
+
+/* Start and Dock intentionally share one neutral material. Wallpaper accents may
+   indicate focus, but never recolor the panel or turn every app into a different tile. */
+[data-theme='horizon'] .start-menu-layer {
+  bottom: 0 !important;
+}
+
+[data-theme='horizon'] .start-menu-panel {
+  bottom: 84px !important;
+  left: max(14px, calc(50vw - 306px)) !important;
+  width: 392px !important;
+  max-height: min(680px, calc(100vh - 116px)) !important;
+  padding: 14px !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 22px !important;
+  color: var(--hz-text);
+  background: rgba(0, 0, 0, 0.4) !important;
+  box-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 14px 34px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-sans) !important;
+  backdrop-filter: blur(20px) saturate(120%) brightness(85%);
+}
+
+[data-theme='horizon'] .start-menu-search {
+  min-height: 40px;
+  padding: 0 12px !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 13px !important;
+  background: rgba(255, 255, 255, 0.065) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='horizon'] .start-menu-search:focus-within {
+  border-color: color-mix(in srgb, var(--color-os-accent) 42%, var(--hz-line)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-os-accent) 12%, transparent);
+}
+
+[data-theme='horizon'] .start-menu-search input {
+  color: var(--hz-text) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 13px !important;
+}
+
+[data-theme='horizon'] .start-menu-panel .font-mono {
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] .start-menu-search > svg,
+[data-theme='horizon'] .start-menu-result > svg {
+  color: var(--hz-text-soft) !important;
+}
+
+[data-theme='horizon'] .start-menu-app {
+  min-height: 74px;
+  border: 1px solid transparent;
+  border-radius: 15px !important;
+  color: var(--hz-text-muted) !important;
+}
+
+[data-theme='horizon'] .start-menu-app:hover {
+  border-color: var(--hz-line) !important;
+  color: var(--hz-text) !important;
+  background: rgba(255, 255, 255, 0.065) !important;
+}
+
+[data-theme='horizon'] .start-menu-app-icon {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: var(--hz-text-soft);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.105), transparent 46%), rgba(255, 255, 255, 0.055);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 7px 16px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme='horizon'] .start-menu-app-icon svg {
+  color: currentColor !important;
+}
+
+[data-theme='horizon'] .start-menu-app:hover .start-menu-app-icon {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--hz-text);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+[data-theme='horizon'] .start-menu-app > span:last-child {
+  color: var(--hz-text-soft) !important;
+  font-size: 10.5px !important;
+  font-weight: 500;
+  letter-spacing: 0 !important;
+  text-transform: none;
+}
+
+[data-theme='horizon'] .start-menu-result {
+  min-height: 38px;
+  border-radius: 11px !important;
+  color: var(--hz-text-soft);
+}
+
+[data-theme='horizon'] .start-menu-result:hover {
+  color: var(--hz-text) !important;
+  background: rgba(255, 255, 255, 0.065) !important;
+}
+
+[data-theme='horizon'][data-appearance='light'] .start-menu-panel {
+  border-color: rgba(60, 60, 67, 0.16) !important;
+  background: rgba(248, 248, 250, 0.82) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.84),
+    0 14px 34px rgba(61, 37, 23, 0.2);
+}
+
+[data-theme='horizon'] .taskbar-start-button img {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.28));
+}
+
+.macos-menu-mark:is(img) {
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  object-fit: contain;
+}
+
+/* Match the proven macOS rail geometry while retaining Horizon's own material recipe. */
+[data-theme='horizon'] .os-rail {
+  top: 50% !important;
+  bottom: auto !important;
+  left: 10px !important;
+  width: 44px !important;
+  max-height: calc(100vh - 180px);
+  padding: 7px 0 !important;
+  transform: translate3d(-58px, -50%, 0);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 160ms ease;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* This invisible edge target makes the rail reveal without a permanent visual handle. */
+[data-theme='horizon'] .os-rail::after {
+  position: absolute;
+  top: 0;
+  right: -18px;
+  bottom: 0;
+  width: 18px;
+  content: '';
+}
+
+[data-theme='horizon'] .os-rail:hover,
+[data-theme='horizon'] .os-rail:focus-within {
+  transform: translate3d(0, -50%, 0);
+  opacity: 1;
+}
+
+[data-theme='horizon'] .os-rail button {
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px;
+}
+
+/* Running and pinned apps share one dock treatment; running state is not underlined. */
+[data-theme='horizon'] .taskbar-button-unpinned {
+  opacity: 1 !important;
+}
+
+[data-theme='horizon'] .taskbar-button-unpinned:hover,
+[data-theme='horizon'] .taskbar-button-unpinned.active {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+[data-theme='horizon'] .taskbar-button.active > .absolute {
+  display: none !important;
+}
+
+[data-theme='horizon'] .window-control {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+/* Horizon and macOS maximize into the full workspace; their docks remain edge-revealable. */
+[data-theme='horizon'] .desktop-has-maximized .os-window-maximized,
+[data-theme='macos'] .desktop-has-maximized .os-window-maximized {
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+}
+
+[data-theme='horizon'] .desktop-has-maximized .os-rail,
+[data-theme='horizon'] .desktop-has-maximized .music-sidebar,
+[data-theme='macos'] .desktop-has-maximized .os-rail,
+[data-theme='macos'] .desktop-has-maximized .music-sidebar {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.taskbar-reveal-zone {
+  display: none;
+}
+
+[data-theme='horizon'] .taskbar-reveal-zone,
+[data-theme='macos'] .taskbar-reveal-zone {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9997;
+  display: block;
+  height: 18px;
+}
+
+[data-theme='horizon'] .taskbar-auto-hide,
+[data-theme='macos'] .taskbar-auto-hide {
+  translate: 0 calc(100% + 24px);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    translate 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 150ms ease;
+}
+
+[data-theme='horizon'] .taskbar-reveal-zone:hover + .taskbar-auto-hide,
+[data-theme='horizon'] .taskbar-auto-hide:hover,
+[data-theme='horizon'] .taskbar-auto-hide:focus-within,
+[data-theme='macos'] .taskbar-reveal-zone:hover + .taskbar-auto-hide,
+[data-theme='macos'] .taskbar-auto-hide:hover,
+[data-theme='macos'] .taskbar-auto-hide:focus-within {
+  translate: 0 0;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Startup is a continuation of the desktop, not a second branded boot sequence. */
 .horizon-boot-surface,
 .horizon-app-loading {
@@ -145,6 +685,110 @@ html[data-theme='horizon'][data-appearance='light'] {
   to {
     opacity: 0.5;
   }
+}
+
+/* Native standalone windows use Nammu chrome rather than an unreliable second
+   browser page. The titlebar is intentionally generic so every theme can host it. */
+.standalone-window-titlebar {
+  position: relative;
+  z-index: 10000;
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hz-line, rgba(255, 255, 255, 0.09));
+  color: var(--hz-text-soft, rgba(255, 255, 255, 0.78));
+  background: color-mix(in srgb, var(--hz-canvas, #100e0c) 84%, transparent);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+  user-select: none;
+  -webkit-app-region: drag;
+  backdrop-filter: blur(22px) saturate(125%);
+}
+
+.standalone-window-identity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  padding-left: 11px;
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+}
+
+.standalone-window-identity img {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  border-radius: 7px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.24));
+}
+
+.standalone-window-controls {
+  display: flex;
+  height: 40px;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+
+.standalone-window-controls button {
+  display: grid;
+  width: 44px;
+  min-width: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 0 !important;
+  color: var(--hz-text-muted, rgba(255, 255, 255, 0.58));
+  background: transparent;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.standalone-window-controls button:hover {
+  color: var(--hz-text, #fffaf6);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.standalone-window-controls .standalone-window-close:hover {
+  color: #fff;
+  background: #c42b1c;
+}
+
+.desktop-startup-error {
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  place-items: center;
+  padding: 24px;
+  color: #fffaf6;
+  background: radial-gradient(circle at 50% 40%, rgba(242, 92, 13, 0.12), transparent 34%), #100e0c;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+.desktop-startup-error-panel {
+  width: min(440px, 100%);
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
+}
+
+.desktop-startup-error-panel h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.desktop-startup-error-panel p {
+  margin: 8px 0 0;
+  color: rgba(255, 250, 246, 0.62);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 [data-theme='horizon'] .nammu-os-shell,
@@ -788,7 +1432,11 @@ html[data-theme='horizon'][data-appearance='light'] {
 /* The persistent music workspace is shell UI rather than a registered app, so it
    receives the same tokens explicitly. */
 [data-theme='horizon'] .music-sidebar {
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   border-color: var(--hz-line) !important;
+  border-radius: 0 !important;
   color: var(--hz-text);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 96px),

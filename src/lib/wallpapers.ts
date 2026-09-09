@@ -10,6 +10,9 @@ export interface Wallpaper {
 
 export type MatrixWallpaperVariant = 'synth-rain' | 'chaos-flow';
 
+export const DEFAULT_HORIZON_WALLPAPER_SRC = '/wallpapers/horizon/21.avif';
+export const DEFAULT_HORIZON_WALLPAPER_ACCENT = '#f25c0d';
+
 export interface MatrixEffectSettings {
   color: string;
   speed: number;
@@ -45,7 +48,7 @@ export const WALLPAPERS: Wallpaper[] = [
     ['18', '#6f30ff'],
     ['19', '#158cd1'],
     ['20', '#6f30ff'],
-    ['21', '#e1431c'],
+    ['21', DEFAULT_HORIZON_WALLPAPER_ACCENT],
     ['22', '#62a032'],
     ['23', '#f25c0d'],
     ['24', '#107bd0'],
@@ -76,23 +79,12 @@ export const WALLPAPERS: Wallpaper[] = [
     preview:
       'radial-gradient(circle at 20% 20%, rgba(255,0,153,.7), transparent 28%), radial-gradient(circle at 78% 35%, rgba(0,220,255,.65), transparent 32%), radial-gradient(circle at 48% 90%, rgba(91,255,68,.5), transparent 35%), #070611',
   },
-  {
-    id: 'whale',
-    name: 'Whale',
-    src: '/wallpapers/whale.webp',
-    kind: 'image',
-    description: 'Deep ocean scene',
-  },
-  {
-    id: 'high-tech-city',
-    name: 'High-Tech City',
-    src: '/wallpapers/high-tech city.webp',
-    kind: 'image',
-    description: 'Futuristic cityscape',
-  },
 ];
 
 export const WALLPAPER_STORAGE_KEY = 'nammu-wallpaper';
+const WALLPAPER_NONE_VALUE = 'none';
+const WALLPAPER_DEFAULT_VERSION_KEY = 'nammu-wallpaper-default-version';
+const WALLPAPER_DEFAULT_VERSION = 'horizon-21-v1';
 export const WALLPAPER_CHANGE_EVENT = 'nammu-wallpaper-change';
 export const WALLPAPER_MASK_STORAGE_KEY = 'nammu-wallpaper-mask';
 export const WALLPAPER_MASK_CHANGE_EVENT = 'nammu-wallpaper-mask-change';
@@ -159,16 +151,25 @@ export function saveMatrixEffectSettings(
 
 export function getSavedWallpaper(): string | null {
   try {
-    return localStorage.getItem(WALLPAPER_STORAGE_KEY);
+    const stored = localStorage.getItem(WALLPAPER_STORAGE_KEY);
+    const saved = stored === WALLPAPER_NONE_VALUE ? null : stored;
+    const defaultVersion = localStorage.getItem(WALLPAPER_DEFAULT_VERSION_KEY);
+    if (defaultVersion !== WALLPAPER_DEFAULT_VERSION) {
+      localStorage.setItem(WALLPAPER_DEFAULT_VERSION_KEY, WALLPAPER_DEFAULT_VERSION);
+      if (stored !== WALLPAPER_NONE_VALUE && (!saved || saved === '/wallpapers/horizon/23.avif')) {
+        localStorage.setItem(WALLPAPER_STORAGE_KEY, DEFAULT_HORIZON_WALLPAPER_SRC);
+        return DEFAULT_HORIZON_WALLPAPER_SRC;
+      }
+    }
+    return stored === WALLPAPER_NONE_VALUE ? null : saved || DEFAULT_HORIZON_WALLPAPER_SRC;
   } catch {
-    return null;
+    return DEFAULT_HORIZON_WALLPAPER_SRC;
   }
 }
 
 export function saveWallpaper(src: string | null) {
   try {
-    if (src) localStorage.setItem(WALLPAPER_STORAGE_KEY, src);
-    else localStorage.removeItem(WALLPAPER_STORAGE_KEY);
+    localStorage.setItem(WALLPAPER_STORAGE_KEY, src || WALLPAPER_NONE_VALUE);
   } catch {}
 
   window.dispatchEvent(
@@ -179,8 +180,12 @@ export function saveWallpaper(src: string | null) {
 }
 
 export function getWallpaperName(src: string | null): string {
-  if (!src) return 'Horizon 23';
+  if (!src) return 'Horizon 21';
   return WALLPAPERS.find((wp) => wp.src === src)?.name || 'Custom';
+}
+
+export function getWallpaperAccent(src: string | null): string | undefined {
+  return WALLPAPERS.find((wallpaper) => wallpaper.src === src)?.accent;
 }
 
 export function getSavedWallpaperMask(): boolean {

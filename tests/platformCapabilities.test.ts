@@ -271,6 +271,7 @@ function tauriEnvironment(
     isNotificationPermissionGranted: async () => false,
     requestNotificationPermission: async () => 'denied',
     sendNotification: () => undefined,
+    openStandaloneWindow: async () => undefined,
     minimizeWindow: async () => undefined,
     toggleMaximizeWindow: async () => undefined,
     closeWindow: async () => undefined,
@@ -357,7 +358,12 @@ describe('platform capabilities', () => {
     expect(Object.keys(firstWeb.external)).toEqual(['openUrl']);
     expect(Object.keys(firstWeb.clipboard).sort()).toEqual(['readText', 'writeText']);
     expect(Object.keys(firstWeb.notifications).sort()).toEqual(['requestPermission', 'show']);
-    expect(Object.keys(firstWeb.window).sort()).toEqual(['close', 'minimize', 'toggleMaximize']);
+    expect(Object.keys(firstWeb.window).sort()).toEqual([
+      'close',
+      'minimize',
+      'openStandalone',
+      'toggleMaximize',
+    ]);
   });
 
   test('uses same-origin web services without desktop authorization', async () => {
@@ -607,6 +613,7 @@ describe('platform capabilities', () => {
   test('uses the native text clipboard, validated opener, and host window operations', async () => {
     let clipboard = 'initial';
     const opened: string[] = [];
+    const standaloneWindows: string[] = [];
     const windowOperations: string[] = [];
     const platform = createTauriPlatformCapabilities(
       tauriEnvironment({
@@ -616,6 +623,9 @@ describe('platform capabilities', () => {
         },
         openUrl: async (url) => {
           opened.push(url);
+        },
+        openStandaloneWindow: async (url, title) => {
+          standaloneWindows.push(`${title}|${url}`);
         },
         minimizeWindow: async () => {
           windowOperations.push('minimize');
@@ -643,6 +653,16 @@ describe('platform capabilities', () => {
       value: undefined,
     });
     expect(opened).toEqual(['https://example.com/']);
+    expect(await platform.window.openStandalone('/apps/youtube-music', 'YouTube Music')).toEqual({
+      status: 'success',
+      value: undefined,
+    });
+    expect(standaloneWindows).toEqual(['YouTube Music|/apps/youtube-music']);
+    expect(await platform.window.openStandalone('https://example.com', 'Unsafe')).toEqual({
+      status: 'error',
+      code: 'invalid-input',
+      message: 'The standalone Nammu route is invalid.',
+    });
     await platform.window.minimize();
     await platform.window.toggleMaximize();
     await platform.window.close();

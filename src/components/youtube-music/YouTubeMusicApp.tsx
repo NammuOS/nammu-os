@@ -265,7 +265,11 @@ function applyPreferencesCommand(
     ${plugins['performance-improvement'] ? 'ytmusic-app:not(:focus-within) #background, ytmusic-app:not(:focus-within) .animated-thumbnail { animation-play-state: paused !important; }' : ''}
     ${foregroundVisuals ? '' : '#background, .animated-thumbnail { animation-play-state: paused !important; }'}
     ${plugins.adblocker ? '.ytp-ad-module, .ytp-ad-overlay-container, ytmusic-mealbar-promo-renderer, ytmusic-statement-banner-renderer, ytd-ad-slot-renderer, #masthead-ad { display: none !important; visibility: hidden !important; }' : ''}
-    * { scrollbar-color: rgba(74,163,255,.45) rgba(255,255,255,.025) !important; }
+    * { scrollbar-color: rgba(255,255,255,.26) transparent !important; scrollbar-width: thin !important; }
+    *::-webkit-scrollbar { width: 5px !important; height: 5px !important; }
+    *::-webkit-scrollbar-track { background: transparent !important; }
+    *::-webkit-scrollbar-thumb { background: rgba(255,255,255,.26) !important; border: 1px solid transparent !important; border-radius: 999px !important; background-clip: padding-box !important; }
+    *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.42) !important; }
     ::selection { background: rgba(74,163,255,.3) !important; }
   `;
   return `

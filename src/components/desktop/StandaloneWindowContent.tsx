@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { Minus, Square, X } from 'lucide-react';
 import { findToolById } from '../../lib/toolRegistry';
 import { SYSTEM_APPS } from '../os/systemAppRegistry';
 import { SystemAppContent } from '../os/SystemApps';
@@ -13,6 +14,8 @@ import {
   DEFAULT_SYSTEM_THEME,
   resolveInitialSystemTheme,
 } from '../../lib/systemTheme';
+import { getSavedWallpaper, getWallpaperAccent } from '../../lib/wallpapers';
+import { getPlatformCapabilities } from '../../platform';
 
 interface StandaloneWindowContentProps {
   kind: string;
@@ -28,6 +31,7 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
   const tool = kind === 'tool' ? findToolById(id) : undefined;
   const ToolComponent = tool ? TOOL_COMPONENTS[tool.component] : undefined;
   const title = systemApp?.title || tool?.name || 'Unavailable';
+  const platform = useMemo(() => getPlatformCapabilities(), []);
   const safeArea = useMemo(() => ({ left: 0, right: 0, top: 0, bottom: 0, margin: 6 }), []);
   const clientReady = useSyncExternalStore(
     subscribeToClientReady,
@@ -51,7 +55,12 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.setAttribute('data-appearance', appearance);
         document.documentElement.style.colorScheme = appearance;
-        const accentColor = migratedLegacyDefault ? DEFAULT_SYSTEM_ACCENT : parsed.accentColor;
+        const accentColor =
+          theme === 'horizon'
+            ? getWallpaperAccent(getSavedWallpaper()) || DEFAULT_SYSTEM_ACCENT
+            : migratedLegacyDefault
+              ? DEFAULT_SYSTEM_ACCENT
+              : parsed.accentColor;
         if (accentColor) {
           document.documentElement.style.setProperty('--os-accent', accentColor);
           document.documentElement.style.setProperty('--color-os-accent', accentColor);
@@ -78,6 +87,8 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
         document.documentElement.setAttribute('data-appearance', 'dark');
         document.documentElement.setAttribute('data-reduced-motion', 'off');
         document.documentElement.style.colorScheme = 'dark';
+        document.documentElement.style.setProperty('--os-accent', DEFAULT_SYSTEM_ACCENT);
+        document.documentElement.style.setProperty('--color-os-accent', DEFAULT_SYSTEM_ACCENT);
       }
     } catch {}
 
@@ -107,46 +118,81 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
 
   return (
     <ContextMenuProvider safeArea={safeArea}>
-      <main className="nammu-os-shell h-dvh w-screen overflow-hidden bg-[#05070b]">
-        {!clientReady ? (
-          <div className="horizon-app-loading h-full" aria-label={`Opening ${title}`}>
-            <div className="horizon-app-loading-sidebar" aria-hidden="true" />
-            <div className="horizon-app-loading-content" aria-hidden="true">
-              <span className="horizon-app-loading-title" />
-              <span />
-              <span />
-              <span />
-            </div>
+      <main className="standalone-window-shell nammu-os-shell flex h-dvh w-screen flex-col overflow-hidden bg-[#05070b]">
+        <header className="standalone-window-titlebar shrink-0" data-tauri-drag-region>
+          <div className="standalone-window-identity" data-tauri-drag-region>
+            <img src="/branding/nammu-logo.webp" alt="" aria-hidden="true" />
+            <span data-tauri-drag-region>{title}</span>
           </div>
-        ) : systemApp ? (
-          <SystemAppContent appId={systemApp.id} />
-        ) : ToolComponent ? (
-          <Suspense
-            fallback={
-              <div className="horizon-app-loading h-full" aria-label={`Opening ${title}`} />
-            }
-          >
-            <div
-              data-nammu-tool={tool?.id}
-              className={
-                tool?.id === 'subdomain-discovery'
-                  ? 'nammu-app-surface h-full'
-                  : 'nammu-app-surface h-full overflow-auto p-3'
-              }
+          <div className="standalone-window-controls" aria-label="Window controls">
+            <button
+              type="button"
+              onClick={() => void platform.window.minimize()}
+              aria-label="Minimize window"
+              title="Minimize"
             >
-              <ToolComponent />
-            </div>
-          </Suspense>
-        ) : (
-          <div className="grid h-full place-items-center bg-os-bg px-6 text-center">
-            <div>
-              <div className="text-sm font-semibold text-[#d6e5f0]">Cannot open this item</div>
-              <div className="mt-1 text-[11px] text-[#70869a]">
-                This app or tool is not available as a standalone window.
+              <Minus size={14} strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onClick={() => void platform.window.toggleMaximize()}
+              aria-label="Maximize or restore window"
+              title="Maximize or restore"
+            >
+              <Square size={12} strokeWidth={1.7} />
+            </button>
+            <button
+              type="button"
+              className="standalone-window-close"
+              onClick={() => void platform.window.close()}
+              aria-label="Close window"
+              title="Close"
+            >
+              <X size={14} strokeWidth={1.8} />
+            </button>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {!clientReady ? (
+            <div className="horizon-app-loading h-full" aria-label={`Opening ${title}`}>
+              <div className="horizon-app-loading-sidebar" aria-hidden="true" />
+              <div className="horizon-app-loading-content" aria-hidden="true">
+                <span className="horizon-app-loading-title" />
+                <span />
+                <span />
+                <span />
               </div>
             </div>
-          </div>
-        )}
+          ) : systemApp ? (
+            <SystemAppContent appId={systemApp.id} />
+          ) : ToolComponent ? (
+            <Suspense
+              fallback={
+                <div className="horizon-app-loading h-full" aria-label={`Opening ${title}`} />
+              }
+            >
+              <div
+                data-nammu-tool={tool?.id}
+                className={
+                  tool?.id === 'subdomain-discovery'
+                    ? 'nammu-app-surface h-full'
+                    : 'nammu-app-surface h-full overflow-auto p-3'
+                }
+              >
+                <ToolComponent />
+              </div>
+            </Suspense>
+          ) : (
+            <div className="grid h-full place-items-center bg-os-bg px-6 text-center">
+              <div>
+                <div className="text-sm font-semibold text-[#d6e5f0]">Cannot open this item</div>
+                <div className="mt-1 text-[11px] text-[#70869a]">
+                  This app or tool is not available as a standalone window.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <ContextMenu />
       </main>
     </ContextMenuProvider>

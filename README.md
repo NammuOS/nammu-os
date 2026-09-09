@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/favicon.svg" width="78" alt="Nammu OS mark" />
+  <img src="./public/branding/nammu-logo.webp" width="78" alt="Nammu OS mark" />
 
 # Nammu OS
 

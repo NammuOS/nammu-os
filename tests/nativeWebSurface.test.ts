@@ -134,7 +134,7 @@ describe('native web-surface boundary', () => {
     expect(listeners.size).toBe(0);
   });
 
-  test('scopes native permissions to the local main webview and no remote origin', () => {
+  test('scopes native permissions to local trusted shell webviews and no remote origin', () => {
     const capability = JSON.parse(
       readFileSync(join(repositoryRoot, 'src-tauri/capabilities/main.json'), 'utf8'),
     ) as {
@@ -145,10 +145,12 @@ describe('native web-surface boundary', () => {
       permissions?: string[];
     };
     expect(capability.local).toBe(true);
-    expect(capability.webviews).toEqual(['main']);
+    expect(capability.webviews).toEqual(['main', 'standalone-*']);
     expect(capability.windows).toBeUndefined();
     expect(capability.remote).toBeUndefined();
     expect(capability.permissions).toContain('allow-create-web-surface');
+    expect(capability.permissions).toContain('allow-open-standalone-window');
+    expect(capability.permissions).toContain('allow-get-standalone-bootstrap');
     expect(capability.permissions).not.toContain('core:webview:allow-create-webview');
   });
 
@@ -170,5 +172,32 @@ describe('native web-surface boundary', () => {
     expect(source).not.toContain("getItem('nammu-browser-renderer')");
     expect(source).not.toContain('Falling back to Gecko');
     expect(source).not.toContain('setNativeSurfaceFailed');
+  });
+
+  test('loads standalone windows from the local entry with a Rust-owned typed route', () => {
+    const nativeWindow = readFileSync(
+      join(repositoryRoot, 'src-tauri/src/standalone_window.rs'),
+      'utf8',
+    );
+    const desktopEntry = readFileSync(join(repositoryRoot, 'desktop/main.tsx'), 'utf8');
+    const standaloneShell = readFileSync(
+      join(repositoryRoot, 'src/components/desktop/StandaloneWindowContent.tsx'),
+      'utf8',
+    );
+
+    expect(nativeWindow).toContain('WebviewUrl::App(PathBuf::from("index.html"))');
+    expect(nativeWindow).toContain('pub async fn open_standalone_window(');
+    expect(nativeWindow).toContain('leaving\n    // a visible native window permanently parked at about:blank');
+    expect(nativeWindow).toContain('StandaloneWindowState');
+    expect(nativeWindow).toContain('get_standalone_bootstrap');
+    expect(nativeWindow).toContain('.decorations(false)');
+    expect(nativeWindow).not.toContain('.initialization_script(');
+    expect(nativeWindow).not.toContain('index.html?nammuStandaloneKind=');
+    expect(desktopEntry).toContain(
+      "return invoke<StandaloneBootstrap | null>('get_standalone_bootstrap')",
+    );
+    expect(desktopEntry).not.toContain('__NAMMU_STANDALONE__');
+    expect(standaloneShell).toContain('standalone-window-titlebar');
+    expect(standaloneShell).toContain('platform.window.close()');
   });
 });

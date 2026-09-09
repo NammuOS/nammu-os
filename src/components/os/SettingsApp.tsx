@@ -35,6 +35,7 @@ import {
   getSavedMatrixEffectSettings,
   getSavedWallpaper,
   getSavedWallpaperMask,
+  getWallpaperAccent,
   getWallpaperName,
   saveMatrixEffectSettings,
   saveWallpaper,
@@ -254,14 +255,20 @@ export function SettingsApp() {
         parsed.themeStyle,
         localStorage,
       );
+      const horizonAccent =
+        savedTheme === 'horizon'
+          ? getWallpaperAccent(getSavedWallpaper()) || DEFAULT_SYSTEM_ACCENT
+          : undefined;
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
         ...normalizeIconSettings(parsed),
         themeStyle: savedTheme,
-        accentColor: migratedLegacyDefault
-          ? DEFAULT_SYSTEM_ACCENT
-          : parsed.accentColor || DEFAULT_SETTINGS.accentColor,
+        accentColor:
+          horizonAccent ||
+          (migratedLegacyDefault
+            ? DEFAULT_SYSTEM_ACCENT
+            : parsed.accentColor || DEFAULT_SETTINGS.accentColor),
         enableScanlines: migratedLegacyDefault ? false : parsed.enableScanlines !== false,
         appearance: parsed.appearance === 'light' ? 'light' : 'dark',
       };
@@ -387,10 +394,11 @@ export function SettingsApp() {
     setWallpaperSrc(src);
     saveWallpaper(src);
     const wallpaper = src ? WALLPAPERS.find((candidate) => candidate.src === src) : undefined;
-    if (settings.themeStyle === 'horizon' && wallpaper?.accent) {
-      setSettings((current) => ({ ...current, accentColor: wallpaper.accent! }));
-    } else if (settings.themeStyle === 'horizon' && src === null) {
-      setSettings((current) => ({ ...current, accentColor: DEFAULT_SYSTEM_ACCENT }));
+    if (settings.themeStyle === 'horizon') {
+      setSettings((current) => ({
+        ...current,
+        accentColor: wallpaper?.accent || DEFAULT_SYSTEM_ACCENT,
+      }));
     }
   };
 

@@ -91,7 +91,14 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
       <header className="os-lock-menubar absolute inset-x-0 top-0 z-10 flex h-9 items-center justify-between px-4">
         <div className="flex items-center gap-2 font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-os-text-muted">
-          <span className="h-1 w-1 bg-os-accent" /> Nammu OS
+          <img
+            className="h-4 w-4 rounded-[5px] object-contain"
+            src="/branding/nammu-logo.webp"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+          />{' '}
+          Nammu OS
           <span className="text-os-text-dim">/</span>
           <span>Secure session</span>
         </div>

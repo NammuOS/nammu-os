@@ -1,12 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Permissions for the trusted Nammu shell webview only. Remote child webviews intentionally match no capability.",
+  "description": "Permissions for trusted Nammu shell webviews only. Remote child webviews intentionally match no capability.",
   "local": true,
-  "webviews": ["main"],
+  "webviews": ["main", "standalone-*"],
   "permissions": [
     "allow-get-local-service-info",
     "allow-authorize-local-request",
+    "allow-open-standalone-window",
+    "allow-get-standalone-bootstrap",
     "allow-list-native-file-roots",
     "allow-list-native-directory",
     "allow-stat-native-file",

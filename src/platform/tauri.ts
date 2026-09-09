@@ -214,6 +214,7 @@ export interface TauriCapabilityEnvironment {
   isNotificationPermissionGranted(): Promise<boolean>;
   requestNotificationPermission(): Promise<PlatformNotificationPermission>;
   sendNotification(notification: { title: string; body?: string }): void | Promise<void>;
+  openStandaloneWindow(url: string, title: string): Promise<void>;
   minimizeWindow(): Promise<void>;
   toggleMaximizeWindow(): Promise<void>;
   closeWindow(): Promise<void>;
@@ -482,6 +483,9 @@ const tauriCapabilityEnvironment: TauriCapabilityEnvironment = {
   async sendNotification(notification) {
     const { sendNotification } = await import('@tauri-apps/plugin-notification');
     sendNotification(notification);
+  },
+  async openStandaloneWindow(url, title) {
+    await tauriServiceEnvironment.invoke('open_standalone_window', { url, title });
   },
   async minimizeWindow() {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -2659,6 +2663,20 @@ export function createTauriPlatformCapabilities(
       },
     }),
     window: Object.freeze({
+      async openStandalone(url: string, title: string): Promise<CapabilityResult<void>> {
+        if (!/^\/(?:browser|apps\/[a-z0-9-]+|tools\/[a-z0-9-]+)$/u.test(url)) {
+          return invalidInput('The standalone Nammu route is invalid.');
+        }
+        if (!title.trim() || title.length > 120) {
+          return invalidInput('The standalone Nammu window title is invalid.');
+        }
+        try {
+          await environment.openStandaloneWindow(url, title.trim());
+          return success(undefined);
+        } catch (error) {
+          return tauriFailure(error, 'The standalone Nammu window could not be opened.');
+        }
+      },
       async minimize(): Promise<CapabilityResult<void>> {
         try {
           await environment.minimizeWindow();

@@ -189,9 +189,13 @@ export default function Desktop({
 
       <div className="macos-menu-bar" aria-label="MacOS menu bar">
         <div className="macos-menu-leading">
-          <span className="macos-menu-mark" aria-hidden="true">
-            ●
-          </span>
+          <img
+            className="macos-menu-mark"
+            src="/branding/nammu-logo.webp"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+          />
           <strong>Nammu OS</strong>
           <span>File</span>
           <span>Edit</span>

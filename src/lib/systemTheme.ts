@@ -1,9 +1,11 @@
+import { DEFAULT_HORIZON_WALLPAPER_ACCENT } from './wallpapers';
+
 export const SYSTEM_THEME_IDS = ['horizon', 'cyber', 'macos', 'obsidian', 'midnight'] as const;
 
 export type SystemTheme = (typeof SYSTEM_THEME_IDS)[number];
 
 export const DEFAULT_SYSTEM_THEME: SystemTheme = 'horizon';
-export const DEFAULT_SYSTEM_ACCENT = '#f25c0d';
+export const DEFAULT_SYSTEM_ACCENT = DEFAULT_HORIZON_WALLPAPER_ACCENT;
 
 const DEFAULT_THEME_MIGRATION_KEY = 'nammu-theme-default-version';
 const DEFAULT_THEME_MIGRATION_VERSION = 'horizon-v1';

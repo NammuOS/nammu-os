@@ -525,6 +525,19 @@ export function createWebPlatformCapabilities(
       },
     }),
     window: Object.freeze({
+      async openStandalone(url: string, title: string): Promise<CapabilityResult<void>> {
+        const browserWindow = environment.getWindow();
+        if (!browserWindow) return unsupported('Browser windows are not available.');
+        if (!/^\/(?:browser|apps\/[a-z0-9-]+|tools\/[a-z0-9-]+)$/u.test(url)) {
+          return invalidInput('The standalone Nammu route is invalid.');
+        }
+
+        const opened = browserWindow.open(url, '_blank');
+        if (!opened) return denied('The browser blocked the new tab.');
+        opened.opener = null;
+        void title;
+        return success(undefined);
+      },
       async minimize(): Promise<CapabilityResult<void>> {
         return unsupported('Browsers cannot minimize their containing window.');
       },

@@ -9,6 +9,8 @@ use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, Url, Webview, WebviewUrl,
 };
 
+use crate::trusted_shell::require_trusted_shell;
+
 #[cfg(windows)]
 use webview2_com::{
     IsDocumentPlayingAudioChangedEventHandler, IsMutedChangedEventHandler,
@@ -17,7 +19,6 @@ use webview2_com::{
 #[cfg(windows)]
 use windows::core::Interface;
 
-const TRUSTED_WEBVIEW_LABEL: &str = "main";
 const WEB_SURFACE_EVENT: &str = "nammu://web-surface-state";
 const WEB_SURFACE_OPEN_REQUEST_EVENT: &str = "nammu://web-surface-open-request";
 const MAX_WEB_SURFACES: usize = 32;
@@ -240,6 +241,7 @@ fn validate_profile_key(profile_key: &str) -> Result<&str, String> {
 #[derive(Debug, Clone)]
 struct SurfaceEntry {
     label: String,
+    host_label: String,
     snapshot: WebSurfaceSnapshot,
 }
 
@@ -295,10 +297,20 @@ impl WebSurfaceState {
 }
 
 fn require_trusted_caller(caller: &Webview) -> Result<(), String> {
-    if caller.label() != TRUSTED_WEBVIEW_LABEL || caller.window().label() != TRUSTED_WEBVIEW_LABEL {
-        return Err("This native operation is restricted to the trusted Nammu shell.".to_string());
+    require_trusted_shell(caller)
+}
+
+fn require_surface_owner(
+    caller: &Webview,
+    state: &WebSurfaceState,
+    id: &str,
+) -> Result<SurfaceEntry, String> {
+    require_trusted_caller(caller)?;
+    let entry = state.entry(id)?;
+    if entry.host_label != caller.label() {
+        return Err("The native web surface belongs to another Nammu window.".to_string());
     }
-    Ok(())
+    Ok(entry)
 }
 
 fn random_id(bytes: usize) -> Result<String, String> {
@@ -309,7 +321,13 @@ fn random_id(bytes: usize) -> Result<String, String> {
 }
 
 fn emit_snapshot(app: &AppHandle, snapshot: &WebSurfaceSnapshot) {
-    let _ = app.emit_to(TRUSTED_WEBVIEW_LABEL, WEB_SURFACE_EVENT, snapshot);
+    let Some(state) = app.try_state::<WebSurfaceState>() else {
+        return;
+    };
+    let Ok(entry) = state.entry(&snapshot.id) else {
+        return;
+    };
+    let _ = app.emit_to(entry.host_label, WEB_SURFACE_EVENT, snapshot);
 }
 
 #[cfg(windows)]
@@ -436,6 +454,8 @@ pub async fn create_web_surface(
     state: State<'_, WebSurfaceState>,
 ) -> Result<WebSurfaceSnapshot, String> {
     require_trusted_caller(&caller)?;
+    let host_label = caller.label().to_string();
+    let host_window = caller.window().clone();
     let bounds = bounds.validate()?;
     let initial_url = state.policy.validate_url(owner, &url)?;
     let profile_key = validate_profile_key(&profile_key)?;
@@ -455,6 +475,7 @@ pub async fn create_web_surface(
     let app_for_popup = app.clone();
     let id_for_popup = id.clone();
     let label_for_popup = label.clone();
+    let host_label_for_popup = host_label.clone();
     let popup_policy = state.policy.clone();
     let popup_owner = owner;
     let owner_profile_root = state.profile_root.join(owner.profile_directory());
@@ -489,7 +510,7 @@ pub async fn create_web_surface(
             }
             if popup_owner == WebSurfaceOwner::Browser {
                 let _ = app_for_popup.emit_to(
-                    TRUSTED_WEBVIEW_LABEL,
+                    &host_label_for_popup,
                     WEB_SURFACE_OPEN_REQUEST_EVENT,
                     WebSurfaceOpenRequest {
                         source_id: id_for_popup.clone(),
@@ -539,9 +560,6 @@ pub async fn create_web_surface(
         builder = builder.initialization_script(YOUTUBE_MUSIC_INITIALIZATION_SCRIPT);
     }
 
-    let window = app
-        .get_window(TRUSTED_WEBVIEW_LABEL)
-        .ok_or_else(|| "The Nammu host window is unavailable.".to_string())?;
     let snapshot = WebSurfaceSnapshot {
         id: id.clone(),
         owner,
@@ -558,11 +576,12 @@ pub async fn create_web_surface(
         id.clone(),
         SurfaceEntry {
             label: label.clone(),
+            host_label,
             snapshot: snapshot.clone(),
         },
     );
 
-    let webview = match window.add_child(
+    let webview = match host_window.add_child(
         builder,
         LogicalPosition::new(bounds.x, bounds.y),
         LogicalSize::new(bounds.width, bounds.height),
@@ -603,7 +622,7 @@ pub fn destroy_web_surface(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
+    require_surface_owner(&caller, &state, &id)?;
     let entry = state
         .lock()?
         .remove(&id)
@@ -622,8 +641,8 @@ pub fn navigate_web_surface(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
-    let owner = state.entry(&id)?.snapshot.owner;
+    let entry = require_surface_owner(&caller, &state, &id)?;
+    let owner = entry.snapshot.owner;
     let target = state.policy.validate_url(owner, &url)?;
     get_surface(&app, &state, &id)?
         .navigate(target)
@@ -639,7 +658,7 @@ pub fn control_web_surface(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
+    require_surface_owner(&caller, &state, &id)?;
     let webview = get_surface(&app, &state, &id)?;
     match control {
         WebSurfaceControl::Reload => webview.reload().map_err(|error| error.to_string())?,
@@ -695,7 +714,7 @@ pub fn set_web_surface_bounds(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
+    require_surface_owner(&caller, &state, &id)?;
     let bounds = bounds.validate()?;
     let webview = get_surface(&app, &state, &id)?;
     webview
@@ -715,7 +734,7 @@ pub fn set_web_surface_visibility(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
+    require_surface_owner(&caller, &state, &id)?;
     let webview = get_surface(&app, &state, &id)?;
     if visible {
         webview.show().map_err(|error| error.to_string())?;
@@ -735,7 +754,7 @@ pub fn focus_web_surface(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
+    require_surface_owner(&caller, &state, &id)?;
     get_surface(&app, &state, &id)?
         .set_focus()
         .map_err(|error| error.to_string())?;
@@ -750,7 +769,7 @@ pub fn set_web_surface_zoom(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<(), String> {
-    require_trusted_caller(&caller)?;
+    require_surface_owner(&caller, &state, &id)?;
     if !zoom.is_finite() || !(0.5..=2.0).contains(&zoom) {
         return Err("The native browser zoom value is invalid.".to_string());
     }
@@ -766,8 +785,7 @@ pub fn get_web_surface_state(
     caller: Webview,
     state: State<'_, WebSurfaceState>,
 ) -> Result<WebSurfaceSnapshot, String> {
-    require_trusted_caller(&caller)?;
-    Ok(state.entry(&id)?.snapshot)
+    Ok(require_surface_owner(&caller, &state, &id)?.snapshot)
 }
 
 #[cfg(test)]

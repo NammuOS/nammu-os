@@ -465,10 +465,10 @@ describe('Files native filesystem service', () => {
     expect([...toggled.selected]).toEqual(['C:\\b', 'C:\\d']);
   });
 
-  test('grants native filesystem commands only to the local main shell capability', () => {
+  test('grants native filesystem commands only to local trusted shell windows', () => {
     const capability = JSON.parse(readFileSync('src-tauri/capabilities/main.json', 'utf8'));
     expect(capability.local).toBe(true);
-    expect(capability.webviews).toEqual(['main']);
+    expect(capability.webviews).toEqual(['main', 'standalone-*']);
     expect(capability.remote).toBeUndefined();
     expect(capability.permissions).toContain('allow-list-native-file-roots');
     expect(capability.permissions).toContain('allow-list-native-directory');

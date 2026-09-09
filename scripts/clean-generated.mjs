@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -7,6 +7,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const fixedTargets = [
   '.next',
   'dist-desktop',
+  'src-tauri/target',
   'src-tauri/resources/local-server',
   'tsconfig.tsbuildinfo',
   '.codex-temp',
@@ -38,10 +39,12 @@ function removeGeneratedTarget(relativePath) {
 const removed = [...fixedTargets, ...generatedRootEntries].filter(removeGeneratedTarget);
 
 if (removed.length === 0) {
-  console.log('Generated web, desktop, staging, and QA outputs are already clean.');
+  console.info('Generated web, desktop, staging, and QA outputs are already clean.');
 } else {
-  console.log(`Removed ${removed.length} generated path${removed.length === 1 ? '' : 's'}:`);
-  for (const target of removed) console.log(`- ${target}`);
+  console.info(`Removed ${removed.length} generated path${removed.length === 1 ? '' : 's'}:`);
+  for (const target of removed) console.info(`- ${target}`);
 }
 
-console.log('Installed dependencies, source files, donor repositories, and user data were preserved.');
+console.info(
+  'Installed dependencies, source files, donor repositories, and user data were preserved.',
+);

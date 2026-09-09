@@ -10,7 +10,12 @@ export const metadata: Metadata = {
   description:
     'Unicorn-grade web operating system featuring multi-cloud virtualization, rich tool suite, developer workspace, and desktop environment.',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/branding/nammu-logo.webp', type: 'image/webp' },
+    ],
+    apple: '/apple-touch-icon.png',
   },
 };
 

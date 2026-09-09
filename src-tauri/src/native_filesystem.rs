@@ -6,7 +6,8 @@ use std::{
 };
 use tauri::Webview;
 
-const TRUSTED_WEBVIEW_LABEL: &str = "main";
+use crate::trusted_shell::require_trusted_shell;
+
 const MAX_NATIVE_PATH_UNITS: usize = 32_767;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -303,10 +304,7 @@ impl<T> NativeFilesystemResponse<T> {
 }
 
 pub(crate) fn require_trusted_caller(caller: &Webview) -> Result<(), String> {
-    if caller.label() != TRUSTED_WEBVIEW_LABEL || caller.window().label() != TRUSTED_WEBVIEW_LABEL {
-        return Err("This native operation is restricted to the trusted Nammu shell.".to_string());
-    }
-    Ok(())
+    require_trusted_shell(caller)
 }
 
 pub(crate) fn validate_path(raw: &str) -> Result<PathBuf, NativeFilesystemError> {

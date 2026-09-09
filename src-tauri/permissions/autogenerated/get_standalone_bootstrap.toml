@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-standalone-bootstrap"
+description = "Enables the get_standalone_bootstrap command without any pre-configured scope."
+commands.allow = ["get_standalone_bootstrap"]
+
+[[permission]]
+identifier = "deny-get-standalone-bootstrap"
+description = "Denies the get_standalone_bootstrap command without any pre-configured scope."
+commands.deny = ["get_standalone_bootstrap"]

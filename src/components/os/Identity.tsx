@@ -6,6 +6,7 @@ import {
   FilePlus2,
   FolderPlus,
   NotebookPen,
+  Search,
   Wrench,
 } from 'lucide-react';
 import { searchTools } from '../../lib/toolRegistry';
@@ -101,7 +102,7 @@ export default function Identity({
           <span>W·122.33</span>
         </div>
 
-        <div className="relative mt-4 w-full max-w-130">
+        <div className="identity-search-wrap relative mt-4 w-full max-w-130">
           <form
             ref={formRef}
             className={`desktop-search-field flex items-center gap-2 rounded-lg border px-3 py-2 backdrop-blur-xl transition-colors ${searchActive ? 'border-[#4aa3ff]/45' : 'border-white/[0.08] hover:border-white/[0.14]'}`}
@@ -123,7 +124,8 @@ export default function Identity({
               }
             }}
           >
-            <Command size={12} className="shrink-0 text-[#4aa3ff]" />
+            <Search size={20} className="identity-search-icon hidden shrink-0" aria-hidden="true" />
+            <Command size={12} className="identity-command-icon shrink-0 text-[#4aa3ff]" />
             <input
               ref={inputRef}
               value={query}
@@ -141,12 +143,12 @@ export default function Identity({
               aria-label="Search tools"
               aria-expanded={searchActive}
             />
-            <kbd className="hidden rounded border border-white/[0.07] bg-black/25 px-1.5 py-0.5 font-mono text-[8px] tracking-widest text-[#556f84] sm:block">
-              Win Space
+            <kbd className="desktop-search-key hidden rounded border border-white/[0.07] bg-black/25 px-1.5 py-0.5 font-mono text-[8px] tracking-widest text-[#556f84] sm:block">
+              âŒ˜ K
             </kbd>
             <button
               type="submit"
-              className="flex h-5 w-5 items-center justify-center rounded text-[#71889d] transition-colors hover:bg-[#4aa3ff]/10 hover:text-[#9ecaff]"
+              className="desktop-search-submit flex h-5 w-5 items-center justify-center rounded text-[#71889d] transition-colors hover:bg-[#4aa3ff]/10 hover:text-[#9ecaff]"
               aria-label="Open first matching tool"
             >
               <ArrowRight size={11} />

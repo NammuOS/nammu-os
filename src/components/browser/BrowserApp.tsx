@@ -69,9 +69,7 @@ import {
 import { getPlatformCapabilities, type WebSurfaceSnapshot } from '../../platform';
 import { getBrowserRuntimeUrl } from './services/geckoRuntimeUrl';
 import { useWindowRuntime } from '../os/WindowRuntimeContext';
-import NativeWebSurface, {
-  type NativeWebSurfaceHandle,
-} from '../web-surfaces/NativeWebSurface';
+import NativeWebSurface, { type NativeWebSurfaceHandle } from '../web-surfaces/NativeWebSurface';
 
 const RUNTIME_HOME_URL = 'about:blank';
 const INTERNAL_PAGE_TITLES: Record<string, string> = {
@@ -1376,9 +1374,7 @@ export default function BrowserApp() {
 
   const handleToggleMuteTab = (tabId: string) => {
     const nextMuted = !tabs.find((tab) => tab.id === tabId)?.isMuted;
-    setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, isMuted: nextMuted } : tab)),
-    );
+    setTabs((prev) => prev.map((tab) => (tab.id === tabId ? { ...tab, isMuted: nextMuted } : tab)));
     if (nativeSurfaceEnabled && tabId === activeTabId) {
       void nativeSurfaceRefs.current
         .get(tabId)
@@ -1722,9 +1718,7 @@ export default function BrowserApp() {
   const isSecure = activeTab?.url.startsWith('https://');
   const effectiveProxyConnection = tabProxyConnections[activeTabId] || browserProxyConnection;
   const nativeInternalPage =
-    nativeSurfaceEnabled &&
-    activeTab?.url.startsWith('about:') &&
-    activeTab.url !== 'about:home';
+    nativeSurfaceEnabled && activeTab?.url.startsWith('about:') && activeTab.url !== 'about:home';
   const browserOverlayActive = menuOpen || findOpen || showSuggestions || contextMenu.isOpen;
 
   return (
@@ -2462,7 +2456,7 @@ export default function BrowserApp() {
                   {bookmarks.map((bookmark) => (
                     <div
                       key={bookmark.id}
-                      className="group flex items-center gap-2 rounded border border-transparent p-1.5 hover:border-white/6 hover:bg-white/2.5"
+                      className="group flex items-center gap-2 border-b border-white/4 px-1 py-2 hover:bg-white/2.5"
                     >
                       <button
                         type="button"
@@ -2494,7 +2488,7 @@ export default function BrowserApp() {
                           setBookmarks(updated);
                           saveStoredBookmarks(updated);
                         }}
-                        className="grid h-5 w-5 shrink-0 place-items-center rounded text-[#5b7184] opacity-0 hover:bg-[#f43f5e]/10 hover:text-[#f87171] group-hover:opacity-100"
+                        className="grid h-5 w-5 shrink-0 place-items-center text-[#5b7184] opacity-0 hover:text-[#f87171] group-hover:opacity-100"
                         aria-label={`Delete ${bookmark.title}`}
                       >
                         <Trash2 size={10} />

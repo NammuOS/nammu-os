@@ -749,6 +749,7 @@ export interface PlatformCapabilities {
     show(notification: PlatformNotification): Promise<CapabilityResult<void>>;
   };
   readonly window: {
+    openStandalone(url: string, title: string): Promise<CapabilityResult<void>>;
     minimize(): Promise<CapabilityResult<void>>;
     toggleMaximize(): Promise<CapabilityResult<void>>;
     close(): Promise<CapabilityResult<void>>;

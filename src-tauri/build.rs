@@ -3,6 +3,8 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "get_local_service_info",
             "authorize_local_request",
+            "open_standalone_window",
+            "get_standalone_bootstrap",
             "list_native_file_roots",
             "list_native_directory",
             "stat_native_file",

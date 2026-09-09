@@ -21,6 +21,7 @@ import { OS_LOCK_STATE_KEY, getStoredLockState, saveLockState } from '../../lib/
 import { applyIconSettings } from '../../lib/iconSettings';
 import { getPlatformCapabilities } from '../../platform';
 import { NAMMU_OPEN_DOCUMENT_EVENT, type NammuOpenDocumentDetail } from '../../lib/appLaunch';
+import { getSavedWallpaper, getWallpaperAccent } from '../../lib/wallpapers';
 import {
   DEFAULT_SYSTEM_ACCENT,
   DEFAULT_SYSTEM_THEME,
@@ -89,6 +90,13 @@ export default function DesktopApp() {
   const [suggestedTools, setSuggestedTools] = useState<string[]>([]);
   const [musicOpen, setMusicOpen] = useState(true);
   const [isLocked, setIsLocked] = useState(getStoredLockState);
+  const hasMaximizedWindow = windows.some(
+    (windowState) => windowState.isMaximized && !windowState.isMinimized,
+  );
+  const shouldAutoHideTaskbar = windows.some(
+    (windowState) =>
+      !windowState.isMinimized && (windowState.isMaximized || Boolean(windowState.snap)),
+  );
   const contextMenuSafeArea = useMemo(
     () => ({ left: 36, right: musicOpen ? 292 : 0, bottom: 32, top: 0, margin: 6 }),
     [musicOpen],
@@ -303,18 +311,28 @@ export default function DesktopApp() {
           parsed.themeStyle,
           localStorage,
         );
+        const accentColor =
+          theme === 'horizon'
+            ? getWallpaperAccent(getSavedWallpaper()) || DEFAULT_SYSTEM_ACCENT
+            : migratedLegacyDefault
+              ? DEFAULT_SYSTEM_ACCENT
+              : parsed.accentColor;
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.setAttribute(
           'data-crt-scanlines',
           migratedLegacyDefault || parsed.enableScanlines === false ? 'off' : 'on',
         );
-        if (parsed.themeStyle !== theme || migratedLegacyDefault) {
+        if (
+          parsed.themeStyle !== theme ||
+          migratedLegacyDefault ||
+          parsed.accentColor !== accentColor
+        ) {
           localStorage.setItem(
             'nammu-settings',
             JSON.stringify({
               ...parsed,
               themeStyle: theme,
-              accentColor: migratedLegacyDefault ? DEFAULT_SYSTEM_ACCENT : parsed.accentColor,
+              accentColor,
               enableScanlines: migratedLegacyDefault ? false : parsed.enableScanlines,
             }),
           );
@@ -322,7 +340,6 @@ export default function DesktopApp() {
         const appearance = parsed.appearance === 'light' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-appearance', appearance);
         document.documentElement.style.colorScheme = appearance;
-        const accentColor = migratedLegacyDefault ? DEFAULT_SYSTEM_ACCENT : parsed.accentColor;
         if (accentColor) {
           document.documentElement.style.setProperty('--os-accent', accentColor);
           document.documentElement.style.setProperty('--color-os-accent', accentColor);
@@ -339,6 +356,8 @@ export default function DesktopApp() {
         document.documentElement.setAttribute('data-crt-scanlines', 'off');
         document.documentElement.setAttribute('data-reduced-motion', 'off');
         document.documentElement.style.colorScheme = 'dark';
+        document.documentElement.style.setProperty('--os-accent', DEFAULT_SYSTEM_ACCENT);
+        document.documentElement.style.setProperty('--color-os-accent', DEFAULT_SYSTEM_ACCENT);
       }
     } catch {}
 
@@ -430,7 +449,7 @@ export default function DesktopApp() {
   return (
     <ContextMenuProvider safeArea={contextMenuSafeArea}>
       <div
-        className={`nammu-os-shell h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'}`}
+        className={`nammu-os-shell h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'} ${hasMaximizedWindow ? 'desktop-has-maximized' : ''}`}
       >
         <div className="os-scanline" aria-hidden="true" />
 
@@ -548,6 +567,7 @@ export default function DesktopApp() {
 
         {/* Taskbar */}
         <Taskbar
+          autoHide={shouldAutoHideTaskbar}
           windows={windows}
           pinnedTools={pinnedTools}
           onToggleStartMenu={() => {

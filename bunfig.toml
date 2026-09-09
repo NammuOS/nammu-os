@@ -1,4 +1,4 @@
 [test]
-# BentoPDF is an audited donor repository with its own dependency graph and test suite.
-# Nammu's root quality gate must not discover the donor's tests as product tests.
-pathIgnorePatterns = ["bentopdf/**"]
+# Donor repositories have independent dependency graphs and test suites.
+# Nammu's root quality gate must not discover their tests as product tests.
+pathIgnorePatterns = ["bentopdf/**", "umbrel/**"]

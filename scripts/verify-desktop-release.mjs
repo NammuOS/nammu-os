@@ -12,15 +12,17 @@ const releaseExecutable = process.env.NAMMU_RELEASE_EXECUTABLE
 const tauriConfig = JSON.parse(
   readFileSync(join(repositoryRoot, 'src-tauri', 'tauri.conf.json'), 'utf8'),
 );
-const installer = join(
-  repositoryRoot,
-  'src-tauri',
-  'target',
-  'release',
-  'bundle',
-  'nsis',
-  `Nammu OS_${tauriConfig.version}_x64-setup.exe`,
-);
+const installer = process.env.NAMMU_RELEASE_INSTALLER
+  ? resolve(process.env.NAMMU_RELEASE_INSTALLER)
+  : join(
+      repositoryRoot,
+      'src-tauri',
+      'target',
+      'release',
+      'bundle',
+      'nsis',
+      `Nammu OS_${tauriConfig.version}_x64-setup.exe`,
+    );
 const requireInstaller = process.env.NAMMU_VERIFY_INSTALLER !== 'false';
 const expectedRuntimePackages = [
   'better-sqlite3',

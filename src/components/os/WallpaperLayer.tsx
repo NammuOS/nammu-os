@@ -14,7 +14,7 @@ import {
 import MatrixWallpaper from './wallpapers/MatrixWallpaper';
 
 export default function WallpaperLayer() {
-  const [src, setSrc] = useState<string | null>(null);
+  const [src, setSrc] = useState<string | null>(() => getSavedWallpaper());
   const [ready, setReady] = useState(false);
   const [maskEnabled, setMaskEnabled] = useState(true);
   const [effectSettings, setEffectSettings] = useState<MatrixEffectSettingsMap>(() =>

@@ -18,6 +18,7 @@ import { useContextMenu } from '../context-menu/useContextMenu';
 import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 import { shouldKeepWindowRuntimeAlive } from '../../lib/appRuntimePolicy';
 import { WindowRuntimeProvider } from './WindowRuntimeContext';
+import { getPlatformCapabilities } from '../../platform';
 
 interface WindowProps {
   win: WindowState;
@@ -52,6 +53,7 @@ function Window({
   const dragFrameRef = useRef(0);
   const resizeFrameRef = useRef(0);
   const standaloneUrl = getStandaloneWindowUrl(win.toolId);
+  const platform = useMemo(() => getPlatformCapabilities(), []);
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -422,6 +424,9 @@ function Window({
         height: previewIsQuarter || previewIsHorizontal ? halfHeight : fullHeight,
       }
     : undefined;
+  const workspaceGeometryVariables = {
+    '--window-right-inset': `${rightInset}px`,
+  } as React.CSSProperties;
   const windowMenu: ContextMenuEntry[] = [
     { id: 'window-header', type: 'header', label: win.title },
     {
@@ -510,16 +515,18 @@ function Window({
     <>
       {snapPreview && (
         <div
-          className="pointer-events-none fixed z-[9995] border border-[#4aa3ff]/45 bg-[#4aa3ff]/8 shadow-[inset_0_0_24px_rgba(74,163,255,.06),0_0_18px_rgba(74,163,255,.12)]"
-          style={previewStyle}
+          className="os-snap-preview pointer-events-none fixed z-[9995] border border-[#4aa3ff]/45 bg-[#4aa3ff]/8 shadow-[inset_0_0_24px_rgba(74,163,255,.06),0_0_18px_rgba(74,163,255,.12)]"
+          data-snap={snapPreview}
+          style={{ ...previewStyle, ...workspaceGeometryVariables }}
         />
       )}
       <div
         ref={windowRef}
         aria-hidden={win.isMinimized || undefined}
         data-runtime-phase={runtimeState.phase}
-        className={`os-window-chrome flex flex-col overflow-hidden ${win.isMaximized || win.snap ? 'os-window-docked rounded-none' : 'rounded-sm'} ${win.isFocused ? 'os-window-active' : ''}`}
-        style={style}
+        data-snap={win.snap || undefined}
+        className={`os-window-chrome flex flex-col overflow-hidden ${win.isMaximized ? 'os-window-maximized' : ''} ${win.isMaximized || win.snap ? 'os-window-docked rounded-none' : 'rounded-sm'} ${win.isFocused ? 'os-window-active' : ''}`}
+        style={{ ...style, ...workspaceGeometryVariables }}
         onMouseDown={() => onFocus(win.id)}
         onContextMenu={(event) =>
           contextMenu.openAtEvent(event, windowMenu, { ariaLabel: `${win.title} window menu` })
@@ -554,34 +561,33 @@ function Window({
             onMouseDown={(event) => event.stopPropagation()}
           >
             {standaloneUrl && (
-              <a
-                href={standaloneUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="window-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
+              <button
+                type="button"
+                onClick={() => void platform.window.openStandalone(standaloneUrl, win.title)}
+                className="window-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-white/[0.06]"
                 title={`Open ${win.title} in new tab`}
                 aria-label={`Open ${win.title} in new tab`}
               >
                 <ExternalLink size={10} className="text-[#70869a]" />
-              </a>
+              </button>
             )}
             <button
               onClick={() => onSnap(win.id)}
-              className={`window-control window-snap-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors ${win.snap ? 'bg-[#4aa3ff]/12' : 'hover:bg-white/[0.06]'}`}
+              className={`window-control window-snap-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors ${win.snap ? 'bg-[#4aa3ff]/12' : 'hover:bg-white/[0.06]'}`}
               title={win.snap ? 'Exit split view' : 'Split with another window'}
             >
               <Columns2 size={11} className={win.snap ? 'text-[#4aa3ff]' : 'text-[#70869a]'} />
             </button>
             <button
               onClick={() => onMinimize(win.id)}
-              className="window-control window-minimize-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
+              className="window-control window-minimize-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-white/[0.06]"
               title="Minimize"
             >
               <Minus size={11} className="text-[#70869a]" />
             </button>
             <button
               onClick={() => onMaximize(win.id)}
-              className="window-control window-maximize-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-white/[0.06]"
+              className="window-control window-maximize-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-white/[0.06]"
               title="Maximize"
             >
               {win.isMaximized ? (
@@ -592,7 +598,7 @@ function Window({
             </button>
             <button
               onClick={() => onClose(win.id)}
-              className="window-control window-close-control grid h-4 w-4 place-items-center rounded-[2px] transition-colors hover:bg-[#8b2d33]"
+              className="window-control window-close-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-[#8b2d33]"
               title="Close"
             >
               <X size={11} className="text-[#70869a] hover:text-white" />

@@ -126,7 +126,7 @@ export default function StartMenu({
   ];
 
   return (
-    <div className="fixed inset-x-0 bottom-[32px] top-0 z-[9997]" onClick={close}>
+    <div className="start-menu-layer fixed inset-x-0 bottom-[32px] top-0 z-[9997]" onClick={close}>
       <div
         className="start-menu-panel absolute bottom-0 left-[36px] flex max-h-[70vh] w-[360px] flex-col border border-white/[0.08] bg-[#070b12]/94 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         onClick={(event) => event.stopPropagation()}
@@ -137,7 +137,7 @@ export default function StartMenu({
           })
         }
       >
-        <div className="mb-3 flex items-center gap-2 border border-white/[0.07] bg-black/25 px-2 py-1.5">
+        <div className="start-menu-search mb-3 flex items-center gap-2 border border-white/[0.07] bg-black/25 px-2 py-1.5">
           <Search size={11} className="shrink-0 text-[#4aa3ff]" />
           <input
             autoFocus
@@ -228,7 +228,7 @@ export default function StartMenu({
                           { ariaLabel: `${app.title} menu` },
                         )
                       }
-                      className={`flex min-w-0 flex-col items-center gap-1.5 px-1 py-2.5 text-[#8aa0b2] transition-colors hover:bg-white/[0.04] hover:text-[#d5e4f0] rounded ${draggedAppId === app.id ? 'opacity-40' : ''}`}
+                      className={`start-menu-app flex min-w-0 flex-col items-center gap-1.5 px-1 py-2.5 text-[#8aa0b2] transition-colors hover:bg-white/[0.04] hover:text-[#d5e4f0] rounded ${draggedAppId === app.id ? 'opacity-40' : ''}`}
                       title={app.title}
                     >
                       <span className="start-menu-app-icon grid place-items-center">
@@ -275,7 +275,7 @@ export default function StartMenu({
                         { ariaLabel: `${app.title} menu` },
                       )
                     }
-                    className="row-hover flex w-full items-center gap-2 px-2 py-1.5 text-left rounded"
+                    className="start-menu-result row-hover flex w-full items-center gap-2 px-2 py-1.5 text-left rounded"
                   >
                     <Icon size={13} className="text-[#4aa3ff]" />
                     <span className="text-[11px] text-[#d5e0ea]">{app.title}</span>
@@ -314,7 +314,7 @@ export default function StartMenu({
                         { ariaLabel: `${tool.name} menu` },
                       )
                     }
-                    className="row-hover flex w-full items-center gap-2 px-2 py-1.5 text-left rounded"
+                    className="start-menu-result row-hover flex w-full items-center gap-2 px-2 py-1.5 text-left rounded"
                   >
                     <Icon size={13} className="text-[#4aa3ff]" />
                     <span className="min-w-0 flex-1 truncate text-[11px] text-[#d5e0ea]">

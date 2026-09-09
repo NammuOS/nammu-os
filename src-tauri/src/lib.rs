@@ -11,6 +11,8 @@ mod native_filesystem;
 mod native_pdf_preview;
 mod native_recycle_bin;
 mod native_video_preview;
+mod standalone_window;
+mod trusted_shell;
 mod web_surface;
 #[cfg(windows)]
 mod windows_job;
@@ -92,6 +94,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_local_service_info,
             authorize_local_request,
+            standalone_window::open_standalone_window,
+            standalone_window::get_standalone_bootstrap,
             native_filesystem::list_native_file_roots,
             native_filesystem::list_native_directory,
             native_filesystem::stat_native_file,
@@ -177,6 +181,7 @@ pub fn run() {
                 supervisor.instance_id()
             );
             app.manage(LocalServerState::new(supervisor));
+            app.manage(standalone_window::StandaloneWindowState::default());
             app.manage(native_file_operations::NativeFileOperationState::default());
             app.manage(native_file_drag_drop::NativeFileDragDropState::default());
             app.manage(native_file_properties::NativeFilePropertiesState::default());
