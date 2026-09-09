@@ -70,16 +70,55 @@ describe('Horizon product-wide theme', () => {
 
   test('uses compact neutral scrollbars and an edge-revealed macOS-sized rail', () => {
     const applicationTheme = read('src/app/horizon.css');
+    const desktop = read('src/components/desktop/DesktopApp.tsx');
+    const nativeSurface = read('src/components/web-surfaces/NativeWebSurface.tsx');
     const taskbar = read('src/components/os/Taskbar.tsx');
 
     expect(applicationTheme).toContain('width: 5px !important');
     expect(applicationTheme).toContain('scrollbar-color: rgba(255, 255, 255, 0.25) transparent');
-    expect(applicationTheme).toContain("[data-theme='horizon'] .os-rail::after");
+    expect(applicationTheme).toContain("[data-theme='horizon'] .rail-reveal-zone");
     expect(applicationTheme).toContain('width: 44px !important');
     expect(applicationTheme).toContain('transform: translate3d(-58px, -50%, 0)');
     expect(applicationTheme).toContain("[data-theme='horizon'] .os-rail:hover");
+    expect(applicationTheme).toContain("[data-theme='horizon'] .desktop-rail-revealed .os-rail");
     expect(applicationTheme).toContain("[data-theme='horizon'] .taskbar-button.active > .absolute");
+    expect(applicationTheme).not.toContain(
+      "[data-theme='horizon'] .desktop-has-maximized .os-rail,",
+    );
+    expect(desktop).toContain('onPointerEnter={() => setRailRevealed(true)}');
+    expect(desktop).toContain('taskbarFlyoutOpen || railRevealed');
+    expect(nativeSurface).toContain('HORIZON_RAIL_EDGE_INSET = 6');
+    expect(nativeSurface).toContain("document.documentElement.dataset.theme === 'horizon'");
+    expect(applicationTheme).toContain('border-radius: 999px !important');
+    expect(applicationTheme).toContain('color: rgba(255, 255, 255, 0.94) !important');
+    expect(applicationTheme).toContain('.rail-app-button:is(:hover, :focus-visible, .is-active)');
+    expect(read('src/components/os/Rail.tsx')).toContain('rail-app-button');
+    expect(read('src/components/os/Rail.tsx')).toContain('is-active bg-[#4aa3ff]/10');
     expect(taskbar).toContain('taskbar-button-unpinned');
+  });
+
+  test('uses one Horizon glass system for shell popovers, side surfaces, and every context menu', () => {
+    const applicationTheme = read('src/app/horizon.css');
+    const contextTheme = read('src/components/context-menu/contextMenu.css');
+    const browser = read('src/components/browser/BrowserApp.tsx');
+    const cloud = read('src/components/cloud/views/CloudMyDriveView.tsx');
+    const pdf = read('src/components/pdf/PdfApp.tsx');
+
+    expect(applicationTheme).toContain('--hz-shell-glass: rgba(0, 0, 0, 0.4)');
+    expect(applicationTheme).toContain('--hz-shell-glass-filter: blur(20px)');
+    expect(applicationTheme).toContain('.search-launcher-panel,');
+    expect(applicationTheme).toContain('.nammu-context-surface');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .taskbar-popover");
+    expect(applicationTheme).toContain("[data-theme='horizon'] .rail-tooltip");
+    expect(applicationTheme).toContain("[data-theme='horizon'] .music-sidebar {");
+    expect(applicationTheme).toContain(
+      'color-mix(in srgb, var(--hz-shell-glass) var(--music-panel-opacity, 90%), transparent)',
+    );
+    expect(contextTheme).toContain("[data-theme='horizon'] .nammu-context-surface");
+    expect(contextTheme).toContain("[data-theme='horizon'] .nammu-context-legacy button");
+    expect(browser).toContain('nammu-context-surface nammu-context-legacy');
+    expect(cloud).toContain('nammu-context-surface nammu-context-legacy');
+    expect(pdf).toContain('nammu-context-surface nammu-context-legacy');
   });
 
   test('uses full-workspace maximize and auto-hides the dock for snapped windows', () => {
@@ -129,6 +168,7 @@ describe('Horizon product-wide theme', () => {
     const applicationTheme = read('src/app/horizon.css');
     const identity = read('src/components/os/Identity.tsx');
     const startMenu = read('src/components/os/StartMenu.tsx');
+    const launcher = read('src/components/os/Launcher.tsx');
 
     expect(applicationTheme).toContain("url('/wallpapers/horizon/21.avif')");
     expect(applicationTheme).toContain('.nammu-os-shell\n  :is(');
@@ -138,12 +178,53 @@ describe('Horizon product-wide theme', () => {
     expect(applicationTheme).toContain('height: 50px !important');
     expect(applicationTheme).toContain('.identity-actions');
     expect(applicationTheme).toContain("[data-theme='horizon'] .start-menu-search");
-    expect(applicationTheme).toContain('background: rgba(0, 0, 0, 0.4) !important');
+    expect(applicationTheme).toContain('background: var(--hz-shell-glass) !important');
     expect(applicationTheme).toContain("[data-theme='horizon'] .taskbar-start-button img");
     expect(identity).toContain('identity-search-wrap');
     expect(identity).toContain('identity-search-icon');
     expect(startMenu).toContain('start-menu-layer');
     expect(startMenu).toContain('start-menu-app');
+    expect(launcher).toContain('launcher-item-icon');
+    expect(launcher).toContain('launcher-item-description');
+    expect(launcher).toContain('launcher-tools-filter flex flex-nowrap');
+    expect(launcher).not.toContain('#4aa3ff');
+    expect(launcher).not.toContain('font-mono');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .search-launcher-panel");
+    expect(applicationTheme).toContain('width: min(520px, calc(100vw - 48px))');
+    expect(applicationTheme).toContain('background: var(--hz-shell-glass) !important');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .launcher-item-icon");
+    expect(applicationTheme).toContain('min-height: 45px');
+    expect(applicationTheme).toContain('flex-wrap: nowrap !important');
+    expect(identity).toContain('<Command size={11} strokeWidth={1.8} aria-hidden="true" />');
+    expect(identity).not.toContain('âŒ˜ K');
+  });
+
+  test('keeps Horizon Start and context menus spatially compact', () => {
+    const applicationTheme = read('src/app/horizon.css');
+    const contextTheme = read('src/components/context-menu/contextMenu.css');
+
+    expect(applicationTheme).toContain('width: 344px !important');
+    expect(applicationTheme).toContain('max-height: min(520px, calc(100vh - 108px)) !important');
+    expect(applicationTheme).toContain('min-height: 62px');
+    expect(contextTheme).toContain('min-width: 164px');
+    expect(contextTheme).toContain('max-width: min(244px, calc(100vw - 16px))');
+  });
+
+  test('uses compact premium controls for managed and standalone windows', () => {
+    const windowChrome = read('src/components/os/Window.tsx');
+    const standaloneChrome = read('src/components/desktop/StandaloneWindowContent.tsx');
+    const applicationTheme = read('src/app/horizon.css');
+
+    expect(windowChrome).toContain('window-external-control');
+    expect(windowChrome).toContain('<ExternalLink size={13} strokeWidth={1.8}');
+    expect(windowChrome).toContain('<X size={14} strokeWidth={1.9}');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .window-control");
+    expect(applicationTheme).toContain('width: 25px !important');
+    expect(applicationTheme).toContain('border-radius: 999px !important');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .window-control:focus-visible");
+    expect(applicationTheme).toContain('.standalone-window-controls button:focus-visible');
+    expect(applicationTheme).toContain('width: 27px');
+    expect(standaloneChrome).toContain('className="standalone-window-close"');
   });
 
   test('ships one optimized brand system and removes retired wallpapers', () => {
@@ -169,5 +250,49 @@ describe('Horizon product-wide theme', () => {
     expect(bookmarkLibrary).not.toContain(
       'group flex items-center gap-2 rounded border border-transparent',
     );
+  });
+
+  test('moves the music workspace control into the rail and releases the Horizon left edge', () => {
+    const rail = read('src/components/os/Rail.tsx');
+    const taskbar = read('src/components/os/Taskbar.tsx');
+    const windowChrome = read('src/components/os/Window.tsx');
+    const windowManager = read('src/hooks/useWindowManager.ts');
+
+    expect(rail).toContain("if (id === 'system:music') return { id, label: 'Music', icon: Music }");
+    expect(rail).toContain("else if (id === 'system:music') onToggleMusic()");
+    expect(taskbar).not.toContain('taskbar-music');
+    expect(taskbar).not.toContain('onToggleMusic');
+    expect(windowChrome).toContain('getDesktopLeftInset(document.documentElement.dataset.theme)');
+    expect(windowManager).toContain('getDesktopLeftInset(document.documentElement.dataset.theme)');
+  });
+
+  test('provides persistent app and tool management for the Horizon rail', () => {
+    const rail = read('src/components/os/Rail.tsx');
+    const settings = read('src/components/os/SettingsApp.tsx');
+    const preferences = read('src/lib/railPreferences.ts');
+
+    expect(rail).toContain('RAIL_PREFERENCES_CHANGE_EVENT');
+    expect(rail).toContain('onOpenTool(item.tool)');
+    expect(rail).toContain("label: 'Remove from rail'");
+    expect(settings).toContain("{ id: 'rail', label: 'Sidebar & Rail', icon: PanelLeft }");
+    expect(settings).toContain('Choose an app or tool');
+    expect(settings).toContain('TOOLS.map((tool)');
+    expect(preferences).toContain('export type RailAppItemId = `app:${SystemAppId}`');
+    expect(preferences).toContain('export type RailToolItemId = `tool:${string}`');
+  });
+
+  test('uses a wallpaper-first Horizon authentication workspace with a glass clock', () => {
+    const lockScreen = read('src/components/os/LockScreen.tsx');
+    const applicationTheme = read('src/app/horizon.css');
+
+    expect(lockScreen).toContain('os-lock-time-glass');
+    expect(lockScreen).toContain('os-lock-time-digits');
+    expect(lockScreen).toContain('Welcome back, ${firstName}');
+    expect(lockScreen).toContain('Private workspace');
+    expect(lockScreen).not.toContain('Authentication</span>');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .os-lock-time-glass");
+    expect(applicationTheme).toContain('backdrop-filter: blur(28px) saturate(145%)');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .os-lock-card");
+    expect(applicationTheme).toContain('var(--hz-shell-glass) !important');
   });
 });

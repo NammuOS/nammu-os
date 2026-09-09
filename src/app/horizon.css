@@ -25,6 +25,15 @@ html[data-theme='horizon'] {
   --hz-radius-card: 16px;
   --hz-radius-control: 12px;
   --hz-shadow-card: inset 0 1px rgba(255, 255, 255, 0.055), 0 10px 30px rgba(0, 0, 0, 0.18);
+  --hz-shell-glass: rgba(0, 0, 0, 0.4);
+  --hz-shell-glass-border: rgba(255, 255, 255, 0.1);
+  --hz-shell-glass-highlight: rgba(255, 255, 255, 0.1);
+  --hz-shell-glass-control: rgba(255, 255, 255, 0.065);
+  --hz-shell-glass-control-hover: rgba(255, 255, 255, 0.105);
+  --hz-shell-glass-filter: blur(20px) saturate(120%) brightness(85%);
+  --hz-shell-glass-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.04), inset -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px var(--hz-shell-glass-highlight), 0 14px 34px rgba(0, 0, 0, 0.5);
 }
 
 html[data-theme='horizon'][data-appearance='light'] {
@@ -42,6 +51,15 @@ html[data-theme='horizon'][data-appearance='light'] {
   --hz-text-muted: rgba(33, 27, 23, 0.59);
   --hz-text-faint: rgba(33, 27, 23, 0.4);
   --hz-shadow-card: inset 0 1px rgba(255, 255, 255, 0.76), 0 10px 30px rgba(53, 35, 23, 0.09);
+  --hz-shell-glass: rgba(248, 248, 250, 0.82);
+  --hz-shell-glass-border: rgba(60, 60, 67, 0.16);
+  --hz-shell-glass-highlight: rgba(255, 255, 255, 0.84);
+  --hz-shell-glass-control: rgba(255, 255, 255, 0.48);
+  --hz-shell-glass-control-hover: rgba(255, 255, 255, 0.7);
+  --hz-shell-glass-filter: blur(20px) saturate(120%) brightness(102%);
+  --hz-shell-glass-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.3), inset -1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 1px var(--hz-shell-glass-highlight), 0 14px 34px rgba(61, 37, 23, 0.2);
 }
 
 /* Compact, neutral scrollbars belong to the OS chrome rather than the accent system. */
@@ -307,6 +325,7 @@ html[data-appearance='light'] * {
   display: flex !important;
   height: 28px;
   align-items: center;
+  gap: 4px;
   padding: 0 9px !important;
   border: 1px solid rgba(255, 255, 255, 0.06) !important;
   border-radius: 12px !important;
@@ -338,6 +357,291 @@ html[data-appearance='light'] * {
   left: 0 !important;
 }
 
+/* One shell-material recipe drives every floating Horizon surface. Keeping the
+   alpha, blur, border, highlight, and shadow together prevents popovers and
+   side workspaces from drifting back toward the legacy Cyber treatment. */
+[data-theme='horizon']
+  :is(
+    .os-taskbar,
+    .os-rail,
+    .start-menu-panel,
+    .search-launcher-panel,
+    .taskbar-popover,
+    .nammu-context-surface
+  ) {
+  border-color: var(--hz-shell-glass-border) !important;
+  background: var(--hz-shell-glass) !important;
+  box-shadow: var(--hz-shell-glass-shadow) !important;
+  backdrop-filter: var(--hz-shell-glass-filter) !important;
+}
+
+[data-theme='horizon'] .search-launcher-panel {
+  width: min(520px, calc(100vw - 48px));
+  max-width: none;
+  overflow: hidden;
+  color: var(--hz-text);
+  border-width: 0.5px !important;
+  border-radius: 24px !important;
+  font-family: var(--font-sans) !important;
+  animation: nammu-material-enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-theme='horizon']
+  .search-launcher-panel
+  :is(
+    .launcher-query-strip,
+    .launcher-tabs,
+    .launcher-tools-filter,
+    .launcher-suggestion,
+    .launcher-footer
+  ) {
+  color: var(--hz-text-muted);
+  border-color: var(--hz-shell-glass-border) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent) !important;
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] .launcher-query-strip svg {
+  color: var(--hz-text-soft);
+}
+
+[data-theme='horizon'] .launcher-query-strip strong {
+  color: var(--hz-text);
+  font-weight: 600;
+}
+
+[data-theme='horizon'] .launcher-tabs {
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+[data-theme='horizon'] .launcher-category-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--hz-text-muted);
+  border: 0 !important;
+  border-radius: 11px !important;
+  background: transparent;
+  font-family: var(--font-sans) !important;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+[data-theme='horizon'] .launcher-category-tab svg {
+  margin-right: 5px;
+  color: currentColor;
+  stroke-width: 1.8;
+}
+
+[data-theme='horizon'] .launcher-category-tab:hover {
+  color: var(--hz-text) !important;
+  border-color: transparent !important;
+  background: var(--hz-shell-glass-control-hover) !important;
+}
+
+[data-theme='horizon'] .launcher-category-tab.active {
+  color: var(--hz-text) !important;
+  border-color: transparent !important;
+  background: var(--hz-shell-glass-control) !important;
+  box-shadow: inset 0 1px var(--hz-shell-glass-highlight);
+}
+
+[data-theme='horizon'] .launcher-tools-filter {
+  display: flex !important;
+  min-height: 45px;
+  max-height: none;
+  flex: 0 0 auto;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 9px 12px;
+  scrollbar-width: none;
+}
+
+[data-theme='horizon'] .launcher-tools-filter::-webkit-scrollbar {
+  display: none;
+}
+
+[data-theme='horizon'] .launcher-filter-pill {
+  min-height: 26px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  color: var(--hz-text-soft) !important;
+  border-color: var(--hz-line-strong) !important;
+  border-radius: 999px !important;
+  background: var(--hz-shell-glass-control) !important;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 520;
+}
+
+[data-theme='horizon'] .launcher-filter-pill:hover {
+  color: var(--hz-text) !important;
+  border-color: var(--hz-line-strong) !important;
+  background: var(--hz-shell-glass-control-hover) !important;
+}
+
+[data-theme='horizon'] .launcher-filter-pill.active {
+  color: white !important;
+  border-color: color-mix(in srgb, var(--color-os-accent) 58%, var(--hz-line)) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-os-accent) 26%,
+    var(--hz-shell-glass-control)
+  ) !important;
+}
+
+[data-theme='horizon'] .launcher-suggestion {
+  color: var(--hz-text-soft) !important;
+}
+
+[data-theme='horizon'] .launcher-suggestion svg {
+  color: color-mix(in srgb, var(--color-os-accent) 68%, white 18%);
+  fill: color-mix(in srgb, var(--color-os-accent) 28%, transparent);
+}
+
+[data-theme='horizon'] .launcher-items {
+  padding: 10px;
+}
+
+[data-theme='horizon'] .launcher-grid {
+  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+[data-theme='horizon'] .search-launcher-panel .tool-tile {
+  min-height: 78px;
+  padding: 10px;
+  color: var(--hz-text);
+  border: 1px solid transparent;
+  border-radius: 14px !important;
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+[data-theme='horizon'] .search-launcher-panel .tool-tile:hover {
+  border-color: var(--hz-line) !important;
+  background: var(--hz-shell-glass-control-hover) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045) !important;
+}
+
+[data-theme='horizon'] .launcher-item-icon {
+  width: 34px;
+  height: 34px;
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--hz-line);
+  border-radius: 11px;
+  background: var(--hz-shell-glass-control);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.065);
+}
+
+[data-theme='horizon'] .tool-tile:hover .launcher-item-icon {
+  color: white;
+  border-color: var(--hz-line-strong);
+  background: color-mix(in srgb, var(--color-os-accent) 13%, var(--hz-shell-glass-control));
+}
+
+[data-theme='horizon'] .launcher-item-name {
+  padding-right: 18px;
+  color: var(--hz-text);
+  font-weight: 590;
+  letter-spacing: -0.01em;
+}
+
+[data-theme='horizon'] .launcher-item-description {
+  color: var(--hz-text-muted);
+}
+
+[data-theme='horizon'] .launcher-item-category {
+  color: var(--hz-text-faint);
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+[data-theme='horizon'] .launcher-pin {
+  color: var(--hz-text-faint);
+  border-radius: 999px;
+}
+
+[data-theme='horizon'] .launcher-pin:hover {
+  color: var(--hz-text);
+  background: var(--hz-shell-glass-control-hover);
+}
+
+[data-theme='horizon'] .launcher-pin.is-pinned {
+  color: var(--color-os-accent);
+}
+
+[data-theme='horizon'] .launcher-empty {
+  color: var(--hz-text-muted);
+}
+
+[data-theme='horizon'] .launcher-footer {
+  min-height: 36px;
+  color: var(--hz-text-faint) !important;
+}
+
+[data-theme='horizon'][data-appearance='light'] .launcher-item-icon {
+  color: var(--hz-text-soft);
+}
+
+[data-theme='horizon'] .taskbar-popover {
+  overflow: hidden;
+  border-width: 0.5px !important;
+  border-radius: 16px !important;
+  color: var(--hz-text);
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] .taskbar-popover-header {
+  min-height: 40px;
+  color: var(--hz-text-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent) !important;
+  border-color: var(--hz-shell-glass-border) !important;
+}
+
+[data-theme='horizon'] .taskbar-popover :is(.font-mono, kbd) {
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] .taskbar-popover-header .font-mono,
+[data-theme='horizon'] .taskbar-popover-header.font-mono {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+}
+
+[data-theme='horizon'] .taskbar-popover-footer {
+  color: var(--hz-text-muted) !important;
+  font-size: 9px !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+}
+
+[data-theme='horizon']
+  .taskbar-popover
+  :is(
+    .taskbar-popover-control,
+    .taskbar-popover-presets,
+    .taskbar-popover-footer,
+    .taskbar-popover-item
+  ) {
+  border-color: var(--hz-shell-glass-border) !important;
+}
+
+[data-theme='horizon'] .taskbar-popover :is(button, .taskbar-popover-item) {
+  border-radius: 10px;
+}
+
+[data-theme='horizon'] .taskbar-popover :is(button, .taskbar-popover-item):hover {
+  background: var(--hz-shell-glass-control-hover) !important;
+}
+
 /* Start and Dock intentionally share one neutral material. Wallpaper accents may
    indicate focus, but never recolor the panel or turn every app into a different tile. */
 [data-theme='horizon'] .start-menu-layer {
@@ -346,26 +650,23 @@ html[data-appearance='light'] * {
 
 [data-theme='horizon'] .start-menu-panel {
   bottom: 84px !important;
-  left: max(14px, calc(50vw - 306px)) !important;
-  width: 392px !important;
-  max-height: min(680px, calc(100vh - 116px)) !important;
-  padding: 14px !important;
-  border: 0.5px solid rgba(255, 255, 255, 0.1) !important;
+  left: max(12px, calc(50vw - 282px)) !important;
+  width: 344px !important;
+  max-height: min(520px, calc(100vh - 108px)) !important;
+  padding: 10px !important;
+  border: 0.5px solid var(--hz-shell-glass-border) !important;
   border-radius: 22px !important;
   color: var(--hz-text);
-  background: rgba(0, 0, 0, 0.4) !important;
-  box-shadow:
-    inset 1px 0 rgba(255, 255, 255, 0.04),
-    inset -1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 1px rgba(255, 255, 255, 0.1),
-    0 14px 34px rgba(0, 0, 0, 0.5);
+  background: var(--hz-shell-glass) !important;
+  box-shadow: var(--hz-shell-glass-shadow) !important;
   font-family: var(--font-sans) !important;
-  backdrop-filter: blur(20px) saturate(120%) brightness(85%);
+  backdrop-filter: var(--hz-shell-glass-filter) !important;
 }
 
 [data-theme='horizon'] .start-menu-search {
-  min-height: 40px;
-  padding: 0 12px !important;
+  min-height: 36px;
+  margin-bottom: 8px !important;
+  padding: 0 10px !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
   border-radius: 13px !important;
   background: rgba(255, 255, 255, 0.065) !important;
@@ -393,7 +694,9 @@ html[data-appearance='light'] * {
 }
 
 [data-theme='horizon'] .start-menu-app {
-  min-height: 74px;
+  min-height: 62px;
+  gap: 4px !important;
+  padding: 6px 4px !important;
   border: 1px solid transparent;
   border-radius: 15px !important;
   color: var(--hz-text-muted) !important;
@@ -406,8 +709,8 @@ html[data-appearance='light'] * {
 }
 
 [data-theme='horizon'] .start-menu-app-icon {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   color: var(--hz-text-soft);
@@ -430,7 +733,7 @@ html[data-appearance='light'] * {
 
 [data-theme='horizon'] .start-menu-app > span:last-child {
   color: var(--hz-text-soft) !important;
-  font-size: 10.5px !important;
+  font-size: 10px !important;
   font-weight: 500;
   letter-spacing: 0 !important;
   text-transform: none;
@@ -448,11 +751,9 @@ html[data-appearance='light'] * {
 }
 
 [data-theme='horizon'][data-appearance='light'] .start-menu-panel {
-  border-color: rgba(60, 60, 67, 0.16) !important;
-  background: rgba(248, 248, 250, 0.82) !important;
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.84),
-    0 14px 34px rgba(61, 37, 23, 0.2);
+  border-color: var(--hz-shell-glass-border) !important;
+  background: var(--hz-shell-glass) !important;
+  box-shadow: var(--hz-shell-glass-shadow) !important;
 }
 
 [data-theme='horizon'] .taskbar-start-button img {
@@ -478,6 +779,12 @@ html[data-appearance='light'] * {
   width: 44px !important;
   max-height: calc(100vh - 180px);
   padding: 7px 0 !important;
+  overflow: visible;
+  border: 0.5px solid var(--hz-shell-glass-border) !important;
+  border-radius: 22px !important;
+  background: var(--hz-shell-glass) !important;
+  box-shadow: var(--hz-shell-glass-shadow) !important;
+  backdrop-filter: var(--hz-shell-glass-filter) !important;
   transform: translate3d(-58px, -50%, 0);
   transition:
     transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -486,18 +793,25 @@ html[data-appearance='light'] * {
   will-change: transform, opacity;
 }
 
-/* This invisible edge target makes the rail reveal without a permanent visual handle. */
-[data-theme='horizon'] .os-rail::after {
-  position: absolute;
+.rail-reveal-zone {
+  display: none;
+}
+
+/* The dedicated edge sensor sits above snapped React windows and temporarily
+   suppresses native WebView2 surfaces through DesktopApp state. */
+[data-theme='horizon'] .rail-reveal-zone {
+  position: fixed;
   top: 0;
-  right: -18px;
   bottom: 0;
-  width: 18px;
-  content: '';
+  left: 0;
+  z-index: 10000;
+  display: block;
+  width: 6px;
 }
 
 [data-theme='horizon'] .os-rail:hover,
-[data-theme='horizon'] .os-rail:focus-within {
+[data-theme='horizon'] .os-rail:focus-within,
+[data-theme='horizon'] .desktop-rail-revealed .os-rail {
   transform: translate3d(0, -50%, 0);
   opacity: 1;
 }
@@ -506,6 +820,33 @@ html[data-appearance='light'] * {
   width: 32px !important;
   height: 32px !important;
   flex: 0 0 32px;
+  border-radius: 999px !important;
+  color: rgba(255, 255, 255, 0.94) !important;
+  opacity: 1;
+}
+
+[data-theme='horizon'] .os-rail .rail-app-button:is(:hover, :focus-visible, .is-active) {
+  color: #fff !important;
+  background: var(--hz-shell-glass-control-hover) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+[data-theme='horizon'] .os-rail .rail-app-button > svg {
+  color: currentColor !important;
+}
+
+[data-theme='horizon'] .rail-tooltip,
+[data-theme='horizon'] .taskbar-volume-badge {
+  border: 0.5px solid var(--hz-shell-glass-border) !important;
+  border-radius: 9px !important;
+  color: var(--hz-text-soft) !important;
+  background: var(--hz-shell-glass) !important;
+  box-shadow: var(--hz-shell-glass-shadow) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 9px !important;
+  letter-spacing: 0.01em !important;
+  backdrop-filter: var(--hz-shell-glass-filter) !important;
 }
 
 /* Running and pinned apps share one dock treatment; running state is not underlined. */
@@ -525,8 +866,63 @@ html[data-appearance='light'] * {
 }
 
 [data-theme='horizon'] .window-control {
-  width: 28px !important;
-  height: 28px !important;
+  position: relative;
+  width: 25px !important;
+  height: 25px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  color: var(--hz-text-muted) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition:
+    color 130ms ease,
+    background-color 130ms ease,
+    border-color 130ms ease,
+    box-shadow 130ms ease,
+    transform 130ms ease !important;
+}
+
+[data-theme='horizon'] .window-controls {
+  gap: 3px !important;
+}
+
+[data-theme='horizon'] .window-control svg {
+  color: currentColor !important;
+  filter: none !important;
+}
+
+[data-theme='horizon'] .window-control:hover {
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  color: var(--hz-text) !important;
+  background: rgba(255, 255, 255, 0.095) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 3px 10px rgba(0, 0, 0, 0.14) !important;
+}
+
+[data-theme='horizon'] .window-control:active {
+  transform: scale(0.92);
+}
+
+[data-theme='horizon'] .window-control:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-os-accent) 72%, white);
+  outline-offset: 1px;
+}
+
+[data-theme='horizon'] .window-snap-control[class*='bg-'] {
+  border-color: color-mix(in srgb, var(--color-os-accent) 26%, transparent) !important;
+  color: var(--color-os-accent) !important;
+  background: color-mix(in srgb, var(--color-os-accent) 13%, transparent) !important;
+}
+
+[data-theme='horizon'] .window-close-control:hover {
+  border-color: rgba(255, 110, 105, 0.42) !important;
+  color: #fff !important;
+  background: rgba(218, 68, 62, 0.88) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.16),
+    0 4px 12px rgba(128, 22, 20, 0.28) !important;
 }
 
 /* Horizon and macOS maximize into the full workspace; their docks remain edge-revealable. */
@@ -539,9 +935,7 @@ html[data-appearance='light'] * {
   border-radius: 0 !important;
 }
 
-[data-theme='horizon'] .desktop-has-maximized .os-rail,
 [data-theme='horizon'] .desktop-has-maximized .music-sidebar,
-[data-theme='macos'] .desktop-has-maximized .os-rail,
 [data-theme='macos'] .desktop-has-maximized .music-sidebar {
   visibility: hidden !important;
   opacity: 0 !important;
@@ -729,33 +1123,57 @@ html[data-appearance='light'] * {
 .standalone-window-controls {
   display: flex;
   height: 40px;
-  align-items: stretch;
+  align-items: center;
+  gap: 3px;
+  padding-right: 8px;
   -webkit-app-region: no-drag;
 }
 
 .standalone-window-controls button {
   display: grid;
-  width: 44px;
-  min-width: 44px;
+  width: 27px;
+  min-width: 27px;
+  height: 27px;
+  padding: 0;
   place-items: center;
-  border: 0;
-  border-radius: 0 !important;
-  color: var(--hz-text-muted, rgba(255, 255, 255, 0.58));
+  border: 1px solid transparent;
+  border-radius: 999px !important;
+  color: var(--hz-text-muted, rgba(255, 250, 246, 0.62));
   background: transparent;
   transition:
     color 120ms ease,
-    background-color 120ms ease;
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
   -webkit-app-region: no-drag;
 }
 
 .standalone-window-controls button:hover {
   color: var(--hz-text, #fffaf6);
-  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.095);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 3px 10px rgba(0, 0, 0, 0.14);
+}
+
+.standalone-window-controls button:active {
+  transform: scale(0.92);
+}
+
+.standalone-window-controls button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-os-accent) 72%, white);
+  outline-offset: 1px;
 }
 
 .standalone-window-controls .standalone-window-close:hover {
   color: #fff;
-  background: #c42b1c;
+  border-color: rgba(255, 110, 105, 0.42);
+  background: rgba(218, 68, 62, 0.88);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.16),
+    0 4px 12px rgba(128, 22, 20, 0.28);
 }
 
 .desktop-startup-error {
@@ -1435,19 +1853,27 @@ html[data-appearance='light'] * {
   top: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  border-color: var(--hz-line) !important;
+  border: 0.5px solid var(--hz-shell-glass-border) !important;
+  border-right: 0 !important;
   border-radius: 0 !important;
   color: var(--hz-text);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 96px),
-    rgba(10, 9, 8, var(--music-panel-opacity, 92%)) !important;
-  box-shadow: -14px 0 42px rgba(0, 0, 0, 0.24);
+    color-mix(in srgb, var(--hz-shell-glass) var(--music-panel-opacity, 90%), transparent) !important;
+  box-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px var(--hz-shell-glass-highlight),
+    -14px 0 34px rgba(0, 0, 0, 0.32) !important;
   font-family: var(--font-sans);
-  backdrop-filter: blur(var(--music-panel-blur, 24px)) saturate(125%) !important;
+  backdrop-filter: blur(var(--music-panel-blur, 20px)) saturate(120%) brightness(85%) !important;
 }
 
 [data-theme='horizon'] .music-sidebar .font-mono {
   font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] .music-sidebar .music-atmosphere {
+  opacity: 0.16 !important;
 }
 
 [data-theme='horizon']
@@ -1485,8 +1911,8 @@ html[data-appearance='light'] * {
 
 [data-theme='horizon'] .music-settings-panel {
   color: var(--hz-text);
-  background: rgba(12, 10, 9, 0.93) !important;
-  backdrop-filter: blur(24px) saturate(120%);
+  background: color-mix(in srgb, var(--hz-shell-glass) 96%, transparent) !important;
+  backdrop-filter: blur(var(--music-panel-blur, 20px)) saturate(120%) brightness(85%);
 }
 
 [data-theme='horizon'] .music-play-btn {
@@ -1501,8 +1927,16 @@ html[data-appearance='light'] * {
 
 [data-theme='horizon'][data-appearance='light'] .music-sidebar,
 [data-theme='horizon'][data-appearance='light'] .music-settings-panel {
-  background: rgba(248, 244, 239, var(--music-panel-opacity, 92%)) !important;
-  box-shadow: -14px 0 42px rgba(53, 35, 23, 0.12);
+  background: color-mix(
+    in srgb,
+    var(--hz-shell-glass) var(--music-panel-opacity, 90%),
+    transparent
+  ) !important;
+  box-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 1px var(--hz-shell-glass-highlight),
+    -14px 0 34px rgba(53, 35, 23, 0.14) !important;
+  backdrop-filter: blur(var(--music-panel-blur, 20px)) saturate(120%) brightness(102%) !important;
 }
 
 [data-theme='horizon'] [data-nammu-app='maps'] > div {
@@ -1584,11 +2018,381 @@ html[data-appearance='light'] * {
   border-radius: 12px !important;
 }
 
+/* Horizon lock screen — wallpaper-first, quiet identity, and one shared shell
+   material. Authentication behavior remains owned by LockScreen/osLock. */
+[data-theme='horizon'] .os-lock-screen {
+  color: var(--hz-text);
+  font-family: var(--font-sans);
+  background: #130d09;
+}
+
+[data-theme='horizon'] .os-lock-screen .wallpaper-layer {
+  transform: scale(1.025);
+}
+
+[data-theme='horizon'] .os-lock-scrim {
+  background:
+    linear-gradient(180deg, rgba(7, 5, 4, 0.2), rgba(7, 5, 4, 0.08) 42%, rgba(7, 5, 4, 0.38)),
+    radial-gradient(circle at 50% 44%, transparent 5%, rgba(4, 3, 2, 0.3) 100%);
+  backdrop-filter: blur(7px) saturate(92%) brightness(82%);
+}
+
+[data-theme='horizon'] .os-lock-ambient {
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+[data-theme='horizon'] .os-lock-ambient span {
+  position: absolute;
+  width: min(48vw, 640px);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  opacity: 0.16;
+  filter: blur(90px);
+}
+
+[data-theme='horizon'] .os-lock-ambient span:first-child {
+  top: -30%;
+  left: -12%;
+  background: var(--color-os-accent);
+}
+
+[data-theme='horizon'] .os-lock-ambient span:last-child {
+  right: -18%;
+  bottom: -40%;
+  background: color-mix(in srgb, var(--color-os-accent) 42%, #8d4bff);
+}
+
+[data-theme='horizon'] .os-lock-menubar {
+  z-index: 20;
+  height: 64px;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+}
+
+[data-theme='horizon'] :is(.os-lock-brand, .os-lock-secure-badge) {
+  min-height: 38px;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid var(--hz-shell-glass-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hz-shell-glass) 82%, transparent);
+  box-shadow:
+    inset 0 1px var(--hz-shell-glass-highlight),
+    0 10px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: var(--hz-shell-glass-filter);
+}
+
+[data-theme='horizon'] .os-lock-brand {
+  padding-right: 14px;
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+[data-theme='horizon'] .os-lock-brand img {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='horizon'] .os-lock-secure-badge {
+  padding: 8px 13px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  font-weight: 550;
+}
+
+[data-theme='horizon'] .os-lock-clock {
+  color: white;
+  text-align: center;
+  text-shadow: 0 3px 22px rgba(0, 0, 0, 0.46);
+}
+
+[data-theme='horizon'] .os-lock-time-glass {
+  gap: 9px;
+  padding: 13px 24px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 32px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), transparent 42%), rgba(12, 10, 9, 0.24);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.25),
+    inset 0 -1px rgba(255, 255, 255, 0.04),
+    0 20px 54px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(28px) saturate(145%) brightness(105%);
+}
+
+[data-theme='horizon'] .os-lock-time-digits {
+  font-size: clamp(52px, 7vw, 78px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 570;
+  letter-spacing: -0.075em;
+  line-height: 0.88;
+}
+
+[data-theme='horizon'] .os-lock-time-period {
+  padding-bottom: 3px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+
+[data-theme='horizon'] .os-lock-date {
+  margin-top: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+}
+
+[data-theme='horizon'] .os-lock-card {
+  top: clamp(74px, 10vh, 112px);
+  overflow: hidden;
+  border: 1px solid var(--hz-shell-glass-border) !important;
+  border-radius: 28px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), transparent 38%), var(--hz-shell-glass) !important;
+  box-shadow: var(--hz-shell-glass-shadow) !important;
+  backdrop-filter: blur(30px) saturate(125%) brightness(88%) !important;
+}
+
+[data-theme='horizon'] .os-lock-card-content {
+  padding: 26px 28px 22px;
+}
+
+[data-theme='horizon'] .os-lock-profile {
+  margin-bottom: 15px;
+}
+
+[data-theme='horizon'] .os-lock-avatar {
+  width: 76px;
+  height: 76px;
+  color: white;
+  border: 1px solid color-mix(in srgb, var(--color-os-accent) 45%, rgba(255, 255, 255, 0.25));
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.2), transparent 36%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--color-os-accent) 72%, white 8%),
+      color-mix(in srgb, var(--color-os-accent) 70%, #1b100a)
+    );
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.3),
+    0 12px 30px color-mix(in srgb, var(--color-os-accent) 20%, rgba(0, 0, 0, 0.35));
+}
+
+[data-theme='horizon'] .os-lock-initials {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+[data-theme='horizon'] .os-lock-greeting h1 {
+  color: white;
+  font-size: 22px;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+[data-theme='horizon'] .os-lock-greeting p {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+[data-theme='horizon'] .os-lock-form {
+  margin-top: 20px;
+}
+
+[data-theme='horizon'] .os-lock-field {
+  min-height: 50px;
+  color: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+[data-theme='horizon'] .os-lock-field:focus-within {
+  color: rgba(255, 255, 255, 0.92);
+  border-color: color-mix(in srgb, var(--color-os-accent) 58%, rgba(255, 255, 255, 0.2));
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.07),
+    0 0 0 3px color-mix(in srgb, var(--color-os-accent) 14%, transparent);
+}
+
+[data-theme='horizon'] .os-lock-field input {
+  color: white;
+  caret-color: var(--color-os-accent);
+}
+
+[data-theme='horizon'] .os-lock-field input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+[data-theme='horizon'] .os-lock-reveal {
+  color: rgba(255, 255, 255, 0.48);
+  border: 0;
+  border-radius: 999px;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+[data-theme='horizon'] .os-lock-reveal:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+[data-theme='horizon'] .os-lock-submit {
+  color: white;
+  border: 1px solid color-mix(in srgb, var(--color-os-accent) 72%, white 14%);
+  border-radius: 999px !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-os-accent) 84%, white 14%),
+    var(--color-os-accent)
+  );
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.24),
+    0 7px 18px color-mix(in srgb, var(--color-os-accent) 28%, transparent);
+  transition:
+    transform 150ms ease,
+    filter 150ms ease;
+}
+
+[data-theme='horizon'] .os-lock-submit:hover:not(:disabled) {
+  color: white;
+  border-color: color-mix(in srgb, var(--color-os-accent) 72%, white 14%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-os-accent) 80%, white 20%),
+    color-mix(in srgb, var(--color-os-accent) 88%, black)
+  );
+  filter: brightness(1.06);
+  transform: scale(1.04);
+}
+
+[data-theme='horizon'] .os-lock-submit:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+[data-theme='horizon'] .os-lock-error {
+  color: #ffd0ca;
+  border: 1px solid rgba(255, 116, 101, 0.24);
+  border-radius: 12px;
+  background: rgba(121, 24, 16, 0.28);
+}
+
+[data-theme='horizon'] .os-lock-local-note {
+  color: rgba(255, 255, 255, 0.42);
+  font-weight: 520;
+}
+
+[data-theme='horizon'] .os-lock-local-note svg {
+  color: color-mix(in srgb, var(--color-os-accent) 70%, white 20%);
+}
+
+[data-theme='horizon'] .os-lock-hint {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+  font-weight: 540;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme='horizon'][data-appearance='light']
+  :is(.os-lock-brand, .os-lock-secure-badge, .os-lock-card) {
+  color: rgba(255, 255, 255, 0.92);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 38%), rgba(18, 14, 11, 0.4) !important;
+}
+
+@media (max-height: 720px) {
+  [data-theme='horizon'] .os-lock-clock {
+    top: 78px;
+  }
+
+  [data-theme='horizon'] .os-lock-time-digits {
+    font-size: 48px;
+  }
+
+  [data-theme='horizon'] .os-lock-card {
+    top: 92px;
+    transform: scale(0.92);
+  }
+
+  [data-theme='horizon'] .os-lock-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  [data-theme='horizon'] .os-lock-menubar {
+    padding-inline: 12px;
+  }
+
+  [data-theme='horizon'] .os-lock-secure-badge span {
+    display: none;
+  }
+
+  [data-theme='horizon'] .os-lock-secure-badge {
+    width: 38px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  [data-theme='horizon'] .os-lock-clock {
+    top: 88px;
+  }
+
+  [data-theme='horizon'] .os-lock-time-glass {
+    padding: 11px 19px 10px;
+    border-radius: 26px;
+  }
+
+  [data-theme='horizon'] .os-lock-time-digits {
+    font-size: 48px;
+  }
+
+  [data-theme='horizon'] .os-lock-card {
+    top: 78px;
+  }
+
+  [data-theme='horizon'] .os-lock-card-content {
+    padding: 22px 20px 19px;
+  }
+}
+
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  [data-theme='horizon']
+    :is(
+      .os-taskbar,
+      .os-rail,
+      .start-menu-panel,
+      .taskbar-popover,
+      .nammu-context-surface,
+      .music-sidebar,
+      .music-settings-panel,
+      .os-lock-time-glass,
+      .os-lock-card,
+      .os-lock-brand,
+      .os-lock-secure-badge
+    ),
   [data-theme='horizon'] .nammu-app-surface :is(header, nav, aside),
   [data-theme='horizon'] .nammu-app-surface :is([role='dialog'], [role='menu'], [role='listbox']),
   [data-theme='horizon'] [data-nammu-app='maps'] section {
-    background: var(--nammu-material-solid) !important;
+    background: var(--hz-canvas) !important;
     backdrop-filter: none !important;
   }
 }

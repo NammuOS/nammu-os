@@ -48,6 +48,30 @@ interface NativeWebSurfaceProps {
   onOpenRequest?(url: string): void;
 }
 
+const HORIZON_RAIL_EDGE_INSET = 6;
+
+function surfaceBoundsForHost(node: HTMLDivElement): WebSurfaceBounds | null {
+  const rect = node.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return null;
+
+  // A native child WebView sits above the React shell. When a maximized or
+  // left-snapped remote surface reaches the screen edge, reserve only the
+  // physical edge pixels needed by Horizon's trusted-shell reveal sensor.
+  // Without this, WebView2 consumes the pointer before the React rail can open.
+  const baseX = Math.max(0, rect.left);
+  const surfaceX =
+    document.documentElement.dataset.theme === 'horizon' && baseX < HORIZON_RAIL_EDGE_INSET
+      ? HORIZON_RAIL_EDGE_INSET
+      : baseX;
+
+  return {
+    x: surfaceX,
+    y: Math.max(0, rect.top),
+    width: Math.max(1, rect.right - surfaceX),
+    height: rect.height,
+  };
+}
+
 function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -127,14 +151,8 @@ const NativeWebSurface = forwardRef<NativeWebSurfaceHandle, NativeWebSurfaceProp
       const node = hostRef.current;
       const surface = surfaceRef.current;
       if (!node || !surface) return;
-      const rect = node.getBoundingClientRect();
-      if (rect.width < 1 || rect.height < 1) return;
-      const bounds = {
-        x: Math.max(0, rect.left),
-        y: Math.max(0, rect.top),
-        width: rect.width,
-        height: rect.height,
-      };
+      const bounds = surfaceBoundsForHost(node);
+      if (!bounds) return;
       const signature = [bounds.x, bounds.y, bounds.width, bounds.height]
         .map((value) => value.toFixed(2))
         .join(':');
@@ -176,20 +194,15 @@ const NativeWebSurface = forwardRef<NativeWebSurfaceHandle, NativeWebSurfaceProp
     if (!enabled || !url || surfaceRef.current || creatingRef.current) return;
     const node = hostRef.current;
     if (!node) return;
-    const rect = node.getBoundingClientRect();
-    if (rect.width < 1 || rect.height < 1) return;
+    const bounds = surfaceBoundsForHost(node);
+    if (!bounds) return;
     creatingRef.current = true;
     void createWebSurface(platform.webSurfaces, {
       owner,
       profileKey,
       privateSession,
       url,
-      bounds: {
-        x: Math.max(0, rect.left),
-        y: Math.max(0, rect.top),
-        width: rect.width,
-        height: rect.height,
-      },
+      bounds,
       visible: false,
     })
       .then(({ surface, initialState }) => {

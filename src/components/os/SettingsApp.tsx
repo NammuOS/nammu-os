@@ -28,6 +28,12 @@ import {
   ArrowDown,
   RotateCcw,
   LayoutGrid,
+  PanelLeft,
+  Plus,
+  Home,
+  Search,
+  Music,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   WALLPAPERS,
@@ -70,6 +76,15 @@ import {
   type StartMenuPreferences,
 } from '../../lib/appOrder';
 import { SYSTEM_APPS, type SystemAppId } from './systemAppRegistry';
+import { TOOLS } from '../../lib/toolRegistry';
+import {
+  DEFAULT_RAIL_ORDER,
+  RAIL_PREFERENCES_CHANGE_EVENT,
+  getRailPreferences,
+  saveRailPreferences,
+  type RailItemId,
+  type RailPreferences,
+} from '../../lib/railPreferences';
 import {
   createLockProfile,
   getStoredLockProfile,
@@ -114,6 +129,17 @@ const DEFAULT_SETTINGS: SystemSettings = {
   lockShowProfile: true,
   ...DEFAULT_ICON_SETTINGS,
 };
+
+const RAIL_SYSTEM_CHOICES: Array<{
+  id: RailItemId;
+  label: string;
+  kind: string;
+  icon: LucideIcon;
+}> = [
+  { id: 'system:home', label: 'Home', kind: 'System shortcut', icon: Home },
+  { id: 'system:search', label: 'Tools search', kind: 'System shortcut', icon: Search },
+  { id: 'system:music', label: 'Music workspace', kind: 'System shortcut', icon: Music },
+];
 
 const THEME_OPTIONS = [
   {
@@ -283,6 +309,7 @@ export function SettingsApp() {
     | 'icons'
     | 'audio'
     | 'taskbar'
+    | 'rail'
     | 'start-menu'
     | 'security'
     | 'storage'
@@ -297,6 +324,11 @@ export function SettingsApp() {
     hidden: [],
   }));
   const [draggedStartApp, setDraggedStartApp] = useState<SystemAppId | null>(null);
+  const [railPreferences, setRailPreferences] = useState<RailPreferences>(() => ({
+    order: DEFAULT_RAIL_ORDER,
+  }));
+  const [draggedRailItem, setDraggedRailItem] = useState<RailItemId | null>(null);
+  const [railCandidate, setRailCandidate] = useState<RailItemId | ''>('');
   const [lockProfile, setLockProfile] = useState<OsLockProfile | null>(getStoredLockProfile);
   const [lockUsername, setLockUsername] = useState(() => lockProfile?.username || 'nammu');
   const [lockDisplayName, setLockDisplayName] = useState(
@@ -319,16 +351,20 @@ export function SettingsApp() {
 
   useEffect(() => {
     const syncStartMenu = () => setStartMenuPreferences(getStartMenuPreferences());
+    const syncRail = () => setRailPreferences(getRailPreferences());
     const syncMusic = () => {
       setMusicSettings(getSavedMusicSettings());
       setMusicVolume(getSavedMusicVolume());
     };
     syncStartMenu();
+    syncRail();
     window.addEventListener(START_MENU_ORDER_CHANGE_EVENT, syncStartMenu);
+    window.addEventListener(RAIL_PREFERENCES_CHANGE_EVENT, syncRail);
     window.addEventListener(MUSIC_SETTINGS_CHANGE_EVENT, syncMusic);
     window.addEventListener(MUSIC_VOLUME_CHANGE_EVENT, syncMusic);
     return () => {
       window.removeEventListener(START_MENU_ORDER_CHANGE_EVENT, syncStartMenu);
+      window.removeEventListener(RAIL_PREFERENCES_CHANGE_EVENT, syncRail);
       window.removeEventListener(MUSIC_SETTINGS_CHANGE_EVENT, syncMusic);
       window.removeEventListener(MUSIC_VOLUME_CHANGE_EVENT, syncMusic);
     };
@@ -356,6 +392,24 @@ export function SettingsApp() {
       ...startMenuPreferences,
       order: reorderIds(startMenuPreferences.order, sourceId, targetId),
     });
+  };
+
+  const updateRailPreferences = (next: RailPreferences) => {
+    setRailPreferences(saveRailPreferences(next));
+  };
+
+  const moveRailItem = (sourceId: RailItemId, targetId: RailItemId) => {
+    updateRailPreferences({ order: reorderIds(railPreferences.order, sourceId, targetId) });
+  };
+
+  const removeRailItem = (itemId: RailItemId) => {
+    updateRailPreferences({ order: railPreferences.order.filter((id) => id !== itemId) });
+  };
+
+  const addRailItem = () => {
+    if (!railCandidate || railPreferences.order.includes(railCandidate)) return;
+    updateRailPreferences({ order: [...railPreferences.order, railCandidate] });
+    setRailCandidate('');
   };
 
   const saveSecurityProfile = async () => {
@@ -579,6 +633,26 @@ export function SettingsApp() {
     return `${h > 0 ? `${h}h ` : ''}${m}m ${s}s`;
   };
 
+  const railChoices = [
+    ...RAIL_SYSTEM_CHOICES,
+    ...SYSTEM_APPS.filter((app) => app.id !== 'settings').map((app) => ({
+      id: `app:${app.id}` as RailItemId,
+      label: app.title,
+      kind: 'App',
+      icon: app.icon,
+    })),
+    ...TOOLS.map((tool) => ({
+      id: `tool:${tool.id}` as RailItemId,
+      label: tool.name,
+      kind: `Tool · ${tool.category}`,
+      icon: tool.icon,
+    })),
+  ];
+  const availableRailChoices = railChoices.filter(
+    (choice) => !railPreferences.order.includes(choice.id),
+  );
+  const getRailChoice = (id: RailItemId) => railChoices.find((choice) => choice.id === id);
+
   return (
     <div className="settings-app flex h-full min-h-0 bg-[#05080d] text-[11px] select-none">
       {/* Left Settings Navigation */}
@@ -590,6 +664,7 @@ export function SettingsApp() {
             { id: 'icons', label: 'Icons & Layout', icon: Grid3X3 },
             { id: 'audio', label: 'Sound & Audio', icon: Volume2 },
             { id: 'taskbar', label: 'Taskbar', icon: Monitor },
+            { id: 'rail', label: 'Sidebar & Rail', icon: PanelLeft },
             { id: 'start-menu', label: 'Start Menu', icon: LayoutGrid },
             { id: 'security', label: 'Lock Screen', icon: Shield },
             { id: 'storage', label: 'Storage & Backup', icon: Database },
@@ -1246,6 +1321,138 @@ export function SettingsApp() {
           </div>
         )}
 
+        {/* SIDEBAR / RAIL */}
+        {activeTab === 'rail' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xs font-semibold text-[#e8eef4]">Sidebar &amp; Rail</h2>
+              <p className="text-[10px] text-[#71889d]">
+                Add apps and tools, remove shortcuts, or drag them into your preferred order.
+              </p>
+            </div>
+
+            <div className="settings-card border border-white/[0.05] bg-[#05070b]">
+              <div className="flex items-center gap-2 border-b border-white/[0.05] p-3">
+                <select
+                  value={railCandidate}
+                  onChange={(event) => setRailCandidate(event.target.value as RailItemId | '')}
+                  className="min-w-0 flex-1 border border-white/[0.08] bg-white/[0.035] px-2.5 py-2 text-[10px] text-os-text outline-none focus:border-os-accent"
+                  aria-label="App or tool to add to the rail"
+                >
+                  <option value="">Choose an app or tool…</option>
+                  {availableRailChoices.map((choice) => (
+                    <option key={choice.id} value={choice.id}>
+                      {choice.kind} — {choice.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={addRailItem}
+                  disabled={!railCandidate}
+                  className="flex h-8 items-center gap-1.5 border border-os-accent/40 bg-os-accent/15 px-3 text-[9.5px] font-medium text-os-accent transition-colors hover:bg-os-accent/25 disabled:cursor-not-allowed disabled:opacity-35"
+                >
+                  <Plus size={11} /> Add
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2">
+                <span className="font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-dim">
+                  Current rail
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateRailPreferences({ order: DEFAULT_RAIL_ORDER })}
+                  className="flex items-center gap-1 font-mono text-[8px] text-os-text-muted hover:text-os-accent"
+                >
+                  <RotateCcw size={9} /> Restore default
+                </button>
+              </div>
+
+              {railPreferences.order.length ? (
+                <div className="divide-y divide-white/[0.05]">
+                  {railPreferences.order.map((itemId, index) => {
+                    const choice = getRailChoice(itemId);
+                    if (!choice) return null;
+                    const Icon = choice.icon;
+                    return (
+                      <div
+                        key={itemId}
+                        draggable
+                        onDragStart={(event) => {
+                          setDraggedRailItem(itemId);
+                          event.dataTransfer.effectAllowed = 'move';
+                          event.dataTransfer.setData('text/plain', itemId);
+                        }}
+                        onDragOver={(event) => {
+                          if (!draggedRailItem || draggedRailItem === itemId) return;
+                          event.preventDefault();
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const sourceId = (draggedRailItem ||
+                            event.dataTransfer.getData('text/plain')) as RailItemId;
+                          if (sourceId) moveRailItem(sourceId, itemId);
+                          setDraggedRailItem(null);
+                        }}
+                        onDragEnd={() => setDraggedRailItem(null)}
+                        className={`flex items-center gap-2 px-3 py-2 ${draggedRailItem === itemId ? 'opacity-40' : ''}`}
+                      >
+                        <GripVertical size={11} className="cursor-grab text-os-text-dim" />
+                        <Icon size={13} className="text-os-accent" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] text-os-text-muted">
+                            {choice.label}
+                          </div>
+                          <div className="truncate text-[8px] text-os-text-dim">{choice.kind}</div>
+                        </div>
+                        <span className="w-5 text-right font-mono text-[8px] text-os-text-dim">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            index > 0 && moveRailItem(itemId, railPreferences.order[index - 1])
+                          }
+                          disabled={index === 0}
+                          className="grid h-6 w-6 place-items-center text-os-text-dim hover:text-os-accent disabled:opacity-20"
+                          aria-label={`Move ${choice.label} up`}
+                        >
+                          <ArrowUp size={10} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            index < railPreferences.order.length - 1 &&
+                            moveRailItem(itemId, railPreferences.order[index + 1])
+                          }
+                          disabled={index === railPreferences.order.length - 1}
+                          className="grid h-6 w-6 place-items-center text-os-text-dim hover:text-os-accent disabled:opacity-20"
+                          aria-label={`Move ${choice.label} down`}
+                        >
+                          <ArrowDown size={10} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRailItem(itemId)}
+                          className="grid h-6 w-6 place-items-center text-os-text-dim hover:text-os-red"
+                          aria-label={`Remove ${choice.label} from rail`}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-3 py-6 text-center text-[10px] text-os-text-dim">
+                  The custom rail is empty. Choose an app or tool above to add it.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* START MENU */}
         {activeTab === 'start-menu' && (
           <div className="space-y-4">
@@ -1844,6 +2051,24 @@ export function SettingsApp() {
                 <li>Middle-click a running app to close it.</li>
                 <li>Scroll over running apps to switch focus.</li>
               </ul>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'rail' && (
+          <div className="space-y-3">
+            <div className="settings-inspector-section text-center">
+              <div className="font-mono text-[24px] leading-none text-os-accent">
+                {railPreferences.order.length}
+              </div>
+              <div className="mt-2 font-mono text-[8px] uppercase tracking-wider text-os-text-dim">
+                Rail shortcuts
+              </div>
+            </div>
+            <div className="settings-inspector-note">
+              Changes apply immediately. You can also drag shortcuts directly on the rail or remove
+              one from its context menu. Settings remains fixed at the bottom so this panel is
+              always recoverable.
             </div>
           </div>
         )}

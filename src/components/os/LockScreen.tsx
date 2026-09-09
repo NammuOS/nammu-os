@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Eye, EyeOff, LockKeyhole, Power, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import {
   createLockProfile,
   getLockDisplayName,
@@ -37,6 +37,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const isFirstRun = !profile;
   const normalizedUsername = normalizeLockUsername(username);
   const displayName = profile?.displayName || getLockDisplayName(normalizedUsername);
+  const firstName = displayName.split(/\s+/)[0] || 'there';
   const initials = useMemo(
     () =>
       displayName
@@ -47,6 +48,20 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         .toUpperCase() || 'NU',
     [displayName],
   );
+  const clock = useMemo(() => {
+    const parts = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).formatToParts(time);
+    const readPart = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value || '';
+    return {
+      hour: readPart('hour'),
+      minute: readPart('minute'),
+      period: readPart('dayPeriod'),
+    };
+  }, [time]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTime(new Date()), 1_000);
@@ -88,88 +103,85 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     <main className="os-lock-screen relative flex h-screen w-screen items-center justify-center overflow-hidden text-os-text">
       <WallpaperLayer />
       <div className="os-lock-scrim absolute inset-0" aria-hidden="true" />
+      <div className="os-lock-ambient absolute inset-0" aria-hidden="true">
+        <span />
+        <span />
+      </div>
 
-      <header className="os-lock-menubar absolute inset-x-0 top-0 z-10 flex h-9 items-center justify-between px-4">
-        <div className="flex items-center gap-2 font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-os-text-muted">
+      <header className="os-lock-menubar absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5">
+        <div className="os-lock-brand flex items-center gap-2.5">
           <img
-            className="h-4 w-4 rounded-[5px] object-contain"
+            className="h-6 w-6 rounded-[8px] object-contain"
             src="/branding/nammu-logo.webp"
             alt=""
             aria-hidden="true"
             draggable={false}
-          />{' '}
-          Nammu OS
-          <span className="text-os-text-dim">/</span>
-          <span>Secure session</span>
+          />
+          <span>Nammu OS</span>
         </div>
-        {lockPreferences.showDate && (
-          <div className="flex items-center gap-3 font-mono text-[8px] uppercase tracking-[0.12em] text-os-text-muted">
-            <span>
-              {time.toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-              })}
-            </span>
-            <span className="font-semibold text-os-text">
-              {time.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true,
-              })}
-            </span>
-          </div>
-        )}
+        <div className="os-lock-secure-badge flex items-center gap-2">
+          <ShieldCheck size={13} />
+          <span>Private workspace</span>
+        </div>
       </header>
 
-      <section className="os-lock-card relative z-10 w-[min(92vw,380px)]">
-        <div className="os-lock-card-header flex h-9 items-center justify-between px-3">
-          <span className="flex items-center gap-1.5 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-os-text-muted">
-            <LockKeyhole size={11} className="text-os-accent" /> Authentication
+      <section className="os-lock-clock absolute top-[11vh] z-10 flex flex-col items-center">
+        <div
+          className="os-lock-time-glass flex items-end"
+          aria-label={`Current time ${clock.hour}:${clock.minute} ${clock.period}`}
+        >
+          <span className="os-lock-time-digits">
+            {clock.hour}:{clock.minute}
           </span>
-          <span className="font-mono text-[7.5px] uppercase tracking-[0.12em] text-os-text-dim">
-            Local profile
-          </span>
+          <span className="os-lock-time-period">{clock.period}</span>
         </div>
+        {lockPreferences.showDate && (
+          <p className="os-lock-date">
+            {time.toLocaleDateString(undefined, {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </p>
+        )}
+      </section>
 
-        <div className="p-5">
+      <section className="os-lock-card relative z-10 w-[min(92vw,390px)]">
+        <div className="os-lock-card-content p-6">
           {lockPreferences.showProfile && (
-            <div className="flex items-center gap-3 border-b border-os-border/20 pb-4">
-              <div className="os-lock-avatar grid h-14 w-14 shrink-0 place-items-center">
+            <div className="os-lock-profile mb-4 flex flex-col items-center text-center">
+              <div className="os-lock-avatar grid h-20 w-20 place-items-center">
                 {initials ? (
-                  <span className="font-display text-[18px] font-semibold tracking-[0.08em] text-os-accent">
-                    {initials}
-                  </span>
+                  <span className="os-lock-initials">{initials}</span>
                 ) : (
-                  <UserRound size={23} className="text-os-accent" />
+                  <UserRound size={30} />
                 )}
-              </div>
-              <div className="min-w-0 text-left">
-                <div className="truncate text-[15px] font-semibold text-os-text">{displayName}</div>
-                <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
-                  {isFirstRun ? 'Create local profile' : `@${profile.username}`}
-                </div>
               </div>
             </div>
           )}
 
-          <form
-            onSubmit={handleSubmit}
-            className={`${lockPreferences.showProfile ? 'mt-4' : ''} space-y-3 text-left`}
-          >
+          <div className="os-lock-greeting text-center">
+            <h1>{isFirstRun ? 'Create your workspace' : `Welcome back, ${firstName}`}</h1>
+            <p>
+              {isFirstRun
+                ? 'Set up a local profile to protect this device.'
+                : 'Enter your password to unlock Nammu OS.'}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="os-lock-form mt-5 space-y-3 text-left">
             {isFirstRun && (
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
-                  Username
-                </span>
-                <div className="os-lock-field flex items-center gap-2 px-3">
-                  <UserRound size={12} className="shrink-0 text-os-text-muted" />
+                <span className="sr-only">Username</span>
+                <div className="os-lock-field flex items-center gap-3 px-4">
+                  <UserRound size={16} className="shrink-0" />
                   <input
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     autoComplete="username"
                     maxLength={32}
-                    className="h-9 min-w-0 flex-1 bg-transparent text-[11px] text-os-text outline-none"
+                    className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none"
+                    placeholder="Choose a username"
                     aria-label="Username"
                   />
                 </div>
@@ -177,28 +189,36 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             )}
 
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-[0.14em] text-os-text-muted">
-                {isFirstRun ? 'Create password' : 'Password'}
-              </span>
-              <div className="os-lock-field flex items-center gap-2 px-3">
-                <LockKeyhole size={12} className="shrink-0 text-os-text-muted" />
+              <span className="sr-only">{isFirstRun ? 'Create password' : 'Password'}</span>
+              <div className="os-lock-field flex items-center gap-3 py-1 pl-4 pr-1.5">
+                <LockKeyhole size={16} className="shrink-0" />
                 <input
                   ref={passwordRef}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={isFirstRun ? 'new-password' : 'current-password'}
-                  className="h-9 min-w-0 flex-1 bg-transparent text-[11px] text-os-text outline-none"
+                  className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none"
                   placeholder={isFirstRun ? 'At least 6 characters' : 'Enter your password'}
                   aria-label={isFirstRun ? 'Create password' : 'Password'}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  className="os-lock-reveal grid h-7 w-7 place-items-center text-os-text-muted transition-colors hover:text-os-accent"
+                  className="os-lock-reveal grid h-9 w-9 shrink-0 place-items-center"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showPassword ? <EyeOff size={12} /> : <Eye size={12} />}
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    isSubmitting || !password || (isFirstRun && normalizedUsername.length < 2)
+                  }
+                  className="os-lock-submit grid h-9 w-9 shrink-0 place-items-center disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label={isFirstRun ? 'Create profile and unlock' : 'Unlock Nammu OS'}
+                >
+                  <ArrowRight size={17} className={isSubmitting ? 'animate-pulse' : ''} />
                 </button>
               </div>
             </label>
@@ -206,30 +226,27 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             {error && (
               <div
                 role="alert"
-                className="os-lock-error px-2.5 py-2 font-mono text-[8px] leading-relaxed text-os-red"
+                className="os-lock-error px-3 py-2.5 text-center text-xs leading-relaxed text-os-red"
               >
                 {error}
               </div>
             )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting || !password || (isFirstRun && normalizedUsername.length < 2)}
-              className="os-lock-submit flex h-9 w-full items-center justify-center gap-2 font-mono text-[8px] font-medium uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              <Power size={12} />
-              <span>
-                {isSubmitting ? 'Verifying…' : isFirstRun ? 'Set password & power on' : 'Power on'}
-              </span>
-            </button>
           </form>
-        </div>
 
-        <div className="os-lock-card-footer flex h-9 items-center justify-center gap-1.5 px-3 font-mono text-[7.5px] uppercase tracking-[0.12em] text-os-text-dim">
-          <ShieldCheck size={10} className="text-os-accent" />
-          {isFirstRun ? 'Credentials remain on this device' : 'Workspace locked locally'}
+          <div className="os-lock-local-note mt-4 flex items-center justify-center gap-2 text-[10px]">
+            <ShieldCheck size={13} />
+            <span>
+              {isSubmitting
+                ? 'Unlocking securely…'
+                : isFirstRun
+                  ? 'Credentials remain only on this device'
+                  : `Local profile · @${profile.username}`}
+            </span>
+          </div>
         </div>
       </section>
+
+      <p className="os-lock-hint absolute bottom-6 z-10 text-xs">Press Enter to unlock</p>
     </main>
   );
 }

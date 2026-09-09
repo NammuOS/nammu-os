@@ -89,6 +89,7 @@ export default function DesktopApp() {
   const [recentTools, setRecentTools] = useState<string[]>(getRecent());
   const [suggestedTools, setSuggestedTools] = useState<string[]>([]);
   const [musicOpen, setMusicOpen] = useState(true);
+  const [railRevealed, setRailRevealed] = useState(false);
   const [isLocked, setIsLocked] = useState(getStoredLockState);
   const hasMaximizedWindow = windows.some(
     (windowState) => windowState.isMaximized && !windowState.isMinimized,
@@ -101,6 +102,29 @@ export default function DesktopApp() {
     () => ({ left: 36, right: musicOpen ? 292 : 0, bottom: 32, top: 0, margin: 6 }),
     [musicOpen],
   );
+
+  useEffect(() => {
+    if (!railRevealed) return;
+    const dismissAwayFromRail = (event: PointerEvent) => {
+      if (event.clientX > 76) setRailRevealed(false);
+    };
+    const dismissOutsideWindow = () => setRailRevealed(false);
+    const dismissOutsideHorizon = () => {
+      window.requestAnimationFrame(() => {
+        if (document.documentElement.dataset.theme !== 'horizon') setRailRevealed(false);
+      });
+    };
+    window.addEventListener('pointermove', dismissAwayFromRail, true);
+    window.addEventListener('blur', dismissOutsideWindow);
+    window.addEventListener('nammu-theme-change', dismissOutsideHorizon);
+    document.documentElement.addEventListener('mouseleave', dismissOutsideWindow);
+    return () => {
+      window.removeEventListener('pointermove', dismissAwayFromRail, true);
+      window.removeEventListener('blur', dismissOutsideWindow);
+      window.removeEventListener('nammu-theme-change', dismissOutsideHorizon);
+      document.documentElement.removeEventListener('mouseleave', dismissOutsideWindow);
+    };
+  }, [railRevealed]);
 
   const openTool = useCallback(
     (toolId: string, data?: any) => {
@@ -449,7 +473,7 @@ export default function DesktopApp() {
   return (
     <ContextMenuProvider safeArea={contextMenuSafeArea}>
       <div
-        className={`nammu-os-shell h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'} ${hasMaximizedWindow ? 'desktop-has-maximized' : ''}`}
+        className={`nammu-os-shell h-screen w-screen overflow-hidden relative ${musicOpen ? 'music-panel-open' : 'music-panel-minimized'} ${hasMaximizedWindow ? 'desktop-has-maximized' : ''} ${railRevealed ? 'desktop-rail-revealed' : ''}`}
       >
         <div className="os-scanline" aria-hidden="true" />
 
@@ -473,6 +497,12 @@ export default function DesktopApp() {
           }}
         />
 
+        <div
+          className="rail-reveal-zone"
+          aria-hidden="true"
+          onPointerEnter={() => setRailRevealed(true)}
+        />
+
         <Rail
           windows={windows}
           searchActive={launcherOpen}
@@ -488,10 +518,13 @@ export default function DesktopApp() {
             setStartMenuOpen(false);
           }}
           onOpenSystemApp={toggleSystemApp}
+          onOpenTool={openTool}
           onFocusWindow={focusWindow}
           onRestoreWindow={restoreWindow}
           onMinimizeWindow={minimizeWindow}
           onCloseWindow={closeWindow}
+          musicOpen={musicOpen}
+          onToggleMusic={() => setMusicOpen((current) => !current)}
         />
 
         {/* Right-side listening workspace */}
@@ -515,7 +548,9 @@ export default function DesktopApp() {
               onMove={moveWindow}
               onResize={resizeWindow}
               rightInset={musicOpen ? 292 : 0}
-              shellOverlayActive={launcherOpen || startMenuOpen || taskbarFlyoutOpen}
+              shellOverlayActive={
+                launcherOpen || startMenuOpen || taskbarFlyoutOpen || railRevealed
+              }
             >
               {systemApp ? (
                 <SystemAppContent appId={systemApp.id} initialData={win.data} />
@@ -585,8 +620,6 @@ export default function DesktopApp() {
           onUnpinTool={handleUnpin}
           onReorderPinned={handleReorderPinned}
           onOpenSystemApp={openSystemApp}
-          musicOpen={musicOpen}
-          onToggleMusic={() => setMusicOpen((current) => !current)}
           onPowerOff={powerOff}
           onFlyoutVisibilityChange={setTaskbarFlyoutOpen}
         />

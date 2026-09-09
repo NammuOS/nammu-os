@@ -1883,7 +1883,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
 
       {pageContextMenu ? (
         <div
-          className={styles.pageContextMenu}
+          className={`${styles.pageContextMenu} nammu-context-surface nammu-context-legacy`}
           style={{ left: pageContextMenu.x, top: pageContextMenu.y }}
           role="menu"
           aria-label={`Page ${pageContextMenu.pageNumber} actions`}

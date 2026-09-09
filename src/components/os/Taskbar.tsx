@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   Maximize2,
   Minimize2,
-  Music,
   Pin,
   PinOff,
   Power,
@@ -41,8 +40,6 @@ interface TaskbarProps {
   onUnpinTool: (toolId: string) => void;
   onReorderPinned: (sourceId: string, targetId: string) => void;
   onOpenSystemApp: (appId: SystemAppId) => void;
-  musicOpen: boolean;
-  onToggleMusic: () => void;
   onPowerOff: () => void;
   onFlyoutVisibilityChange?: (visible: boolean) => void;
 }
@@ -88,8 +85,6 @@ export default function Taskbar({
   onUnpinTool,
   onReorderPinned,
   onOpenSystemApp,
-  musicOpen,
-  onToggleMusic,
   onPowerOff,
   onFlyoutVisibilityChange,
 }: TaskbarProps) {
@@ -289,13 +284,6 @@ export default function Taskbar({
       icon: Eye,
       disabled: !minimizedTools.length,
       action: () => minimizedTools.forEach((win) => onRestoreWindow(win.id)),
-    },
-    {
-      id: 'taskbar-music',
-      label: musicOpen ? 'Hide music sidebar' : 'Show music sidebar',
-      icon: Music,
-      checked: musicOpen,
-      action: onToggleMusic,
     },
     { id: 'taskbar-sep-1', type: 'separator' },
     {
@@ -628,17 +616,6 @@ export default function Taskbar({
         {/* System tray */}
         <div className="flex items-center gap-1">
           <div className="flex items-center gap-2.5 px-2">
-            {/* Music sidebar toggle */}
-            <button
-              title={musicOpen ? 'Hide music sidebar' : 'Show music sidebar'}
-              onClick={onToggleMusic}
-              className={`cursor-pointer flex items-center bg-transparent border-0 p-0 transition-colors ${
-                musicOpen ? 'text-os-accent' : 'text-os-text-muted hover:text-os-accent'
-              }`}
-            >
-              <Music size={13} />
-            </button>
-
             <span
               title="Connected"
               className="cursor-pointer text-os-text-muted hover:text-os-accent flex items-center transition-colors"
@@ -670,7 +647,7 @@ export default function Taskbar({
 
               {/* Wheel percentage status badge tooltip */}
               {showWheelTooltip && (
-                <div className="absolute bottom-9 left-1/2 -translate-x-1/2 bg-[#090d18] border border-[#4aa3ff]/60 shadow-2xl px-2.5 py-1 rounded-[3px] text-[10px] font-mono text-os-text flex items-center gap-1.5 whitespace-nowrap z-50 animate-fade-in pointer-events-none">
+                <div className="taskbar-volume-badge absolute bottom-9 left-1/2 -translate-x-1/2 bg-[#090d18] border border-[#4aa3ff]/60 shadow-2xl px-2.5 py-1 rounded-[3px] text-[10px] font-mono text-os-text flex items-center gap-1.5 whitespace-nowrap z-50 animate-fade-in pointer-events-none">
                   {volume === 0 ? (
                     <VolumeX size={11} className="text-[#f43f5e]" />
                   ) : (

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getDefaultWindowBounds } from '../src/lib/windowGeometry';
+import { getDefaultWindowBounds, getDesktopLeftInset } from '../src/lib/windowGeometry';
 
 describe('default window geometry', () => {
   test('uses the established desktop opening size and position', () => {
@@ -27,5 +27,12 @@ describe('default window geometry', () => {
       width: 900,
       height: 560,
     });
+  });
+
+  test('lets Horizon windows reach the real desktop edge while preserving legacy rails', () => {
+    expect(getDesktopLeftInset('horizon')).toBe(0);
+    expect(getDesktopLeftInset('cyber')).toBe(36);
+    expect(getDesktopLeftInset('macos')).toBe(36);
+    expect(getDesktopLeftInset()).toBe(36);
   });
 });

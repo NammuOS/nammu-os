@@ -2658,7 +2658,7 @@ export default function BrowserApp() {
       {contextMenu.isOpen && (
         <div
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="absolute z-50 max-h-[90%] min-w-52.5 overflow-y-auto border border-white/[0.14] bg-navy/95 p-1 font-mono text-[10px] text-[#c9d7e2] shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100 os-scrollbar"
+          className="nammu-context-surface nammu-context-legacy absolute z-50 max-h-[90%] min-w-52.5 overflow-y-auto border border-white/[0.14] bg-navy/95 p-1 font-mono text-[10px] text-[#c9d7e2] shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100 os-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
           {/* TAB CONTEXT MENU */}

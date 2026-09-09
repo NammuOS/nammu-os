@@ -144,7 +144,8 @@ export default function Identity({
               aria-expanded={searchActive}
             />
             <kbd className="desktop-search-key hidden rounded border border-white/[0.07] bg-black/25 px-1.5 py-0.5 font-mono text-[8px] tracking-widest text-[#556f84] sm:block">
-              âŒ˜ K
+              <Command size={11} strokeWidth={1.8} aria-hidden="true" />
+              <span>K</span>
             </kbd>
             <button
               type="submit"

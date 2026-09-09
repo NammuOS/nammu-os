@@ -13,6 +13,10 @@ const DEFAULT_MAX_WIDTH = 900;
 const DEFAULT_MAX_HEIGHT = 560;
 const DEFAULT_MAX_TOP = 190;
 
+export function getDesktopLeftInset(theme?: string): number {
+  return theme === 'horizon' ? 0 : DESKTOP_LEFT_INSET;
+}
+
 export function getDefaultWindowBounds(
   viewportWidth: number,
   viewportHeight: number,

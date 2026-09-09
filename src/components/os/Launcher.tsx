@@ -308,15 +308,16 @@ export default function Launcher({
         }
       >
         {searchQuery && (
-          <div className="flex items-center gap-2 border-b border-white/[0.06] bg-black/15 px-3 py-2.5 font-mono text-[9px] text-[#61788c]">
-            <Search size={12} className="text-[#4aa3ff]" />
-            Results for <span className="truncate text-[#dce7f2]">{searchQuery}</span>
+          <div className="launcher-query-strip flex items-center gap-2 border-b px-4 py-3 text-[11px]">
+            <Search size={14} />
+            <span>Results for</span>
+            <strong className="truncate">{searchQuery}</strong>
           </div>
         )}
 
         {/* Top Option Tabs: All, Tools, Pinned, Recent */}
         {!searchQuery && (
-          <div className="flex items-center gap-1 border-b border-white/[0.06] bg-black/15 px-3 py-2">
+          <div className="launcher-tabs flex items-center gap-1 border-b px-3 py-2.5">
             <button
               onClick={() => {
                 setActiveTab('all');
@@ -355,14 +356,10 @@ export default function Launcher({
 
         {/* Category Pills (Visible when Tools tab is active) with All on the left of Converters */}
         {!searchQuery && activeTab === 'tools' && (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] bg-black/25 px-3 py-2">
+          <div className="launcher-tools-filter flex flex-nowrap items-center gap-1.5 border-b px-3 py-2.5">
             <button
               onClick={() => setActiveCategory('all')}
-              className={`px-2.5 py-1 text-[11px] rounded-sm border transition-all ${
-                activeCategory === 'all'
-                  ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/15 font-medium text-[#9ecaff]'
-                  : 'border-white/[0.06] bg-white/[0.01] text-[#647c90] hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-[#bcd2e4]'
-              }`}
+              className={`launcher-filter-pill rounded-sm border px-2.5 py-1 text-[11px] transition-all ${activeCategory === 'all' ? 'active' : ''}`}
             >
               All
             </button>
@@ -370,11 +367,7 @@ export default function Launcher({
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-2.5 py-1 text-[11px] rounded-sm border transition-all ${
-                  activeCategory === cat
-                    ? 'border-[#4aa3ff]/40 bg-[#4aa3ff]/15 font-medium text-[#9ecaff]'
-                    : 'border-white/[0.06] bg-white/[0.01] text-[#647c90] hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-[#bcd2e4]'
-                }`}
+                className={`launcher-filter-pill rounded-sm border px-2.5 py-1 text-[11px] transition-all ${activeCategory === cat ? 'active' : ''}`}
               >
                 {cat}
               </button>
@@ -388,17 +381,15 @@ export default function Launcher({
           activeTab === 'tools' &&
           activeCategory === 'all' &&
           !searchQuery && (
-            <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-1.5">
-              <Star size={10} className="text-[#f6c85f]" />
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-[#d7b35f]">
-                Suggested for active workspace
-              </span>
+            <div className="launcher-suggestion flex items-center gap-2 border-b px-4 py-2">
+              <Star size={11} />
+              <span className="text-[10px] font-medium">Suggested for active workspace</span>
             </div>
           )}
 
         {/* Items Grid */}
-        <div className="flex-1 overflow-y-auto os-scrollbar p-3">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="launcher-items os-scrollbar flex-1 overflow-y-auto p-3">
+          <div className="launcher-grid grid grid-cols-2 gap-2 sm:grid-cols-3">
             {displayedItems.map((item) => {
               const Icon = item.icon;
               const isPinned = pinnedTools.includes(item.id);
@@ -431,17 +422,17 @@ export default function Launcher({
                   }
                 >
                   <div className="flex items-start gap-2.5">
-                    <div className="rounded-md border border-white/[0.06] bg-black/30 p-1.5 transition-colors group-hover:border-[#4aa3ff]/30 group-hover:bg-[#4aa3ff]/8">
-                      <Icon size={18} className="text-[#4aa3ff]" />
+                    <div className="launcher-item-icon grid shrink-0 place-items-center">
+                      <Icon size={18} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate text-[11px] font-medium text-[#dce7f2]">
+                    <div className="min-w-0 flex-1">
+                      <div className="launcher-item-name truncate text-[12px] font-medium">
                         {item.name}
                       </div>
-                      <div className="mt-0.5 line-clamp-2 text-[9.5px] leading-tight text-[#71889d]">
+                      <div className="launcher-item-description mt-0.5 line-clamp-2 text-[10px] leading-snug">
                         {item.description}
                       </div>
-                      <div className="mt-1 font-mono text-[8px] uppercase tracking-wider text-[#4a6173]">
+                      <div className="launcher-item-category mt-1 text-[9px] font-medium">
                         {item.category}
                       </div>
                     </div>
@@ -452,12 +443,12 @@ export default function Launcher({
                       if (isPinned) onUnpinTool(item.id);
                       else onPinTool(item.id);
                     }}
-                    className={`absolute top-2 right-2 p-1 rounded-sm opacity-0 group-hover:opacity-100 transition-all ${
-                      isPinned ? 'opacity-100' : ''
+                    className={`launcher-pin absolute right-2 top-2 grid h-6 w-6 place-items-center opacity-0 transition-all group-hover:opacity-100 ${
+                      isPinned ? 'is-pinned opacity-100' : ''
                     }`}
                     title={isPinned ? 'Unpin' : 'Pin'}
                   >
-                    <Pin size={10} className={isPinned ? 'text-[#4aa3ff]' : 'text-[#61788c]'} />
+                    <Pin size={11} />
                   </button>
                 </div>
               );
@@ -465,16 +456,16 @@ export default function Launcher({
           </div>
 
           {displayedItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-[#71889d]">
+            <div className="launcher-empty flex flex-col items-center justify-center py-12">
               <Search size={24} className="mb-2 opacity-40" />
               <div className="text-xs">No matching apps or tools found</div>
-              <div className="text-[10px] mt-1">Try a different search term</div>
+              <div className="mt-1 text-[10px]">Try a different search term</div>
             </div>
           )}
         </div>
 
         {/* Footer stats */}
-        <div className="flex items-center justify-between border-t border-white/[0.06] bg-black/15 px-3 py-2 font-mono text-[8.5px] text-[#556f84]">
+        <div className="launcher-footer flex items-center justify-between border-t px-4 py-2.5 text-[10px]">
           <span>
             {activeTab === 'all' && `${displayedItems.length} applications`}
             {activeTab === 'tools' &&

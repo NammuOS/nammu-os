@@ -19,6 +19,7 @@ import type { ContextMenuEntry } from '../context-menu/contextMenuTypes';
 import { shouldKeepWindowRuntimeAlive } from '../../lib/appRuntimePolicy';
 import { WindowRuntimeProvider } from './WindowRuntimeContext';
 import { getPlatformCapabilities } from '../../platform';
+import { getDesktopLeftInset } from '../../lib/windowGeometry';
 
 interface WindowProps {
   win: WindowState;
@@ -98,9 +99,10 @@ function Window({
       onFocus(win.id);
       const startX = e.clientX;
       const startY = e.clientY;
+      const workspaceLeft = getDesktopLeftInset(document.documentElement.dataset.theme);
       const workspaceRight = window.innerWidth - rightInset;
       const origX = wasDocked
-        ? Math.max(36, Math.min(workspaceRight - win.width, e.clientX - win.width / 2))
+        ? Math.max(workspaceLeft, Math.min(workspaceRight - win.width, e.clientX - win.width / 2))
         : win.x;
       const origY = wasDocked ? 0 : win.y;
       dragRef.current = {
@@ -127,7 +129,7 @@ function Window({
           if (dragRef.current.wasMaximized) onMaximize(win.id);
           else if (dragRef.current.wasSnapped) onSnap(win.id);
           const restoredX = Math.max(
-            36,
+            workspaceLeft,
             Math.min(workspaceRight - win.width, ev.clientX - win.width / 2),
           );
           dragRef.current = {
@@ -145,9 +147,9 @@ function Window({
         }
         const dx = ev.clientX - dragRef.current.startX;
         const dy = ev.clientY - dragRef.current.startY;
-        const maxX = Math.max(36, workspaceRight - win.width);
+        const maxX = Math.max(workspaceLeft, workspaceRight - win.width);
         const maxY = Math.max(0, window.innerHeight - 32 - 26);
-        const nextX = Math.max(36, Math.min(maxX, dragRef.current.origX + dx));
+        const nextX = Math.max(workspaceLeft, Math.min(maxX, dragRef.current.origX + dx));
         const nextY = Math.max(0, Math.min(maxY, dragRef.current.origY + dy));
         dragRef.current.currentX = nextX;
         dragRef.current.currentY = nextY;
@@ -248,6 +250,7 @@ function Window({
         const state = resizeRef.current;
         const dx = moveEvent.clientX - state.startX;
         const dy = moveEvent.clientY - state.startY;
+        const workspaceLeft = getDesktopLeftInset(document.documentElement.dataset.theme);
         const workspaceRight = window.innerWidth - rightInset;
         const workspaceBottom = window.innerHeight - 32;
         let nextX = state.x;
@@ -260,7 +263,7 @@ function Window({
         if (state.direction.includes('s'))
           nextHeight = Math.max(200, Math.min(workspaceBottom - state.y, state.height + dy));
         if (state.direction.includes('w')) {
-          nextX = Math.max(36, Math.min(state.x + state.width - 320, state.x + dx));
+          nextX = Math.max(workspaceLeft, Math.min(state.x + state.width - 320, state.x + dx));
           nextWidth = state.width + state.x - nextX;
         }
         if (state.direction.includes('n')) {
@@ -564,11 +567,11 @@ function Window({
               <button
                 type="button"
                 onClick={() => void platform.window.openStandalone(standaloneUrl, win.title)}
-                className="window-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-white/[0.06]"
+                className="window-control window-external-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-white/[0.06]"
                 title={`Open ${win.title} in new tab`}
                 aria-label={`Open ${win.title} in new tab`}
               >
-                <ExternalLink size={10} className="text-[#70869a]" />
+                <ExternalLink size={13} strokeWidth={1.8} className="text-[#70869a]" />
               </button>
             )}
             <button
@@ -576,14 +579,18 @@ function Window({
               className={`window-control window-snap-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors ${win.snap ? 'bg-[#4aa3ff]/12' : 'hover:bg-white/[0.06]'}`}
               title={win.snap ? 'Exit split view' : 'Split with another window'}
             >
-              <Columns2 size={11} className={win.snap ? 'text-[#4aa3ff]' : 'text-[#70869a]'} />
+              <Columns2
+                size={13}
+                strokeWidth={1.8}
+                className={win.snap ? 'text-[#4aa3ff]' : 'text-[#70869a]'}
+              />
             </button>
             <button
               onClick={() => onMinimize(win.id)}
               className="window-control window-minimize-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-white/[0.06]"
               title="Minimize"
             >
-              <Minus size={11} className="text-[#70869a]" />
+              <Minus size={14} strokeWidth={1.8} className="text-[#70869a]" />
             </button>
             <button
               onClick={() => onMaximize(win.id)}
@@ -591,9 +598,9 @@ function Window({
               title="Maximize"
             >
               {win.isMaximized ? (
-                <Square size={10} className="text-[#70869a]" />
+                <Square size={12} strokeWidth={1.8} className="text-[#70869a]" />
               ) : (
-                <Maximize2 size={10} className="text-[#70869a]" />
+                <Maximize2 size={13} strokeWidth={1.8} className="text-[#70869a]" />
               )}
             </button>
             <button
@@ -601,7 +608,7 @@ function Window({
               className="window-control window-close-control grid h-7 w-7 place-items-center rounded-[5px] transition-colors hover:bg-[#8b2d33]"
               title="Close"
             >
-              <X size={11} className="text-[#70869a] hover:text-white" />
+              <X size={14} strokeWidth={1.9} className="text-[#70869a]" />
             </button>
           </div>
         </div>

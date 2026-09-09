@@ -567,6 +567,24 @@ html[data-crt-scanlines='on'] .os-scanline {
   border-color: rgba(74, 163, 255, 0.28);
 }
 
+.launcher-filter-pill {
+  color: #647c90;
+  background: rgba(255, 255, 255, 0.01);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.launcher-filter-pill:hover {
+  color: #bcd2e4;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.launcher-filter-pill.active {
+  color: #9ecaff;
+  background: rgba(74, 163, 255, 0.15);
+  border-color: rgba(74, 163, 255, 0.4);
+}
+
 .tool-tile {
   @apply cursor-pointer rounded-lg p-2.5 transition-all;
   background: rgba(255, 255, 255, 0.015);

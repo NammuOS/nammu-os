@@ -1267,11 +1267,11 @@ export default function CloudMyDriveView({
       {/* Custom Context Menu */}
       {contextMenu && (
         <div
-          className="absolute z-50 w-44 overflow-hidden rounded-lg border border-white/[0.08] bg-[#090e17]/95 p-1 shadow-2xl backdrop-blur-2xl text-[10px]"
+          className="nammu-context-surface nammu-context-legacy absolute z-50 w-44 overflow-hidden rounded-lg border border-white/[0.08] bg-[#090e17]/95 p-1 shadow-2xl backdrop-blur-2xl text-[10px]"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="truncate px-2 py-1 font-mono text-[8px] text-[#5e788e] border-b border-white/[0.04]">
+          <div className="nammu-context-title truncate px-2 py-1 font-mono text-[8px] text-[#5e788e] border-b border-white/[0.04]">
             {contextMenu.file.file_name}
           </div>
           {!contextMenu.file.is_folder && (

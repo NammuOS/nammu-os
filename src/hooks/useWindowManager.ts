@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { getDefaultWindowBounds } from '../lib/windowGeometry';
+import { getDefaultWindowBounds, getDesktopLeftInset } from '../lib/windowGeometry';
 import { requestManagedWindowClose } from '../lib/windowCloseGuards';
 
 export type SnapEdge =
@@ -237,7 +237,8 @@ export function useWindowManager() {
   }, []);
 
   const fitWindows = useCallback((rightInset: number) => {
-    const workspaceWidth = Math.max(360, window.innerWidth - 36 - rightInset);
+    const workspaceLeft = getDesktopLeftInset(document.documentElement.dataset.theme);
+    const workspaceWidth = Math.max(360, window.innerWidth - workspaceLeft - rightInset);
     const workspaceHeight = Math.max(260, window.innerHeight - 32);
     setWindows((prev) =>
       prev.map((w) => {
@@ -248,7 +249,7 @@ export function useWindowManager() {
           ...w,
           width,
           height,
-          x: Math.max(36, Math.min(w.x, 36 + workspaceWidth - width)),
+          x: Math.max(workspaceLeft, Math.min(w.x, workspaceLeft + workspaceWidth - width)),
           y: Math.max(0, Math.min(w.y, workspaceHeight - height)),
         };
       }),
