@@ -7,6 +7,11 @@ import {
 import { useContextMenuStore } from './contextMenuStore';
 import type { ContextMenuEntry, ContextMenuSafeArea } from './contextMenuTypes';
 
+type ContextMenuOptions = {
+  safeArea?: ContextMenuSafeArea;
+  ariaLabel?: string;
+};
+
 export function useContextMenu() {
   const { openMenu, closeMenu } = useContextMenuStore();
   const longPressTimer = useRef<number | null>(null);
@@ -21,7 +26,7 @@ export function useContextMenu() {
         stopPropagation?: () => void;
       },
       items: ContextMenuEntry[],
-      options?: { safeArea?: ContextMenuSafeArea; ariaLabel?: string },
+      options?: ContextMenuOptions,
     ) => {
       event.preventDefault?.();
       event.stopPropagation?.();
@@ -40,7 +45,7 @@ export function useContextMenu() {
     (
       event: KeyboardEvent<HTMLElement>,
       items: ContextMenuEntry[],
-      options?: { safeArea?: ContextMenuSafeArea; ariaLabel?: string },
+      options?: ContextMenuOptions,
     ) => {
       if (!(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return false;
       event.preventDefault();
@@ -65,7 +70,7 @@ export function useContextMenu() {
     (
       event: ReactPointerEvent<HTMLElement>,
       items: ContextMenuEntry[],
-      options?: { safeArea?: ContextMenuSafeArea; ariaLabel?: string },
+      options?: ContextMenuOptions,
     ) => {
       if (event.pointerType === 'mouse') return;
       const { clientX, clientY, currentTarget } = event;

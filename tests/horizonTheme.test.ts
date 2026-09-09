@@ -199,15 +199,19 @@ describe('Horizon product-wide theme', () => {
     expect(identity).not.toContain('âŒ˜ K');
   });
 
-  test('keeps Horizon Start and context menus spatially compact', () => {
+  test('keeps Horizon Start and every shared context menu spatially compact', () => {
     const applicationTheme = read('src/app/horizon.css');
     const contextTheme = read('src/components/context-menu/contextMenu.css');
+    const contextMenu = read('src/components/context-menu/ContextMenu.tsx');
 
     expect(applicationTheme).toContain('width: 344px !important');
     expect(applicationTheme).toContain('max-height: min(520px, calc(100vh - 108px)) !important');
     expect(applicationTheme).toContain('min-height: 62px');
-    expect(contextTheme).toContain('min-width: 164px');
-    expect(contextTheme).toContain('max-width: min(244px, calc(100vw - 16px))');
+    expect(contextTheme).not.toContain('min-width: 164px');
+    expect(contextTheme).not.toContain('max-width: min(244px, calc(100vw - 16px))');
+    expect(contextTheme).toContain('width: 154px');
+    expect(contextTheme).not.toContain('is-desktop-context');
+    expect(contextMenu).toContain('className={`nammu-context-surface ${position');
   });
 
   test('uses compact premium controls for managed and standalone windows', () => {
