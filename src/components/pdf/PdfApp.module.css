@@ -586,6 +586,102 @@
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
 }
 
+/* PDF keeps its professional density while joining the same Horizon material,
+   typography, control, and panel hierarchy as the rest of Nammu OS. */
+:global(html[data-theme='horizon']) .app {
+  --pdf-line: rgb(255 255 255 / 9%);
+  --pdf-line-strong: rgb(255 255 255 / 16%);
+  --pdf-panel: rgb(255 255 255 / 3.5%);
+  --pdf-panel-2: rgb(255 255 255 / 5%);
+  --pdf-canvas: #292521;
+  background: #100e0c;
+  color: var(--color-os-text);
+  font-family: var(--font-sans);
+}
+
+:global(html[data-theme='horizon']) .menuBar,
+:global(html[data-theme='horizon']) .tabs,
+:global(html[data-theme='horizon']) .toolbar,
+:global(html[data-theme='horizon']) .statusBar {
+  background: var(--pdf-panel);
+  backdrop-filter: blur(18px);
+}
+
+:global(html[data-theme='horizon']) .menuButton,
+:global(html[data-theme='horizon']) .menuItem,
+:global(html[data-theme='horizon']) .tab,
+:global(html[data-theme='horizon']) .toolButton {
+  border-radius: 9px;
+  font-family: var(--font-sans);
+}
+
+:global(html[data-theme='horizon']) .menuButton:hover,
+:global(html[data-theme='horizon']) .menuButtonActive,
+:global(html[data-theme='horizon']) .menuItem:hover:not(:disabled),
+:global(html[data-theme='horizon']) .toolButton:hover:not(:disabled),
+:global(html[data-theme='horizon']) .toolButtonActive {
+  background: rgb(255 255 255 / 9%);
+}
+
+:global(html[data-theme='horizon']) .tabActive {
+  border-color: var(--pdf-line);
+  border-radius: 11px 11px 0 0;
+  background: rgb(255 255 255 / 8%);
+}
+
+:global(html[data-theme='horizon']) .menuPopover,
+:global(html[data-theme='horizon']) .pageContextMenu,
+:global(html[data-theme='horizon']) .dialog {
+  overflow: hidden;
+  border-color: var(--pdf-line-strong);
+  border-radius: 16px;
+  background: rgb(16 14 12 / 92%);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 8%),
+    0 18px 52px rgb(0 0 0 / 48%);
+  backdrop-filter: blur(24px) saturate(120%);
+}
+
+:global(html[data-theme='horizon']) .leftPanel,
+:global(html[data-theme='horizon']) .inspector {
+  background: rgb(255 255 255 / 4%);
+}
+
+:global(html[data-theme='horizon']) .panelHeader,
+:global(html[data-theme='horizon']) .organizeHeader {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+:global(html[data-theme='horizon']) .commentItem,
+:global(html[data-theme='horizon']) .annotationInspectorField input,
+:global(html[data-theme='horizon']) .annotationInspectorField textarea,
+:global(html[data-theme='horizon']) .annotationInspectorField select {
+  border-color: var(--pdf-line);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 6%);
+}
+
+:global(html[data-theme='horizon'][data-appearance='light']) .app {
+  --pdf-line: rgb(45 31 22 / 10%);
+  --pdf-line-strong: rgb(45 31 22 / 17%);
+  --pdf-panel: rgb(255 255 255 / 34%);
+  --pdf-panel-2: rgb(255 255 255 / 55%);
+  --pdf-canvas: #d8d3ce;
+  background: #f4efea;
+}
+
+:global(html[data-theme='horizon'][data-appearance='light']) .menuPopover,
+:global(html[data-theme='horizon'][data-appearance='light']) .pageContextMenu,
+:global(html[data-theme='horizon'][data-appearance='light']) .dialog {
+  background: rgb(250 247 243 / 94%);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 74%),
+    0 18px 52px rgb(53 35 23 / 18%);
+}
+
 @media (max-width: 980px) {
   .workspace {
     grid-template-columns: 164px minmax(0, 1fr);

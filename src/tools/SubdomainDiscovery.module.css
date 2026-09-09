@@ -777,6 +777,88 @@
   font-weight: 500;
 }
 
+/* The inspector remains a dense technical tool, but no longer looks like a
+   separate blueprint-themed product when Horizon is active. */
+:global(html[data-theme='horizon']) .tool {
+  --recon-bg: #100e0c;
+  --recon-panel: rgb(12 10 9 / 72%);
+  --recon-surface: rgb(255 255 255 / 6.5%);
+  --recon-hover: rgb(255 255 255 / 11%);
+  --recon-line: rgb(255 255 255 / 9%);
+  --recon-line-strong: color-mix(in srgb, var(--color-os-accent) 36%, transparent);
+  --recon-text: var(--color-os-text);
+  --recon-muted: var(--color-os-text-muted);
+  --recon-faint: var(--color-os-text-dim);
+  --recon-accent: var(--color-os-accent);
+  background: var(--recon-bg);
+  background-image: none;
+  font-family: var(--font-sans);
+  scrollbar-color: rgb(255 255 255 / 22%) transparent;
+}
+
+:global(html[data-theme='horizon']) .header {
+  padding: 20px 22px 17px;
+  background: rgb(255 255 255 / 3%);
+}
+
+:global(html[data-theme='horizon']) .header h1 {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 650;
+}
+
+:global(html[data-theme='horizon']) .header p {
+  font-family: var(--font-sans);
+}
+
+:global(html[data-theme='horizon']) .iconBox,
+:global(html[data-theme='horizon']) .domainInput,
+:global(html[data-theme='horizon']) .filterInput,
+:global(html[data-theme='horizon']) .scanButton,
+:global(html[data-theme='horizon']) .metrics > div,
+:global(html[data-theme='horizon']) .scopeTabs,
+:global(html[data-theme='horizon']) .sortSelect,
+:global(html[data-theme='horizon']) .resultPanel,
+:global(html[data-theme='horizon']) .actions button,
+:global(html[data-theme='horizon']) .rowActions button,
+:global(html[data-theme='horizon']) .rowActions a {
+  border-color: var(--recon-line);
+  border-radius: 12px;
+  background: var(--recon-surface);
+  box-shadow: inset 0 1px rgb(255 255 255 / 4%);
+}
+
+:global(html[data-theme='horizon']) .resultPanel {
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+:global(html[data-theme='horizon']) .scanButton {
+  color: white;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--recon-accent) 82%, white 12%),
+    var(--recon-accent)
+  );
+}
+
+:global(html[data-theme='horizon']) .eyebrow,
+:global(html[data-theme='horizon']) .metrics span,
+:global(html[data-theme='horizon']) .tableHeader {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+:global(html[data-theme='horizon'][data-appearance='light']) .tool {
+  --recon-bg: #f4efea;
+  --recon-panel: rgb(255 252 248 / 76%);
+  --recon-surface: rgb(255 255 255 / 56%);
+  --recon-hover: rgb(255 255 255 / 82%);
+  --recon-line: rgb(45 31 22 / 10%);
+  --recon-line-strong: color-mix(in srgb, var(--color-os-accent) 30%, transparent);
+}
+
 :global([data-appearance='light']) .tool {
   --recon-bg: #f2f2f7;
   --recon-panel: rgb(255 255 255 / 88%);

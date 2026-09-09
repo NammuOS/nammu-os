@@ -1878,3 +1878,944 @@ html[data-theme='macos'][data-appearance='dark'] {
     display: none;
   }
 }
+
+/* Horizon licensed material refinement. Kept after legacy theme rules so the
+   default desktop receives the complete material recipe without changing app contracts. */
+html[data-theme='horizon'] {
+  --color-os-bg: #15100e;
+  --color-os-panel: #181411;
+  --color-os-surface: #211b17;
+  --color-os-border: rgba(255, 255, 255, 0.1);
+  --color-os-accent: #f25c0d;
+  --color-os-accent-glow: #ff8a48;
+  --color-os-text: #fffaf6;
+  --color-os-text-muted: rgba(255, 250, 246, 0.68);
+  --color-os-text-dim: rgba(255, 250, 246, 0.46);
+  --font-sans:
+    'Inter Variable', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', ui-sans-serif, system-ui,
+    sans-serif;
+  --font-display:
+    'Inter Variable', 'Inter', 'Segoe UI Variable Display', 'Segoe UI', ui-sans-serif, system-ui,
+    sans-serif;
+  --nammu-material: rgba(0, 0, 0, 0.4);
+  --nammu-material-solid: #171310;
+  --nammu-material-raised: rgba(0, 0, 0, 0.52);
+  --nammu-material-control: rgba(255, 255, 255, 0.08);
+  --nammu-material-control-hover: rgba(255, 255, 255, 0.14);
+  --nammu-material-border: rgba(255, 255, 255, 0.1);
+  --nammu-material-border-strong: rgba(255, 255, 255, 0.18);
+  --nammu-material-shine: rgba(255, 255, 255, 0.1);
+  --nammu-shadow-window: 0 10px 64px rgba(0, 0, 0, 0.8);
+  --nammu-shadow-float: 0 14px 34px rgba(0, 0, 0, 0.5);
+  --nammu-radius-window: 40px;
+  --nammu-radius-panel: 20px;
+  --nammu-radius-control: 9999px;
+}
+
+html[data-theme='horizon'][data-appearance='light'] {
+  --color-os-bg: #ede8e2;
+  --color-os-panel: #f8f4ef;
+  --color-os-surface: #fffdfa;
+  --color-os-text: #221d19;
+  --color-os-text-muted: rgba(34, 29, 25, 0.66);
+  --color-os-text-dim: rgba(34, 29, 25, 0.45);
+  --nammu-material: rgba(255, 252, 248, 0.68);
+  --nammu-material-solid: #f7f2ed;
+  --nammu-material-raised: rgba(255, 253, 250, 0.8);
+  --nammu-material-control: rgba(43, 32, 23, 0.07);
+  --nammu-material-control-hover: rgba(43, 32, 23, 0.12);
+  --nammu-material-border: rgba(42, 30, 22, 0.12);
+  --nammu-material-border-strong: rgba(42, 30, 22, 0.2);
+  --nammu-material-shine: rgba(255, 255, 255, 0.76);
+  --nammu-shadow-window: 0 10px 64px rgba(54, 37, 24, 0.28);
+  --nammu-shadow-float: 0 14px 34px rgba(54, 37, 24, 0.2);
+}
+
+[data-theme='horizon'] .os-desktop {
+  background: #15100e url('/wallpapers/horizon/23.avif') center / cover no-repeat fixed;
+}
+
+[data-theme='horizon'] .wallpaper-mask {
+  background:
+    linear-gradient(180deg, rgba(4, 3, 2, 0.08), rgba(4, 3, 2, 0.22)),
+    radial-gradient(circle at 50% 38%, transparent 35%, rgba(5, 3, 2, 0.24)) !important;
+}
+
+[data-theme='horizon'][data-appearance='light'] .wallpaper-mask {
+  background: linear-gradient(180deg, rgba(255, 248, 239, 0.04), rgba(28, 17, 11, 0.12)) !important;
+}
+
+[data-theme='horizon'] .os-window-chrome {
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.045),
+    inset -1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    var(--nammu-shadow-window);
+  backdrop-filter: blur(40px) saturate(150%) brightness(70%);
+}
+
+[data-theme='horizon'][data-appearance='light'] .os-window-chrome {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 252, 248, 0.64);
+  backdrop-filter: blur(40px) saturate(130%) brightness(106%);
+}
+
+[data-theme='horizon'] .window-titlebar {
+  height: 42px !important;
+  padding-inline: 16px !important;
+  background: rgba(255, 255, 255, 0.035);
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='horizon'] .window-content {
+  background: rgba(9, 8, 7, 0.78);
+}
+
+[data-theme='horizon'][data-appearance='light'] .window-content {
+  background: rgba(250, 247, 243, 0.84);
+}
+
+[data-theme='horizon'] .os-taskbar {
+  right: auto !important;
+  bottom: 10px !important;
+  left: 50% !important;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  height: 64px !important;
+  padding: 7px 9px !important;
+  gap: 6px !important;
+  transform: translateX(-50%);
+  overflow: visible;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 14px 34px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px) saturate(120%) brightness(85%);
+}
+
+[data-theme='horizon'] .os-taskbar > button:first-of-type,
+[data-theme='horizon'] .taskbar-button {
+  width: 50px;
+  min-width: 50px;
+  height: 50px;
+  padding: 0 !important;
+  justify-content: center;
+  border-radius: 15px !important;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 140ms ease;
+}
+
+[data-theme='horizon'] .os-taskbar > button:first-of-type:hover,
+[data-theme='horizon'] .taskbar-button:hover {
+  transform: translateY(-4px) scale(1.08);
+}
+
+[data-theme='horizon'] .os-taskbar > button:first-of-type svg,
+[data-theme='horizon'] .taskbar-button > svg {
+  width: 25px;
+  height: 25px;
+}
+
+[data-theme='horizon'] .taskbar-button > span {
+  display: none !important;
+}
+
+[data-theme='horizon'] .taskbar-button.active > .absolute {
+  bottom: -4px !important;
+  width: 18px !important;
+  height: 3px !important;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-os-accent) 65%, transparent);
+}
+
+[data-theme='horizon'] .taskbar-popover {
+  bottom: calc(100% + 13px) !important;
+}
+
+[data-theme='horizon'] .os-rail {
+  top: 12px !important;
+  bottom: 88px !important;
+  left: 10px !important;
+  width: 42px !important;
+  padding: 6px 4px !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 21px;
+  background: rgba(0, 0, 0, 0.36) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 14px 34px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(20px) saturate(120%) brightness(85%);
+}
+
+[data-theme='horizon'] .os-rail button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 11px !important;
+}
+
+[data-theme='horizon'] .start-menu-panel,
+[data-theme='horizon'] .search-launcher-panel,
+[data-theme='horizon'] .glass-panel,
+[data-theme='horizon'] .taskbar-popover,
+[data-theme='horizon'] .context-menu-popover,
+[data-theme='horizon'] .os-lock-card {
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 1px 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    var(--nammu-shadow-float);
+  backdrop-filter: blur(20px) saturate(120%) brightness(85%);
+}
+
+[data-theme='horizon'] .start-menu-panel {
+  bottom: 86px !important;
+  left: 64px !important;
+  width: 420px !important;
+  max-height: min(720px, calc(100vh - 112px)) !important;
+  border-radius: 24px !important;
+}
+
+[data-theme='horizon'] .start-menu-app-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.24),
+    0 10px 22px rgba(0, 0, 0, 0.34);
+}
+
+[data-theme='horizon'] .desktop-search-field {
+  height: 48px !important;
+  border-radius: 9999px !important;
+  background: rgba(0, 0, 0, 0.36);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 14px 34px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(20px) saturate(120%) brightness(85%);
+}
+
+[data-theme='horizon'] .identity-wordmark {
+  font-size: 42px !important;
+  font-weight: 650 !important;
+}
+
+[data-theme='horizon'] .settings-app {
+  background: rgba(11, 10, 9, 0.9) !important;
+}
+
+[data-theme='horizon'] .settings-app .settings-card,
+[data-theme='horizon'] .settings-app [class*='bg-[#05070b]'],
+[data-theme='horizon'] .settings-inspector-section {
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+}
+
+[data-theme='horizon'] .settings-app button,
+[data-theme='horizon'] .settings-app input,
+[data-theme='horizon'] .settings-app select,
+[data-theme='horizon'] .settings-app textarea,
+[data-theme='horizon'] .settings-inspector-option {
+  border-radius: 14px !important;
+}
+
+[data-theme='horizon'] .os-btn,
+[data-theme='horizon'] .taskbar-power-action,
+[data-theme='horizon'] .os-lock-submit {
+  border-radius: 9999px !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.09);
+}
+
+[data-theme='horizon'] ::-webkit-scrollbar,
+[data-theme='horizon'] .os-scrollbar::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+[data-theme='horizon'] ::-webkit-scrollbar-thumb,
+[data-theme='horizon'] .os-scrollbar::-webkit-scrollbar-thumb {
+  border-width: 4px;
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  [data-theme='horizon'] .os-window-chrome,
+  [data-theme='horizon'] .os-taskbar,
+  [data-theme='horizon'] .os-rail,
+  [data-theme='horizon'] .start-menu-panel,
+  [data-theme='horizon'] .search-launcher-panel,
+  [data-theme='horizon'] .glass-panel,
+  [data-theme='horizon'] .taskbar-popover,
+  [data-theme='horizon'] .context-menu-popover,
+  [data-theme='horizon'] .os-lock-card {
+    background: var(--nammu-material-solid) !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  [data-theme='horizon'] .os-window-chrome,
+  [data-theme='horizon'] .os-taskbar,
+  [data-theme='horizon'] .os-rail,
+  [data-theme='horizon'] .start-menu-panel,
+  [data-theme='horizon'] .search-launcher-panel,
+  [data-theme='horizon'] .glass-panel,
+  [data-theme='horizon'] .taskbar-popover,
+  [data-theme='horizon'] .context-menu-popover,
+  [data-theme='horizon'] .os-lock-card {
+    background: var(--nammu-material-solid) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  [data-theme='horizon'] .os-taskbar {
+    bottom: 6px !important;
+    max-width: calc(100vw - 12px);
+    height: 56px !important;
+    padding: 5px 7px !important;
+  }
+
+  [data-theme='horizon'] .os-taskbar > button:first-of-type,
+  [data-theme='horizon'] .taskbar-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+
+  [data-theme='horizon'] .os-rail {
+    left: 6px !important;
+    bottom: 72px !important;
+  }
+
+  [data-theme='horizon'] .start-menu-panel {
+    bottom: 70px !important;
+    left: 8px !important;
+    width: calc(100vw - 16px) !important;
+  }
+}
+
+/* The first Horizon recipe above is authoritative. This superseded prototype
+   stays inert temporarily so the theme migration remains reviewable in Git. */
+@media not all {
+  /* --------------------------------------------------------------------------
+   Horizon
+
+   NammuOS's licensed immersive desktop material system, adapted to the
+   existing Nammu shell. Cyber Glow remains available through Settings.
+   -------------------------------------------------------------------------- */
+
+  html[data-theme='horizon'] {
+    --color-os-bg: #111018;
+    --color-os-panel: #1a1822;
+    --color-os-surface: #252230;
+    --color-os-border: #4d4860;
+    --color-os-accent: #6c63ff;
+    --color-os-accent-glow: #8880ff;
+    --color-os-emerald: #47d7a1;
+    --color-os-amber: #ffbd62;
+    --color-os-red: #ff6476;
+    --color-os-text: #f4f2f7;
+    --color-os-text-muted: #aaa6b4;
+    --color-os-text-dim: #777281;
+    --color-os-glass: rgba(24, 22, 32, 0.74);
+    --font-sans:
+      'Outfit', 'Segoe UI Variable Text', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+    --font-display:
+      'Outfit', 'Segoe UI Variable Display', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+    --void: #111018;
+    --navy: #17151f;
+    --ink: #1d1a26;
+    --panel: rgba(27, 24, 36, 0.72);
+    --panel-2: rgba(35, 31, 46, 0.8);
+    --line: rgba(255, 255, 255, 0.075);
+    --line-strong: rgba(255, 255, 255, 0.13);
+    --electric: #6c63ff;
+    --electric-dim: rgba(108, 99, 255, 0.15);
+    --cyan: #8b84ff;
+    --emerald: #47d7a1;
+    --silver: #f4f2f7;
+    --mute: #aaa6b4;
+    --faint: #777281;
+    --nammu-material: rgba(25, 23, 33, 0.76);
+    --nammu-material-solid: #1b1923;
+    --nammu-material-raised: rgba(41, 37, 52, 0.78);
+    --nammu-material-control: rgba(255, 255, 255, 0.065);
+    --nammu-material-control-hover: rgba(255, 255, 255, 0.105);
+    --nammu-material-border: rgba(255, 255, 255, 0.1);
+    --nammu-material-border-strong: rgba(255, 255, 255, 0.16);
+    --nammu-material-shine: rgba(255, 255, 255, 0.075);
+    --nammu-shadow-window: 0 24px 80px rgba(0, 0, 0, 0.5), 0 4px 18px rgba(0, 0, 0, 0.26);
+    --nammu-shadow-float: 0 18px 52px rgba(0, 0, 0, 0.44), 0 2px 10px rgba(0, 0, 0, 0.2);
+    --nammu-radius-window: 18px;
+    --nammu-radius-panel: 18px;
+    --nammu-radius-control: 10px;
+    color-scheme: dark;
+  }
+
+  html[data-theme='horizon'][data-appearance='light'] {
+    --color-os-bg: #eae8ef;
+    --color-os-panel: #f5f3f8;
+    --color-os-surface: #ffffff;
+    --color-os-border: #c7c2d0;
+    --color-os-text: #24212b;
+    --color-os-text-muted: #696472;
+    --color-os-text-dim: #8e8997;
+    --color-os-glass: rgba(250, 248, 252, 0.76);
+    --void: #eae8ef;
+    --navy: #f2f0f5;
+    --ink: #ffffff;
+    --panel: rgba(250, 248, 252, 0.74);
+    --panel-2: rgba(255, 255, 255, 0.84);
+    --line: rgba(34, 27, 48, 0.09);
+    --line-strong: rgba(34, 27, 48, 0.15);
+    --silver: #24212b;
+    --mute: #696472;
+    --faint: #8e8997;
+    --nammu-material: rgba(248, 246, 251, 0.78);
+    --nammu-material-solid: #f4f2f7;
+    --nammu-material-raised: rgba(255, 255, 255, 0.84);
+    --nammu-material-control: rgba(40, 33, 52, 0.06);
+    --nammu-material-control-hover: rgba(40, 33, 52, 0.1);
+    --nammu-material-border: rgba(38, 31, 50, 0.12);
+    --nammu-material-border-strong: rgba(38, 31, 50, 0.19);
+    --nammu-material-shine: rgba(255, 255, 255, 0.78);
+    --nammu-shadow-window: 0 24px 72px rgba(35, 28, 47, 0.22), 0 4px 16px rgba(35, 28, 47, 0.1);
+    --nammu-shadow-float: 0 18px 48px rgba(35, 28, 47, 0.2), 0 2px 10px rgba(35, 28, 47, 0.08);
+    color-scheme: light;
+  }
+
+  html[data-theme='horizon'],
+  html[data-theme='horizon'] body,
+  html[data-theme='horizon'] #root {
+    color: var(--color-os-text);
+    background: var(--color-os-bg);
+    font-family: var(--font-sans);
+  }
+
+  [data-theme='horizon'] body {
+    background-color: var(--color-os-bg) !important;
+  }
+
+  [data-theme='horizon'] .os-desktop {
+    background:
+      radial-gradient(circle at 21% 12%, rgba(117, 92, 210, 0.28), transparent 36%),
+      radial-gradient(circle at 80% 15%, rgba(55, 101, 185, 0.22), transparent 34%),
+      radial-gradient(circle at 52% 92%, rgba(147, 66, 119, 0.17), transparent 42%),
+      linear-gradient(145deg, #17131d 0%, #100f17 53%, #14121b 100%);
+  }
+
+  [data-theme='horizon'][data-appearance='light'] .os-desktop {
+    background:
+      radial-gradient(circle at 20% 10%, rgba(142, 117, 219, 0.24), transparent 38%),
+      radial-gradient(circle at 80% 16%, rgba(102, 148, 219, 0.2), transparent 35%),
+      radial-gradient(circle at 54% 90%, rgba(202, 140, 181, 0.2), transparent 42%),
+      linear-gradient(145deg, #eeeaf2 0%, #e3e1e9 55%, #e9e5ec 100%);
+  }
+
+  [data-theme='horizon'] .desktop-grid,
+  [data-theme='horizon'] .macos-menu-bar,
+  [data-theme='horizon'] .corner-accent,
+  [data-theme='horizon'] .micro-line,
+  [data-theme='horizon'] .window-focus-dot {
+    display: none !important;
+  }
+
+  [data-theme='horizon'] .wallpaper-mask {
+    background:
+      linear-gradient(180deg, rgba(14, 12, 20, 0.18), rgba(14, 12, 20, 0.42)),
+      radial-gradient(circle at center, transparent 24%, rgba(12, 10, 17, 0.34)) !important;
+  }
+
+  [data-theme='horizon'][data-appearance='light'] .wallpaper-mask {
+    background:
+      linear-gradient(180deg, rgba(235, 231, 240, 0.08), rgba(235, 231, 240, 0.24)),
+      radial-gradient(circle at center, transparent 28%, rgba(229, 224, 235, 0.22)) !important;
+  }
+
+  @keyframes nammu-material-enter {
+    from {
+      opacity: 0;
+      transform: translateY(7px) scale(0.992);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  [data-theme='horizon'] .os-window-chrome {
+    border: 1px solid var(--nammu-material-border);
+    border-radius: var(--nammu-radius-window) !important;
+    background:
+      linear-gradient(180deg, var(--nammu-material-shine), transparent 48px), var(--nammu-material);
+    box-shadow: var(--nammu-shadow-window);
+    backdrop-filter: blur(30px) saturate(1.2);
+    animation: nammu-material-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  [data-theme='horizon'] .os-window-active {
+    border-color: color-mix(in srgb, var(--color-os-accent) 36%, var(--nammu-material-border));
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-os-accent) 8%, transparent),
+      var(--nammu-shadow-window);
+  }
+
+  [data-theme='horizon'] .os-window-docked,
+  [data-theme='horizon'] .os-window-docked.os-window-active {
+    border-radius: 0 !important;
+    box-shadow: none;
+    animation: none;
+  }
+
+  [data-theme='horizon'] .window-titlebar {
+    height: 34px !important;
+    padding-inline: 11px !important;
+    background: color-mix(in srgb, var(--nammu-material-raised) 68%, transparent);
+    border-bottom: 1px solid var(--nammu-material-border);
+    cursor: default;
+  }
+
+  [data-theme='horizon'] .window-title-group {
+    gap: 8px;
+  }
+
+  [data-theme='horizon'] .window-title {
+    color: var(--color-os-text) !important;
+    font-size: 12px !important;
+    font-weight: 600;
+    letter-spacing: -0.005em !important;
+  }
+
+  [data-theme='horizon'] .window-controls {
+    gap: 3px !important;
+  }
+
+  [data-theme='horizon'] .window-control {
+    width: 23px !important;
+    height: 23px !important;
+    border: 1px solid transparent;
+    border-radius: 8px !important;
+    color: var(--color-os-text-muted);
+  }
+
+  [data-theme='horizon'] .window-control:hover {
+    border-color: var(--nammu-material-border);
+    background: var(--nammu-material-control-hover) !important;
+  }
+
+  [data-theme='horizon'] .window-control svg {
+    color: currentColor !important;
+  }
+
+  [data-theme='horizon'] .window-close-control:hover {
+    color: #fff;
+    border-color: transparent;
+    background: #e5485d !important;
+  }
+
+  [data-theme='horizon'] .window-content {
+    color: var(--color-os-text);
+    background: color-mix(in srgb, var(--nammu-material-solid) 92%, transparent);
+  }
+
+  [data-theme='horizon'] .os-taskbar {
+    color: var(--color-os-text);
+    background:
+      linear-gradient(180deg, var(--nammu-material-shine), transparent 60%),
+      color-mix(in srgb, var(--nammu-material) 92%, transparent);
+    border-top: 1px solid var(--nammu-material-border);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(28px) saturate(1.25);
+  }
+
+  [data-theme='horizon'] .os-taskbar > button:first-of-type,
+  [data-theme='horizon'] .taskbar-button,
+  [data-theme='horizon'] .taskbar-tray-button {
+    border-radius: 9px;
+  }
+
+  [data-theme='horizon'] .os-taskbar > button:first-of-type:hover,
+  [data-theme='horizon'] .os-taskbar > button:first-of-type[class*='bg-white'],
+  [data-theme='horizon'] .taskbar-button:hover,
+  [data-theme='horizon'] .taskbar-button.active,
+  [data-theme='horizon'] .taskbar-tray-button:hover {
+    color: var(--color-os-text);
+    border-color: var(--nammu-material-border);
+    background: var(--nammu-material-control-hover) !important;
+    box-shadow: none;
+  }
+
+  [data-theme='horizon'] .taskbar-button.active {
+    color: var(--color-os-text);
+  }
+
+  [data-theme='horizon'] .taskbar-button.active > .absolute {
+    width: 4px !important;
+    height: 4px !important;
+    bottom: -1px !important;
+    border-radius: 999px;
+    background: var(--color-os-accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--color-os-accent) 58%, transparent);
+  }
+
+  [data-theme='horizon'] .os-rail {
+    color: var(--color-os-text-muted);
+    background:
+      linear-gradient(90deg, var(--nammu-material-shine), transparent 70%),
+      color-mix(in srgb, var(--nammu-material) 94%, transparent) !important;
+    border-right: 1px solid var(--nammu-material-border) !important;
+    box-shadow: 8px 0 26px rgba(0, 0, 0, 0.16);
+    backdrop-filter: blur(28px) saturate(1.2);
+  }
+
+  [data-theme='horizon'] .os-rail button {
+    border-radius: 9px !important;
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      transform 150ms ease;
+  }
+
+  [data-theme='horizon'] .os-rail button:hover {
+    color: var(--color-os-text) !important;
+    background: var(--nammu-material-control-hover) !important;
+  }
+
+  [data-theme='horizon'] .start-menu-panel,
+  [data-theme='horizon'] .search-launcher-panel,
+  [data-theme='horizon'] .glass-panel,
+  [data-theme='horizon'] .taskbar-popover,
+  [data-theme='horizon'] .context-menu-popover {
+    color: var(--color-os-text);
+    background:
+      linear-gradient(180deg, var(--nammu-material-shine), transparent 64px), var(--nammu-material);
+    border: 1px solid var(--nammu-material-border);
+    border-radius: var(--nammu-radius-panel) !important;
+    box-shadow: var(--nammu-shadow-float);
+    backdrop-filter: blur(30px) saturate(1.22);
+    animation: nammu-material-enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  [data-theme='horizon'] .start-menu-panel {
+    bottom: 8px !important;
+    left: 44px !important;
+    padding: 12px !important;
+  }
+
+  [data-theme='horizon'] .start-menu-panel [class*='border-white'],
+  [data-theme='horizon'] .search-launcher-panel [class*='border-white'] {
+    border-color: var(--nammu-material-border) !important;
+  }
+
+  [data-theme='horizon'] .start-menu-panel [class*='bg-[#'],
+  [data-theme='horizon'] .search-launcher-panel [class*='bg-[#'] {
+    background-color: var(--nammu-material-control) !important;
+  }
+
+  [data-theme='horizon'] .start-menu-panel button,
+  [data-theme='horizon'] .launcher-category-tab,
+  [data-theme='horizon'] .tool-tile {
+    border-radius: var(--nammu-radius-control) !important;
+  }
+
+  [data-theme='horizon'] .start-menu-panel button:hover,
+  [data-theme='horizon'] .tool-tile:hover,
+  [data-theme='horizon'] .launcher-category-tab:hover {
+    color: var(--color-os-text) !important;
+    background: var(--nammu-material-control-hover) !important;
+    border-color: var(--nammu-material-border) !important;
+    box-shadow: none;
+  }
+
+  [data-theme='horizon'] .launcher-category-tab.active {
+    color: var(--color-os-text) !important;
+    background: color-mix(in srgb, var(--color-os-accent) 20%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-os-accent) 32%, transparent) !important;
+  }
+
+  [data-theme='horizon'] .start-menu-app-icon {
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    color: #f5f2ff;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 48%),
+      linear-gradient(145deg, color-mix(in srgb, var(--color-os-accent) 76%, #8780aa), #373146);
+    box-shadow: 0 7px 16px rgba(0, 0, 0, 0.24);
+  }
+
+  [data-theme='horizon'] .start-menu-app-icon svg {
+    width: 19px;
+    height: 19px;
+    color: currentColor !important;
+    stroke-width: 1.65;
+  }
+
+  [data-theme='horizon'] .start-menu-panel .font-mono,
+  [data-theme='horizon'] .search-launcher-panel .font-mono {
+    font-family: var(--font-sans);
+  }
+
+  [data-theme='horizon'] .nammu-identity {
+    top: 18px !important;
+  }
+
+  [data-theme='horizon'] .nammu-identity > div {
+    padding-top: 20px !important;
+  }
+
+  [data-theme='horizon'] .identity-meta,
+  [data-theme='horizon'] .identity-coordinates {
+    display: none !important;
+  }
+
+  [data-theme='horizon'] .identity-greeting {
+    display: block !important;
+    margin: 0 0 8px;
+    color: var(--color-os-text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  [data-theme='horizon'] .identity-wordmark {
+    color: var(--color-os-text) !important;
+    font-family: var(--font-display);
+    font-size: 36px !important;
+    font-weight: 650 !important;
+    letter-spacing: -0.045em !important;
+    text-shadow: 0 3px 22px rgba(0, 0, 0, 0.25);
+  }
+
+  [data-theme='horizon'] .identity-wordmark .wordmark-os {
+    margin-left: 0.15em;
+    color: color-mix(in srgb, var(--color-os-accent) 82%, white);
+  }
+
+  [data-theme='horizon'] .desktop-search-field {
+    height: 39px !important;
+    color: var(--color-os-text);
+    background:
+      linear-gradient(180deg, var(--nammu-material-shine), transparent), var(--nammu-material);
+    border-color: var(--nammu-material-border) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 13px 36px rgba(0, 0, 0, 0.26);
+    backdrop-filter: blur(24px) saturate(1.15);
+  }
+
+  [data-theme='horizon'] .desktop-search-field:focus-within {
+    border-color: color-mix(
+      in srgb,
+      var(--color-os-accent) 46%,
+      var(--nammu-material-border)
+    ) !important;
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--color-os-accent) 14%, transparent),
+      0 13px 36px rgba(0, 0, 0, 0.24);
+  }
+
+  [data-theme='horizon'] .identity-actions button {
+    height: 25px !important;
+    padding-inline: 10px !important;
+    color: var(--color-os-text-muted) !important;
+    background: var(--nammu-material-control) !important;
+    border-color: var(--nammu-material-border) !important;
+    border-radius: 9px !important;
+    font-family: var(--font-sans) !important;
+    font-size: 10px !important;
+    letter-spacing: 0 !important;
+    text-transform: none;
+  }
+
+  [data-theme='horizon'] .identity-actions button:hover {
+    color: var(--color-os-text) !important;
+    background: var(--nammu-material-control-hover) !important;
+  }
+
+  [data-theme='horizon'] .taskbar-popover-header,
+  [data-theme='horizon'] .taskbar-popover-control,
+  [data-theme='horizon'] .taskbar-popover-presets,
+  [data-theme='horizon'] .taskbar-popover-footer,
+  [data-theme='horizon'] .taskbar-popover-item {
+    border-color: var(--nammu-material-border);
+  }
+
+  [data-theme='horizon'] .taskbar-popover button,
+  [data-theme='horizon'] .taskbar-power-action,
+  [data-theme='horizon'] .os-lock-submit,
+  [data-theme='horizon'] .os-lock-field {
+    border-radius: var(--nammu-radius-control);
+  }
+
+  [data-theme='horizon'] .taskbar-popover-item:hover,
+  [data-theme='horizon'] .taskbar-popover button:hover {
+    background: var(--nammu-material-control-hover);
+  }
+
+  [data-theme='horizon'] .os-lock-card {
+    border-color: var(--nammu-material-border);
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, var(--nammu-material-shine), transparent 72px), var(--nammu-material);
+    box-shadow: var(--nammu-shadow-window);
+    backdrop-filter: blur(32px) saturate(1.2);
+  }
+
+  [data-theme='horizon'] .os-lock-menubar {
+    background: color-mix(in srgb, var(--nammu-material) 90%, transparent);
+    border-color: var(--nammu-material-border);
+  }
+
+  [data-theme='horizon'] .os-lock-field {
+    background: var(--nammu-material-control);
+    border-color: var(--nammu-material-border);
+  }
+
+  [data-theme='horizon'] .settings-app {
+    color: var(--color-os-text);
+    background: var(--nammu-material-solid) !important;
+  }
+
+  [data-theme='horizon'] .settings-app > aside {
+    background: color-mix(in srgb, var(--nammu-material-raised) 76%, transparent) !important;
+    border-color: var(--nammu-material-border) !important;
+  }
+
+  [data-theme='horizon'] .settings-app .settings-card,
+  [data-theme='horizon'] .settings-app [class*='bg-[#05070b]'],
+  [data-theme='horizon'] .settings-inspector-section {
+    background: var(--nammu-material-control) !important;
+    border-color: var(--nammu-material-border) !important;
+    border-radius: 12px !important;
+  }
+
+  [data-theme='horizon'] .settings-app button,
+  [data-theme='horizon'] .settings-app input,
+  [data-theme='horizon'] .settings-app select,
+  [data-theme='horizon'] .settings-app textarea,
+  [data-theme='horizon'] .settings-inspector-option {
+    border-radius: 9px !important;
+  }
+
+  [data-theme='horizon'] .settings-app .font-mono,
+  [data-theme='horizon'] .settings-inspector-label {
+    font-family: var(--font-sans);
+  }
+
+  [data-theme='horizon'] .os-btn,
+  [data-theme='horizon'] .os-input,
+  [data-theme='horizon'] .os-panel,
+  [data-theme='horizon'] .tool-workspace-input,
+  [data-theme='horizon'] .tool-workspace-output,
+  [data-theme='horizon'] .drop-zone {
+    border-color: var(--nammu-material-border);
+    border-radius: var(--nammu-radius-control);
+    box-shadow: none;
+  }
+
+  [data-theme='horizon'] .os-btn,
+  [data-theme='horizon'] .os-input,
+  [data-theme='horizon'] .tool-workspace-input,
+  [data-theme='horizon'] .tool-workspace-output {
+    color: var(--color-os-text);
+    background: var(--nammu-material-control);
+  }
+
+  [data-theme='horizon'] .os-btn:hover {
+    color: var(--color-os-text);
+    background: var(--nammu-material-control-hover);
+    border-color: var(--nammu-material-border-strong);
+  }
+
+  [data-theme='horizon'] input,
+  [data-theme='horizon'] textarea,
+  [data-theme='horizon'] [contenteditable='true'] {
+    user-select: text;
+  }
+
+  [data-theme='horizon'] button,
+  [data-theme='horizon'] [role='button'] {
+    cursor: default;
+  }
+
+  [data-theme='horizon'] :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-os-accent) 82%, white);
+    outline-offset: 2px;
+  }
+
+  [data-theme='horizon'] ::selection {
+    color: #fff;
+    background: color-mix(in srgb, var(--color-os-accent) 56%, transparent);
+  }
+
+  [data-theme='horizon'] ::-webkit-scrollbar,
+  [data-theme='horizon'] .os-scrollbar::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  [data-theme='horizon'] ::-webkit-scrollbar-track,
+  [data-theme='horizon'] .os-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [data-theme='horizon'] ::-webkit-scrollbar-thumb,
+  [data-theme='horizon'] .os-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 28px;
+    background: color-mix(in srgb, var(--color-os-text-muted) 42%, transparent) !important;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box !important;
+  }
+
+  [data-theme='horizon'] ::-webkit-scrollbar-thumb:hover,
+  [data-theme='horizon'] .os-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--color-os-accent) 70%, transparent) !important;
+  }
+
+  html[data-reduced-motion='on'] *,
+  html[data-reduced-motion='on'] *::before,
+  html[data-reduced-motion='on'] *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  @media (max-width: 760px) {
+    [data-theme='horizon'] .nammu-identity {
+      left: 48px !important;
+      right: 12px !important;
+    }
+
+    [data-theme='horizon'] .identity-wordmark {
+      font-size: 30px !important;
+    }
+
+    [data-theme='horizon'] .start-menu-panel {
+      left: 8px !important;
+      width: calc(100vw - 16px) !important;
+    }
+  }
+}

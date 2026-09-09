@@ -21,6 +21,11 @@ import { OS_LOCK_STATE_KEY, getStoredLockState, saveLockState } from '../../lib/
 import { applyIconSettings } from '../../lib/iconSettings';
 import { getPlatformCapabilities } from '../../platform';
 import { NAMMU_OPEN_DOCUMENT_EVENT, type NammuOpenDocumentDetail } from '../../lib/appLaunch';
+import {
+  DEFAULT_SYSTEM_ACCENT,
+  DEFAULT_SYSTEM_THEME,
+  resolveInitialSystemTheme,
+} from '../../lib/systemTheme';
 
 const DEFAULT_PINS = ['browser', 'whatsapp', 'files', 'terminal', 'cloud', 'settings'];
 const platformServices = getPlatformCapabilities().services;
@@ -294,27 +299,46 @@ export default function DesktopApp() {
       if (saved) {
         const parsed = JSON.parse(saved);
         applyIconSettings(document.documentElement, parsed);
-        const theme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
-          ? parsed.themeStyle
-          : 'cyber';
+        const { theme, migratedLegacyDefault } = resolveInitialSystemTheme(
+          parsed.themeStyle,
+          localStorage,
+        );
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.setAttribute(
           'data-crt-scanlines',
-          parsed.enableScanlines === false ? 'off' : 'on',
+          migratedLegacyDefault || parsed.enableScanlines === false ? 'off' : 'on',
         );
-        if (parsed.themeStyle !== theme) {
-          localStorage.setItem('nammu-settings', JSON.stringify({ ...parsed, themeStyle: theme }));
+        if (parsed.themeStyle !== theme || migratedLegacyDefault) {
+          localStorage.setItem(
+            'nammu-settings',
+            JSON.stringify({
+              ...parsed,
+              themeStyle: theme,
+              accentColor: migratedLegacyDefault ? DEFAULT_SYSTEM_ACCENT : parsed.accentColor,
+              enableScanlines: migratedLegacyDefault ? false : parsed.enableScanlines,
+            }),
+          );
         }
         const appearance = parsed.appearance === 'light' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-appearance', appearance);
         document.documentElement.style.colorScheme = appearance;
-        if (parsed.accentColor) {
-          document.documentElement.style.setProperty('--os-accent', parsed.accentColor);
-          document.documentElement.style.setProperty('--color-os-accent', parsed.accentColor);
+        const accentColor = migratedLegacyDefault ? DEFAULT_SYSTEM_ACCENT : parsed.accentColor;
+        if (accentColor) {
+          document.documentElement.style.setProperty('--os-accent', accentColor);
+          document.documentElement.style.setProperty('--color-os-accent', accentColor);
         }
+        document.documentElement.setAttribute(
+          'data-reduced-motion',
+          parsed.reduceMotion === true ? 'on' : 'off',
+        );
       } else {
+        resolveInitialSystemTheme(undefined, localStorage);
         applyIconSettings(document.documentElement, null);
-        document.documentElement.setAttribute('data-crt-scanlines', 'on');
+        document.documentElement.setAttribute('data-theme', DEFAULT_SYSTEM_THEME);
+        document.documentElement.setAttribute('data-appearance', 'dark');
+        document.documentElement.setAttribute('data-crt-scanlines', 'off');
+        document.documentElement.setAttribute('data-reduced-motion', 'off');
+        document.documentElement.style.colorScheme = 'dark';
       }
     } catch {}
 
@@ -323,6 +347,7 @@ export default function DesktopApp() {
         theme: string;
         appearance?: 'light' | 'dark';
         enableScanlines?: boolean;
+        reduceMotion?: boolean;
       }>;
       if (customEvent.detail?.theme) {
         document.documentElement.setAttribute('data-theme', customEvent.detail.theme);
@@ -335,6 +360,12 @@ export default function DesktopApp() {
         document.documentElement.setAttribute(
           'data-crt-scanlines',
           customEvent.detail.enableScanlines ? 'on' : 'off',
+        );
+      }
+      if (typeof customEvent.detail?.reduceMotion === 'boolean') {
+        document.documentElement.setAttribute(
+          'data-reduced-motion',
+          customEvent.detail.reduceMotion ? 'on' : 'off',
         );
       }
     };
@@ -472,14 +503,15 @@ export default function DesktopApp() {
               ) : Component ? (
                 <Suspense
                   fallback={
-                    <div className="grid h-full place-items-center text-[10px] text-os-text-dim">
-                      Loading tool…
-                    </div>
+                    <div className="horizon-app-loading h-full" aria-label="Opening tool" />
                   }
                 >
                   <div
+                    data-nammu-tool={tool?.id}
                     className={
-                      tool?.id === 'subdomain-discovery' ? 'h-full overflow-hidden' : 'h-full p-3'
+                      tool?.id === 'subdomain-discovery'
+                        ? 'nammu-app-surface h-full overflow-hidden'
+                        : 'nammu-app-surface h-full overflow-auto p-3'
                     }
                   >
                     <Component initialData={win.data} />

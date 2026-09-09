@@ -70,7 +70,7 @@ export default function Identity({
   return (
     <header className="nammu-identity absolute left-24 right-73 top-0 z-20 overflow-visible">
       <div className="relative z-10 flex flex-col items-center pb-1 pt-10">
-        <div className="mb-1.5 grid w-full max-w-160 grid-cols-[1fr_auto_1fr] items-center gap-8 font-mono text-[8px] uppercase leading-none">
+        <div className="identity-meta mb-1.5 grid w-full max-w-160 grid-cols-[1fr_auto_1fr] items-center gap-8 font-mono text-[8px] uppercase leading-none">
           <span className="pointer-events-none text-right tracking-[0.22em] text-cyan/35">
             18.42° · RING LOCK
           </span>
@@ -84,14 +84,16 @@ export default function Identity({
           </span>
         </div>
 
+        <p className="identity-greeting hidden">Your private workspace</p>
+
         <h1
-          className="select-none font-display text-[44px] font-extrabold leading-none text-[#e8eef4]"
+          className="identity-wordmark select-none font-display text-[44px] font-extrabold leading-none text-[#e8eef4]"
           style={{ letterSpacing: '0.22em' }}
         >
           NAMMU<span className="wordmark-os">OS</span>
         </h1>
 
-        <div className="mt-1.5 flex items-center gap-2 font-mono text-[8px] tracking-[0.32em] text-[#5c7082]">
+        <div className="identity-coordinates mt-1.5 flex items-center gap-2 font-mono text-[8px] tracking-[0.32em] text-[#5c7082]">
           <span>N·47.61</span>
           <span className="h-px w-8 bg-white/10" />
           <span>CORE ONLINE</span>
@@ -152,7 +154,7 @@ export default function Identity({
           </form>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+        <div className="identity-actions mt-2 flex flex-wrap items-center justify-center gap-1.5">
           <button
             onClick={() => onOpenSystemApp('projects')}
             className="group flex h-5 items-center gap-1.5 rounded-xs border border-white/[0.07] bg-[#080e18]/55 px-2 font-mono text-[9px] tracking-[0.035em] text-[#8298ab] transition-all hover:border-electric/30 hover:bg-electric/8 hover:text-[#d6e6f4]"

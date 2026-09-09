@@ -5,6 +5,7 @@ export interface Wallpaper {
   kind: 'image' | 'effect';
   description: string;
   preview?: string;
+  accent?: string;
 }
 
 export type MatrixWallpaperVariant = 'synth-rain' | 'chaos-flow';
@@ -23,6 +24,40 @@ export const DEFAULT_MATRIX_EFFECT_SETTINGS: MatrixEffectSettingsMap = {
 };
 
 export const WALLPAPERS: Wallpaper[] = [
+  ...[
+    ['01', '#6f30ff'],
+    ['02', '#bd6257'],
+    ['03', '#c4610c'],
+    ['04', '#0076a3'],
+    ['05', '#007aa8'],
+    ['06', '#008a5c'],
+    ['07', '#587f00'],
+    ['08', '#008991'],
+    ['09', '#d86668'],
+    ['10', '#df7441'],
+    ['11', '#008991'],
+    ['12', '#dd136f'],
+    ['13', '#1384b4'],
+    ['14', '#ea106f'],
+    ['15', '#b86100'],
+    ['16', '#5a00d6'],
+    ['17', '#008087'],
+    ['18', '#6f30ff'],
+    ['19', '#158cd1'],
+    ['20', '#6f30ff'],
+    ['21', '#e1431c'],
+    ['22', '#62a032'],
+    ['23', '#f25c0d'],
+    ['24', '#107bd0'],
+    ['25', '#20b49f'],
+  ].map(([number, accent]) => ({
+    id: `horizon-${number}`,
+    name: `Horizon ${number}`,
+    src: `/wallpapers/horizon/${Number(number)}.avif`,
+    kind: 'image' as const,
+    description: 'Atmospheric landscape',
+    accent,
+  })),
   {
     id: 'synth-rain',
     name: 'Synth Rain',
@@ -144,7 +179,7 @@ export function saveWallpaper(src: string | null) {
 }
 
 export function getWallpaperName(src: string | null): string {
-  if (!src) return 'Default';
+  if (!src) return 'Horizon 23';
   return WALLPAPERS.find((wp) => wp.src === src)?.name || 'Custom';
 }
 

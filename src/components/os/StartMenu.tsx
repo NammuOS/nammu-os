@@ -231,7 +231,9 @@ export default function StartMenu({
                       className={`flex min-w-0 flex-col items-center gap-1.5 px-1 py-2.5 text-[#8aa0b2] transition-colors hover:bg-white/[0.04] hover:text-[#d5e4f0] rounded ${draggedAppId === app.id ? 'opacity-40' : ''}`}
                       title={app.title}
                     >
-                      <Icon size={16} strokeWidth={1.4} className="text-[#8ec4ff]" />
+                      <span className="start-menu-app-icon grid place-items-center">
+                        <Icon size={16} strokeWidth={1.4} className="text-[#8ec4ff]" />
+                      </span>
                       <span className="w-full truncate text-center font-mono text-[8px] uppercase tracking-[0.12em]">
                         {app.title}
                       </span>

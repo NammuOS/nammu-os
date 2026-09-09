@@ -47,6 +47,14 @@ data/
 tsconfig.tsbuildinfo
 next-env.d.ts
 
+# Local design/capability donor checkouts (not product source)
+umbrel/
+
+# Local rendered UI review artifacts
+.codex-edge-*/
+.codex-temp/
+.codex-horizon-*.png
+
 # Vercel & Wrangler
 .vercel/
 .open-next/

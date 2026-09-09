@@ -78,10 +78,16 @@ import {
   type OsLockProfile,
 } from '../../lib/osLock';
 import { getPlatformCapabilities } from '../../platform';
+import {
+  DEFAULT_SYSTEM_ACCENT,
+  DEFAULT_SYSTEM_THEME,
+  resolveInitialSystemTheme,
+  type SystemTheme,
+} from '../../lib/systemTheme';
 
 export interface SystemSettings extends IconSettings {
   accentColor: string;
-  themeStyle: 'cyber' | 'obsidian' | 'midnight' | 'macos';
+  themeStyle: SystemTheme;
   appearance: 'light' | 'dark';
   enableScanlines: boolean;
   showSeconds: boolean;
@@ -94,10 +100,10 @@ export interface SystemSettings extends IconSettings {
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  accentColor: '#4aa3ff',
-  themeStyle: 'cyber',
+  accentColor: DEFAULT_SYSTEM_ACCENT,
+  themeStyle: DEFAULT_SYSTEM_THEME,
   appearance: 'dark',
-  enableScanlines: true,
+  enableScanlines: false,
   showSeconds: false,
   showWeekday: true,
   uiSounds: true,
@@ -109,6 +115,14 @@ const DEFAULT_SETTINGS: SystemSettings = {
 };
 
 const THEME_OPTIONS = [
+  {
+    id: 'horizon',
+    name: 'Horizon',
+    desc: 'Immersive desktop glass, adaptive color, and focused spatial depth',
+    bg: '#15100e',
+    accent: DEFAULT_SYSTEM_ACCENT,
+    border: '#7c3a1e',
+  },
   {
     id: 'cyber',
     name: 'Cyber Glow',
@@ -154,6 +168,11 @@ const ACCENT_COLORS = [
 ];
 
 const CREDITS = [
+  {
+    product: 'Licensed desktop design foundation',
+    project: 'getumbrel/umbrel',
+    url: 'https://github.com/getumbrel/umbrel',
+  },
   {
     product: 'YouTube Music app foundation',
     project: 'th-ch/youtube-music',
@@ -224,18 +243,26 @@ export function SettingsApp() {
   const [settings, setSettings] = useState<SystemSettings>(() => {
     try {
       const saved = localStorage.getItem('nammu-settings');
-      if (!saved) return DEFAULT_SETTINGS;
+      if (!saved) {
+        resolveInitialSystemTheme(undefined, localStorage);
+        return DEFAULT_SETTINGS;
+      }
       const parsed = JSON.parse(saved);
       delete parsed.blurIntensity;
       delete parsed.clockFormat;
-      const savedTheme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
-        ? parsed.themeStyle
-        : DEFAULT_SETTINGS.themeStyle;
+      const { theme: savedTheme, migratedLegacyDefault } = resolveInitialSystemTheme(
+        parsed.themeStyle,
+        localStorage,
+      );
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
         ...normalizeIconSettings(parsed),
         themeStyle: savedTheme,
+        accentColor: migratedLegacyDefault
+          ? DEFAULT_SYSTEM_ACCENT
+          : parsed.accentColor || DEFAULT_SETTINGS.accentColor,
+        enableScanlines: migratedLegacyDefault ? false : parsed.enableScanlines !== false,
         appearance: parsed.appearance === 'light' ? 'light' : 'dark',
       };
     } catch {
@@ -359,6 +386,12 @@ export function SettingsApp() {
   const selectWallpaper = (src: string | null) => {
     setWallpaperSrc(src);
     saveWallpaper(src);
+    const wallpaper = src ? WALLPAPERS.find((candidate) => candidate.src === src) : undefined;
+    if (settings.themeStyle === 'horizon' && wallpaper?.accent) {
+      setSettings((current) => ({ ...current, accentColor: wallpaper.accent! }));
+    } else if (settings.themeStyle === 'horizon' && src === null) {
+      setSettings((current) => ({ ...current, accentColor: DEFAULT_SYSTEM_ACCENT }));
+    }
   };
 
   const toggleWallpaperMask = () => {
@@ -400,6 +433,10 @@ export function SettingsApp() {
       'data-crt-scanlines',
       settings.enableScanlines ? 'on' : 'off',
     );
+    document.documentElement.setAttribute(
+      'data-reduced-motion',
+      settings.reduceMotion ? 'on' : 'off',
+    );
 
     // Apply theme attribute across the operating system
     document.documentElement.setAttribute('data-theme', settings.themeStyle);
@@ -411,6 +448,7 @@ export function SettingsApp() {
           theme: settings.themeStyle,
           appearance: settings.appearance,
           enableScanlines: settings.enableScanlines,
+          reduceMotion: settings.reduceMotion,
         },
       }),
     );
@@ -636,10 +674,12 @@ export function SettingsApp() {
                     <button
                       key={thm.id}
                       onClick={() => {
-                        updateSetting('themeStyle', thm.id as any);
-                        if (thm.id === 'macos') {
-                          updateSetting('accentColor', '#0088ff');
-                        }
+                        setSettings((current) => ({
+                          ...current,
+                          themeStyle: thm.id as SystemTheme,
+                          accentColor: thm.accent,
+                          enableScanlines: thm.id === 'cyber' ? current.enableScanlines : false,
+                        }));
                       }}
                       className={`flex flex-col items-start p-2.5 rounded border transition-all text-left relative ${
                         isSelected
@@ -876,13 +916,15 @@ export function SettingsApp() {
                   <span
                     className="block h-20 w-full"
                     style={{
-                      background: 'radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #050505 100%)',
+                      backgroundImage: 'url("/wallpapers/horizon/23.avif")',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
                     }}
                   />
                   <span className="flex min-w-0 items-center justify-between gap-1 bg-white/[0.02] px-2 py-1.5">
                     <span className="min-w-0">
-                      <span className="block truncate text-[10px] text-[#c5d4e2]">Default</span>
-                      <span className="block truncate text-[8.5px] text-[#61788c]">Nammu base</span>
+                      <span className="block truncate text-[10px] text-[#c5d4e2]">Horizon 23</span>
+                      <span className="block truncate text-[8.5px] text-[#61788c]">Default</span>
                     </span>
                     {wallpaperSrc === null && (
                       <Check size={11} className="shrink-0 text-[#2ee6a6]" />

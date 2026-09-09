@@ -235,15 +235,15 @@ export function SystemAppContent({
   return (
     <Suspense
       fallback={
-        <div
-          className="grid h-full min-h-0 place-items-center bg-os-window text-[10px] text-os-text-dim"
-          aria-busy="true"
-        >
-          Loading application…
-        </div>
+        <div className="horizon-app-loading h-full min-h-0" aria-label="Opening application" />
       }
     >
-      {content}
+      <div
+        className="nammu-app-surface h-full min-h-0 w-full overflow-hidden"
+        data-nammu-app={appId}
+      >
+        {content}
+      </div>
     </Suspense>
   );
 }

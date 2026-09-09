@@ -512,6 +512,121 @@
     monospace;
 }
 
+/* Horizon is the default Nammu product language; legacy map styles remain available
+   for the other OS themes without leaking their old blueprint chrome into Horizon. */
+:global(html[data-theme='horizon']) .app {
+  --map-panel: rgb(12 10 9 / 78%);
+  --map-panel-solid: #171310;
+  --map-surface: rgb(255 255 255 / 7%);
+  --map-surface-hover: rgb(255 255 255 / 12%);
+  --map-line: rgb(255 255 255 / 9%);
+  --map-line-strong: color-mix(in srgb, var(--color-os-accent) 38%, transparent);
+  --map-text: var(--color-os-text);
+  --map-muted: var(--color-os-text-muted);
+  --map-faint: var(--color-os-text-dim);
+  --map-accent: var(--color-os-accent);
+  --map-glow: color-mix(in srgb, var(--color-os-accent) 20%, transparent);
+  background: #171411;
+  font-family: var(--font-sans);
+}
+
+:global(html[data-theme='horizon']) .panel {
+  top: 16px;
+  right: 16px;
+  border: 1px solid var(--map-line);
+  border-radius: 20px;
+  background: var(--map-panel);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 10%),
+    0 20px 56px rgb(0 0 0 / 48%);
+  backdrop-filter: blur(24px) saturate(125%);
+}
+
+:global(html[data-theme='horizon']) .panel::before {
+  display: none;
+}
+
+:global(html[data-theme='horizon']) .heading {
+  padding: 15px 16px 13px;
+  background: rgb(255 255 255 / 3%);
+}
+
+:global(html[data-theme='horizon']) .eyebrow,
+:global(html[data-theme='horizon']) .styleRow span {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+
+:global(html[data-theme='horizon']) .heading h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 650;
+}
+
+:global(html[data-theme='horizon']) .headingIcon {
+  width: 34px;
+  height: 34px;
+  border-color: var(--map-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--map-accent) 14%, transparent);
+  box-shadow: inset 0 1px rgb(255 255 255 / 8%);
+}
+
+:global(html[data-theme='horizon']) .search,
+:global(html[data-theme='horizon']) .results,
+:global(html[data-theme='horizon']) .styleSelect select,
+:global(html[data-theme='horizon']) .locateButton {
+  border-color: var(--map-line);
+  border-radius: 12px;
+  background: var(--map-surface);
+  box-shadow: inset 0 1px rgb(255 255 255 / 4%);
+}
+
+:global(html[data-theme='horizon']) .search button:last-child {
+  border-left-color: var(--map-line);
+  background: color-mix(in srgb, var(--map-accent) 16%, transparent);
+  color: var(--map-accent);
+}
+
+:global(html[data-theme='horizon']) .zoomControls,
+:global(html[data-theme='horizon']) .resetButton {
+  overflow: hidden;
+  border-color: var(--map-line);
+  border-radius: 15px;
+  background: rgb(12 10 9 / 72%);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 9%),
+    0 14px 34px rgb(0 0 0 / 36%);
+  backdrop-filter: blur(20px);
+}
+
+:global(html[data-theme='horizon']) .zoomControls button:hover:not(:disabled),
+:global(html[data-theme='horizon']) .resetButton:hover,
+:global(html[data-theme='horizon']) .locateButton:hover:not(:disabled) {
+  background: var(--map-surface-hover);
+  color: var(--map-text);
+}
+
+:global(html[data-theme='horizon'][data-appearance='light']) .app {
+  --map-panel: rgb(255 252 248 / 82%);
+  --map-panel-solid: #f8f3ee;
+  --map-surface: rgb(255 255 255 / 58%);
+  --map-surface-hover: rgb(255 255 255 / 82%);
+  --map-line: rgb(45 31 22 / 10%);
+  --map-line-strong: color-mix(in srgb, var(--color-os-accent) 30%, transparent);
+  background: #ded9d4;
+}
+
+:global(html[data-theme='horizon'][data-appearance='light']) .zoomControls,
+:global(html[data-theme='horizon'][data-appearance='light']) .resetButton {
+  background: rgb(255 252 248 / 76%);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 74%),
+    0 14px 34px rgb(53 35 23 / 16%);
+}
+
 :global([data-appearance='light']) .app {
   --map-panel: rgb(255 255 255 / 86%);
   --map-panel-solid: #fff;

@@ -5,6 +5,7 @@ import DesktopApp from '../src/components/desktop/DesktopApp';
 import { getPlatformCapabilities } from '../src/platform';
 import '../src/app/localFonts';
 import '../src/app/globals.css';
+import '../src/app/horizon.css';
 
 const rootElement = document.getElementById('nammu-root');
 

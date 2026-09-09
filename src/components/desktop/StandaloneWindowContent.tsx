@@ -8,6 +8,11 @@ import ContextMenu from '../context-menu/ContextMenu';
 import { ContextMenuProvider } from '../context-menu/contextMenuStore';
 import { TOOL_COMPONENTS } from './toolComponents';
 import { applyIconSettings } from '../../lib/iconSettings';
+import {
+  DEFAULT_SYSTEM_ACCENT,
+  DEFAULT_SYSTEM_THEME,
+  resolveInitialSystemTheme,
+} from '../../lib/systemTheme';
 
 interface StandaloneWindowContentProps {
   kind: string;
@@ -38,29 +43,62 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
       if (saved) {
         const parsed = JSON.parse(saved);
         applyIconSettings(document.documentElement, parsed);
-        const theme = ['cyber', 'obsidian', 'midnight', 'macos'].includes(parsed.themeStyle)
-          ? parsed.themeStyle
-          : 'cyber';
+        const { theme, migratedLegacyDefault } = resolveInitialSystemTheme(
+          parsed.themeStyle,
+          localStorage,
+        );
         const appearance = parsed.appearance === 'light' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.setAttribute('data-appearance', appearance);
         document.documentElement.style.colorScheme = appearance;
-        if (parsed.accentColor) {
-          document.documentElement.style.setProperty('--os-accent', parsed.accentColor);
-          document.documentElement.style.setProperty('--color-os-accent', parsed.accentColor);
+        const accentColor = migratedLegacyDefault ? DEFAULT_SYSTEM_ACCENT : parsed.accentColor;
+        if (accentColor) {
+          document.documentElement.style.setProperty('--os-accent', accentColor);
+          document.documentElement.style.setProperty('--color-os-accent', accentColor);
+        }
+        document.documentElement.setAttribute(
+          'data-reduced-motion',
+          parsed.reduceMotion === true ? 'on' : 'off',
+        );
+        if (migratedLegacyDefault) {
+          localStorage.setItem(
+            'nammu-settings',
+            JSON.stringify({
+              ...parsed,
+              themeStyle: theme,
+              accentColor,
+              enableScanlines: false,
+            }),
+          );
         }
       } else {
+        resolveInitialSystemTheme(undefined, localStorage);
         applyIconSettings(document.documentElement, null);
+        document.documentElement.setAttribute('data-theme', DEFAULT_SYSTEM_THEME);
+        document.documentElement.setAttribute('data-appearance', 'dark');
+        document.documentElement.setAttribute('data-reduced-motion', 'off');
+        document.documentElement.style.colorScheme = 'dark';
       }
     } catch {}
 
     const handleThemeChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ theme?: string; appearance?: 'light' | 'dark' }>)
-        .detail;
+      const detail = (
+        event as CustomEvent<{
+          theme?: string;
+          appearance?: 'light' | 'dark';
+          reduceMotion?: boolean;
+        }>
+      ).detail;
       if (detail?.theme) document.documentElement.setAttribute('data-theme', detail.theme);
       if (detail?.appearance) {
         document.documentElement.setAttribute('data-appearance', detail.appearance);
         document.documentElement.style.colorScheme = detail.appearance;
+      }
+      if (typeof detail?.reduceMotion === 'boolean') {
+        document.documentElement.setAttribute(
+          'data-reduced-motion',
+          detail.reduceMotion ? 'on' : 'off',
+        );
       }
     };
     window.addEventListener('nammu-theme-change', handleThemeChange);
@@ -71,13 +109,13 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
     <ContextMenuProvider safeArea={safeArea}>
       <main className="nammu-os-shell h-dvh w-screen overflow-hidden bg-[#05070b]">
         {!clientReady ? (
-          <div className="grid h-full place-items-center bg-[#05070b] px-6 text-center">
-            <div className="flex flex-col items-center">
-              <span className="mb-3 h-5 w-5 animate-spin rounded-full border border-os-accent/20 border-t-os-accent" />
-              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-os-text-muted">
-                Opening {title}
-              </div>
-              <div className="mt-1 text-[9px] text-os-text-dim">Loading local workspace state…</div>
+          <div className="horizon-app-loading h-full" aria-label={`Opening ${title}`}>
+            <div className="horizon-app-loading-sidebar" aria-hidden="true" />
+            <div className="horizon-app-loading-content" aria-hidden="true">
+              <span className="horizon-app-loading-title" />
+              <span />
+              <span />
+              <span />
             </div>
           </div>
         ) : systemApp ? (
@@ -85,19 +123,22 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
         ) : ToolComponent ? (
           <Suspense
             fallback={
-              <div className="grid h-full place-items-center text-[10px] text-os-text-dim">
-                Loading tool…
-              </div>
+              <div className="horizon-app-loading h-full" aria-label={`Opening ${title}`} />
             }
           >
             <div
-              className={tool?.id === 'subdomain-discovery' ? 'h-full' : 'h-full overflow-auto p-3'}
+              data-nammu-tool={tool?.id}
+              className={
+                tool?.id === 'subdomain-discovery'
+                  ? 'nammu-app-surface h-full'
+                  : 'nammu-app-surface h-full overflow-auto p-3'
+              }
             >
               <ToolComponent />
             </div>
           </Suspense>
         ) : (
-          <div className="grid h-full place-items-center bg-[#05070b] px-6 text-center">
+          <div className="grid h-full place-items-center bg-os-bg px-6 text-center">
             <div>
               <div className="text-sm font-semibold text-[#d6e5f0]">Cannot open this item</div>
               <div className="mt-1 text-[11px] text-[#70869a]">

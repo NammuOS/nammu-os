@@ -1,0 +1,957 @@
+/*
+ * Horizon application system
+ *
+ * This stylesheet is intentionally loaded after the historical global stylesheet.
+ * It gives every trusted Nammu application and tool one semantic theming boundary,
+ * allowing the licensed Horizon design language to reach legacy interiors without
+ * coupling application logic to a particular theme.
+ */
+
+html[data-theme='horizon'] {
+  --hz-canvas: #100e0c;
+  --hz-canvas-translucent: rgba(15, 13, 11, 0.88);
+  --hz-sidebar: rgba(0, 0, 0, 0.25);
+  --hz-toolbar: rgba(255, 255, 255, 0.04);
+  --hz-surface: rgba(255, 255, 255, 0.065);
+  --hz-surface-hover: rgba(255, 255, 255, 0.11);
+  --hz-surface-active: color-mix(in srgb, var(--color-os-accent) 18%, rgba(255, 255, 255, 0.07));
+  --hz-line: rgba(255, 255, 255, 0.09);
+  --hz-line-strong: rgba(255, 255, 255, 0.16);
+  --hz-text: #fffaf6;
+  --hz-text-soft: rgba(255, 250, 246, 0.78);
+  --hz-text-muted: rgba(255, 250, 246, 0.58);
+  --hz-text-faint: rgba(255, 250, 246, 0.38);
+  --hz-control-height: 36px;
+  --hz-radius-card: 16px;
+  --hz-radius-control: 12px;
+  --hz-shadow-card: inset 0 1px rgba(255, 255, 255, 0.055), 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+html[data-theme='horizon'][data-appearance='light'] {
+  --hz-canvas: #f4efea;
+  --hz-canvas-translucent: rgba(248, 244, 239, 0.9);
+  --hz-sidebar: rgba(255, 255, 255, 0.38);
+  --hz-toolbar: rgba(255, 255, 255, 0.38);
+  --hz-surface: rgba(255, 255, 255, 0.52);
+  --hz-surface-hover: rgba(255, 255, 255, 0.78);
+  --hz-surface-active: color-mix(in srgb, var(--color-os-accent) 14%, rgba(255, 255, 255, 0.7));
+  --hz-line: rgba(45, 31, 22, 0.1);
+  --hz-line-strong: rgba(45, 31, 22, 0.17);
+  --hz-text: #211b17;
+  --hz-text-soft: rgba(33, 27, 23, 0.78);
+  --hz-text-muted: rgba(33, 27, 23, 0.59);
+  --hz-text-faint: rgba(33, 27, 23, 0.4);
+  --hz-shadow-card: inset 0 1px rgba(255, 255, 255, 0.76), 0 10px 30px rgba(53, 35, 23, 0.09);
+}
+
+/* Startup is a continuation of the desktop, not a second branded boot sequence. */
+.horizon-boot-surface,
+.horizon-app-loading {
+  position: relative;
+  overflow: hidden;
+  color: var(--hz-text, #fffaf6);
+  background: var(--hz-canvas, #100e0c);
+}
+
+.horizon-boot-surface {
+  background: radial-gradient(circle at 50% 42%, rgba(242, 92, 13, 0.16), transparent 32%), #100e0c;
+}
+
+.horizon-boot-glow {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #ff7a33, #d64300);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.28),
+    0 18px 45px rgba(242, 92, 13, 0.32);
+  transform: translate(-50%, -50%);
+  animation: horizon-breathe 1.1s ease-in-out infinite alternate;
+}
+
+.horizon-boot-dock {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 19px;
+  background: rgba(0, 0, 0, 0.36);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+  transform: translateX(-50%);
+  backdrop-filter: blur(18px);
+}
+
+.horizon-boot-dock span {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.horizon-app-loading {
+  display: grid;
+  grid-template-columns: minmax(116px, 24%) 1fr;
+  padding: 14px;
+  gap: 14px;
+}
+
+.horizon-app-loading-sidebar,
+.horizon-app-loading-content span {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.horizon-app-loading-sidebar {
+  border-radius: 18px;
+}
+
+.horizon-app-loading-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.horizon-app-loading-content span {
+  width: min(100%, 560px);
+  height: 64px;
+  border-radius: 16px;
+  animation: horizon-loading 1.25s ease-in-out infinite alternate;
+}
+
+.horizon-app-loading-content .horizon-app-loading-title {
+  width: min(42%, 280px);
+  height: 24px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 10px;
+}
+
+@keyframes horizon-breathe {
+  to {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.72;
+  }
+}
+
+@keyframes horizon-loading {
+  to {
+    opacity: 0.5;
+  }
+}
+
+[data-theme='horizon'] .nammu-os-shell,
+[data-theme='horizon'] .window-content,
+[data-theme='horizon'] .nammu-app-surface {
+  color: var(--hz-text);
+  background-color: var(--hz-canvas) !important;
+  font-family: var(--font-sans);
+}
+
+[data-theme='horizon'] .nammu-app-surface {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-theme='horizon'] .nammu-app-surface > :first-child {
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(button, input, textarea, select) {
+  font-family: inherit;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(h1, h2, h3, h4) {
+  color: var(--hz-text);
+  font-family: var(--font-display) !important;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='horizon'] .nammu-app-surface .font-mono,
+[data-theme='horizon'] .tool-workspace .font-mono {
+  font-family: var(--font-sans) !important;
+}
+
+/* Older app shells were designed around 7–10px telemetry typography. Horizon keeps
+   compact desktop density while restoring legibility throughout trusted apps. */
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='text-[6px]'],
+    [class*='text-[6.5px]'],
+    [class*='text-[7px]'],
+    [class*='text-[7.5px]'],
+    [class*='text-[8px]'],
+    [class*='text-[8.5px]']
+  ) {
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is([class*='text-[9px]'], [class*='text-[9.5px]'], [class*='text-[10px]']) {
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is([class*='text-[11px]'], [class*='text-[11.5px]']) {
+  font-size: 12px !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='terminal'],
+[data-theme='horizon'] [data-nammu-app='terminal'] .font-mono,
+[data-theme='horizon'] [data-nammu-app='editor'] textarea,
+[data-theme='horizon'] .nammu-app-surface :is(code, pre, kbd) {
+  font-family: var(--font-mono) !important;
+}
+
+/* Translate the legacy blue-black canvases into one neutral, wallpaper-aware app canvas. */
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='bg-[#05070b]'],
+    [class*='bg-[#05080d]'],
+    [class*='bg-[#060a12]'],
+    [class*='bg-[#070b12]'],
+    [class*='bg-[#070c14]'],
+    [class*='bg-[#070e18]'],
+    [class*='bg-[#07111b]'],
+    [class*='bg-[#080d15]'],
+    [class*='bg-[#080e18]'],
+    [class*='bg-[#090d18]'],
+    [class*='bg-[#090e18]'],
+    [class*='bg-[#0a1018]'],
+    [class*='bg-[#0b121c]'],
+    [class*='bg-[#0c1317]'],
+    [class*='bg-[#0e1621]'],
+    [class*='bg-[#07101a]'],
+    [class*='bg-[#070d16]'],
+    [class*='bg-[#08101a]'],
+    [class*='bg-[#070b14]'],
+    [class*='bg-[#06090e]'],
+    [class*='bg-[#040609]'],
+    [class*='bg-[#090e17]'],
+    [class*='bg-[#020604]'],
+    [class*='bg-[#141b27]'],
+    [class*='bg-[#111b21]'],
+    [class*='bg-[#17212b]'],
+    [class*='bg-[#202c33]']
+  ) {
+  background-color: var(--hz-canvas-translucent) !important;
+  background-image: none !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='bg-[#07111b]'],
+    [class*='bg-[#070b12]'],
+    [class*='bg-[#080d15]'],
+    [class*='bg-[#080e18]'],
+    [class*='bg-[#090e18]'],
+    [class*='bg-[#060a12]']
+  ) {
+  border-color: var(--hz-line) !important;
+  background-color: rgba(17, 14, 12, 0.88) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(120%);
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    header,
+    nav,
+    [role='tablist'],
+    [class*='border-b'][class*='bg-'],
+    [class*='border-t'][class*='bg-']
+  ) {
+  border-color: var(--hz-line) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface > :is(header, nav),
+[data-theme='horizon'] .nammu-app-surface > * > :is(header, nav) {
+  background-color: var(--hz-toolbar) !important;
+  box-shadow: inset 0 -1px var(--hz-line);
+  backdrop-filter: blur(20px) saturate(120%);
+}
+
+[data-theme='horizon'] .nammu-app-surface aside,
+[data-theme='horizon'] .nammu-app-surface > * > [class*='border-r'],
+[data-theme='horizon'] .nammu-app-surface > * > [class*='border-l'] {
+  border-color: var(--hz-line) !important;
+  background-color: var(--hz-sidebar) !important;
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+/* Legacy type tiers. App content now follows the same warm neutral hierarchy. */
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='text-[#e0ecf7]'],
+    [class*='text-[#e8eef4]'],
+    [class*='text-[#e9edef]'],
+    [class*='text-[#d5e0ea]'],
+    [class*='text-[#d5e4f0]'],
+    [class*='text-[#d6e5f0]'],
+    [class*='text-[#d6e6f4]'],
+    [class*='text-[#dce7f2]'],
+    [class*='text-[#cfe6ff]'],
+    [class*='text-[#c5d4e2]'],
+    [class*='text-[#c5d2de]'],
+    [class*='text-[#c9d7e2]'],
+    [class*='text-[#c9d8e4]'],
+    [class*='text-[#d4e5f2]'],
+    [class*='text-[#d1deea]'],
+    [class*='text-[#c9d8e5]'],
+    [class*='text-[#d9edff]'],
+    [class*='text-[#e3edf7]'],
+    [class*='text-[#d0e0ed]'],
+    [class*='text-[#d4e1ed]'],
+    [class*='text-[#c6d4df]'],
+    [class*='text-[#c9dbe9]'],
+    [class*='text-[#d1d7db]'],
+    [class*='text-[#f4f2f7]']
+  ) {
+  color: var(--hz-text) !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='text-[#bcd0df]'],
+    [class*='text-[#bcd2e4]'],
+    [class*='text-[#c0d0de]'],
+    [class*='text-[#c5d6e6]'],
+    [class*='text-[#cadbe8]'],
+    [class*='text-[#c7d6e2]'],
+    [class*='text-[#a8d3ff]'],
+    [class*='text-[#a5d2ff]'],
+    [class*='text-[#a0d2ff]'],
+    [class*='text-[#9eb2c4]'],
+    [class*='text-[#9ab3c7]'],
+    [class*='text-[#94aabd]'],
+    [class*='text-[#90a8bd]'],
+    [class*='text-[#b7c8d6]']
+  ) {
+  color: var(--hz-text-soft) !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='text-[#71889d]'],
+    [class*='text-[#8aa0b2]'],
+    [class*='text-[#8696a0]'],
+    [class*='text-[#8fa5b8]'],
+    [class*='text-[#8fa6b8]'],
+    [class*='text-[#7890a5]'],
+    [class*='text-[#7f95a8]'],
+    [class*='text-[#8298ab]'],
+    [class*='text-[#91a9bc]'],
+    [class*='text-[#6b7c8c]'],
+    [class*='text-[#6b8296]'],
+    [class*='text-[#6d8294]'],
+    [class*='text-[#6d859a]'],
+    [class*='text-[#69849b]'],
+    [class*='text-[#637d92]'],
+    [class*='text-[#647c90]'],
+    [class*='text-[#61788c]'],
+    [class*='text-[#70869a]'],
+    [class*='text-[#60798e]'],
+    [class*='text-[#668096]'],
+    [class*='text-[#536d82]'],
+    [class*='text-[#4d667b]'],
+    [class*='text-[#7790a5]'],
+    [class*='text-[#6a8094]'],
+    [class*='text-[#7990a4]'],
+    [class*='text-[#8da6bc]'],
+    [class*='text-[#84a3be]'],
+    [class*='text-[#61798d]'],
+    [class*='text-[#5e7a90]'],
+    [class*='text-[#668095]'],
+    [class*='text-[#8da2b4]'],
+    [class*='text-[#8094a5]']
+  ) {
+  color: var(--hz-text-muted) !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='text-[#4a5c6c]'],
+    [class*='text-[#43586b]'],
+    [class*='text-[#465c6f]'],
+    [class*='text-[#476077]'],
+    [class*='text-[#52697c]'],
+    [class*='text-[#536a7d]'],
+    [class*='text-[#547086]'],
+    [class*='text-[#557087]'],
+    [class*='text-[#556f84]'],
+    [class*='text-[#567289]'],
+    [class*='text-[#5a6d7c]'],
+    [class*='text-[#415a6e]'],
+    [class*='text-[#344b5e]'],
+    [class*='text-[#3d5568]'],
+    [class*='text-[#4d667a]'],
+    [class*='text-[#3d5366]'],
+    [class*='text-[#526b80]']
+  ) {
+  color: var(--hz-text-faint) !important;
+}
+
+/* The former electric-blue identity becomes the live Horizon/wallpaper accent. */
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class*='text-[#4aa3ff]'],
+    [class*='text-[#8ec4ff]'],
+    [class*='text-[#91c5ff]'],
+    [class*='text-[#9ecaff]'],
+    [class*='text-[#a8d3ff]'],
+    [class*='text-[#acd5ff]'],
+    [class*='text-[#72b5ff]']
+  ) {
+  color: var(--color-os-accent) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is([class*='bg-[#4aa3ff]'], [class*='bg-electric']) {
+  background-color: color-mix(in srgb, var(--color-os-accent) 18%, transparent) !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is([class*='border-[#4aa3ff]'], [class*='border-electric']) {
+  border-color: color-mix(in srgb, var(--color-os-accent) 38%, transparent) !important;
+}
+
+/* Shared application controls. Full circles remain circles; compact icons stay square-ish. */
+[data-theme='horizon'] .nammu-app-surface button:not([class*='rounded-full']),
+[data-theme='horizon'] .nammu-app-surface [role='button']:not([class*='rounded-full']) {
+  border-radius: var(--hz-radius-control) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(input, textarea, select):not([type='range']) {
+  border-color: var(--hz-line) !important;
+  border-radius: var(--hz-radius-control) !important;
+  color: var(--hz-text);
+  background-color: var(--hz-surface) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(input, textarea)::placeholder {
+  color: var(--hz-text-faint) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface [class~='text-white'] {
+  color: var(--hz-text) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is([class~='rounded-sm'], [class~='rounded']) {
+  border-radius: 10px !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface [class*='rounded-[3px]'] {
+  border-radius: 11px !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface [class*='border-white'] {
+  border-color: var(--hz-line) !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class~='bg-white/[0.01]'],
+    [class~='bg-white/[0.012]'],
+    [class~='bg-white/[0.015]'],
+    [class~='bg-white/[0.02]'],
+    [class~='bg-white/[0.025]'],
+    [class~='bg-white/[0.03]'],
+    [class~='bg-white/[0.035]'],
+    [class~='bg-white/[0.04]'],
+    [class~='bg-white/[0.05]'],
+    [class~='bg-black/20'],
+    [class~='bg-black/25'],
+    [class~='bg-black/30']
+  ) {
+  background-color: var(--hz-surface) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(input, textarea, select):focus {
+  border-color: color-mix(in srgb, var(--color-os-accent) 52%, var(--hz-line)) !important;
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-os-accent) 15%, transparent);
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(button, [role='button']) {
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(button, [role='button']):hover:not(:disabled) {
+  border-color: var(--hz-line-strong);
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is(
+    [class~='border'][class*='bg-white/'],
+    [class*='border-white'][class*='bg-white/'],
+    [class*='border-white'][class*='bg-[#']
+  ) {
+  border-color: var(--hz-line) !important;
+  background-color: var(--hz-surface) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is([class*='hover:bg-white/']:hover, [class*='hover:bg-[#4aa3ff]']:hover) {
+  background-color: var(--hz-surface-hover) !important;
+}
+
+[data-theme='horizon']
+  .nammu-app-surface
+  :is([aria-selected='true'], [aria-pressed='true'], [data-state='active']) {
+  border-color: color-mix(in srgb, var(--color-os-accent) 32%, var(--hz-line)) !important;
+  background-color: var(--hz-surface-active) !important;
+  color: var(--hz-text) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(table, [role='table']) {
+  border-color: var(--hz-line);
+  color: var(--hz-text-soft);
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(thead, [role='rowgroup']):first-child {
+  color: var(--hz-text-muted);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(tr, [role='row']) {
+  border-color: var(--hz-line) !important;
+}
+
+[data-theme='horizon'] .nammu-app-surface :is(tr, [role='row']):hover {
+  background-color: rgba(255, 255, 255, 0.045);
+}
+
+[data-theme='horizon'] .nammu-app-surface :is([role='dialog'], [role='menu'], [role='listbox']) {
+  border-color: var(--hz-line-strong) !important;
+  border-radius: 20px !important;
+  color: var(--hz-text);
+  background: rgba(10, 9, 8, 0.82) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 18px 52px rgba(0, 0, 0, 0.48) !important;
+  backdrop-filter: blur(24px) saturate(125%);
+}
+
+[data-theme='horizon'] .nammu-app-surface input[type='range'],
+[data-theme='horizon'] .tool-workspace input[type='range'] {
+  accent-color: var(--color-os-accent);
+}
+
+/* All classic Nammu utility tools now share the same professional workspace. */
+[data-theme='horizon'] .tool-workspace {
+  min-height: 100%;
+  color: var(--hz-text);
+  background: transparent !important;
+  font-family: var(--font-sans);
+}
+
+[data-theme='horizon'] .tool-workspace > :first-child:is(header, div) {
+  border-color: var(--hz-line) !important;
+}
+
+[data-theme='horizon'] .tool-workspace-input,
+[data-theme='horizon'] .tool-workspace-output,
+[data-theme='horizon'] .drop-zone,
+[data-theme='horizon'] .os-panel {
+  border: 1px solid var(--hz-line) !important;
+  border-radius: var(--hz-radius-card) !important;
+  color: var(--hz-text-soft);
+  background: var(--hz-surface) !important;
+  box-shadow: var(--hz-shadow-card) !important;
+}
+
+[data-theme='horizon'] .tool-workspace .os-btn {
+  min-height: 34px;
+  border-color: var(--hz-line) !important;
+  border-radius: 9999px !important;
+  color: var(--hz-text-soft);
+  background: var(--hz-surface) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='horizon'] .tool-workspace .os-btn:hover:not(:disabled) {
+  color: var(--hz-text);
+  background: var(--hz-surface-hover) !important;
+}
+
+[data-theme='horizon'] .tool-workspace .os-btn-primary {
+  border-color: color-mix(in srgb, var(--color-os-accent) 68%, white 10%) !important;
+  color: white !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-os-accent) 82%, white 12%),
+    var(--color-os-accent)
+  ) !important;
+}
+
+/* Application-specific structural refinements. */
+[data-theme='horizon'] [data-nammu-app='browser'] > div > :is(div, header):first-child,
+[data-theme='horizon'] [data-nammu-app='whatsapp'] > div > :is(div, header):first-child,
+[data-theme='horizon'] [data-nammu-app='telegram'] > div > :is(div, header):first-child,
+[data-theme='horizon'] [data-nammu-app='youtube-music'] > div > :is(div, header):first-child {
+  border-color: var(--hz-line) !important;
+  background: var(--hz-toolbar) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='files'] [data-testid='nammu-files-app'],
+[data-theme='horizon'] [data-nammu-app='cloud'] > div,
+[data-theme='horizon'] [data-nammu-app='notes'] > div,
+[data-theme='horizon'] [data-nammu-app='calendar'] > div,
+[data-theme='horizon'] [data-nammu-app='settings'] > div,
+[data-theme='horizon'] [data-nammu-app='projects'] > div {
+  color: var(--hz-text);
+  background-color: var(--hz-canvas) !important;
+}
+
+/* Files, Cloud, Notes, and Settings share one sidebar grammar. */
+[data-theme='horizon']
+  :is(
+    [data-nammu-app='files'],
+    [data-nammu-app='cloud'],
+    [data-nammu-app='notes'],
+    [data-nammu-app='settings']
+  )
+  > div
+  > aside:first-child {
+  width: 184px !important;
+  padding: 12px !important;
+  border-color: var(--hz-line) !important;
+  background: var(--hz-sidebar) !important;
+}
+
+[data-theme='horizon']
+  :is(
+    [data-nammu-app='files'],
+    [data-nammu-app='cloud'],
+    [data-nammu-app='notes'],
+    [data-nammu-app='settings']
+  )
+  > div
+  > aside:first-child
+  button {
+  min-height: 34px;
+  border-left: 0 !important;
+  border-radius: 11px !important;
+  padding-inline: 10px !important;
+}
+
+[data-theme='horizon']
+  :is(
+    [data-nammu-app='files'],
+    [data-nammu-app='cloud'],
+    [data-nammu-app='notes'],
+    [data-nammu-app='settings']
+  )
+  > div
+  > aside:first-child
+  button:is([class*='bg-[#4aa3ff]'], [class*='bg-white/[0.04]']) {
+  color: var(--hz-text) !important;
+  background: var(--hz-surface-active) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='files'] section > div:first-child,
+[data-theme='horizon'] [data-nammu-app='cloud'] main > div:first-child,
+[data-theme='horizon'] [data-nammu-app='notes'] section > div:first-child {
+  min-height: 48px;
+  border-color: var(--hz-line) !important;
+  background: var(--hz-toolbar) !important;
+  backdrop-filter: blur(18px);
+}
+
+[data-theme='horizon'] [data-nammu-app='files'] section > div:first-child > div,
+[data-theme='horizon'] [data-nammu-app='files'] section > div:first-child > button,
+[data-theme='horizon'] [data-nammu-app='cloud'] main > div:first-child :is(button, input) {
+  border-radius: 11px !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='notes'] > div > div:nth-child(2) {
+  width: 260px !important;
+  border-color: var(--hz-line) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='notes'] > div > div:nth-child(2) > div:last-child > div {
+  margin-bottom: 5px;
+  padding: 11px !important;
+  border-color: transparent !important;
+  border-radius: 13px !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='calendar'] > div > div:first-child {
+  padding: 18px !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='calendar'] > div > div:first-child > div:last-child > div {
+  border-color: var(--hz-line) !important;
+  border-radius: 12px !important;
+  background: var(--hz-surface) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+}
+
+[data-theme='horizon'] [data-nammu-app='calendar'] > div > aside {
+  border-color: var(--hz-line) !important;
+  background: var(--hz-sidebar) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='settings'] main {
+  padding: 22px !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='settings'] main > div {
+  width: 100%;
+}
+
+[data-theme='horizon'] [data-nammu-app='settings'] .settings-card,
+[data-theme='horizon'] [data-nammu-app='settings'] main > div > div[class*='border'] {
+  padding: 15px !important;
+  border-radius: 16px !important;
+  background: var(--hz-surface) !important;
+  box-shadow: var(--hz-shadow-card);
+}
+
+/* Browser-family host chrome uses Nammu materials. Remote websites retain their
+   own visual identity inside the secure native/web rendering surface. */
+[data-theme='horizon']
+  :is(
+    [data-nammu-app='browser'],
+    [data-nammu-app='whatsapp'],
+    [data-nammu-app='telegram'],
+    [data-nammu-app='youtube-music']
+  )
+  > div
+  > div:first-child {
+  min-height: 42px;
+  border-color: var(--hz-line) !important;
+  background: var(--hz-toolbar) !important;
+  box-shadow: inset 0 -1px var(--hz-line);
+  backdrop-filter: blur(20px) saturate(120%);
+}
+
+[data-theme='horizon']
+  :is(
+    [data-nammu-app='browser'],
+    [data-nammu-app='whatsapp'],
+    [data-nammu-app='telegram'],
+    [data-nammu-app='youtube-music']
+  )
+  > div
+  > div:first-child
+  :is(button, input) {
+  border-radius: 11px !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='projects'] > div {
+  padding: 20px;
+}
+
+[data-theme='horizon'] [data-nammu-app='projects'] article,
+[data-theme='horizon'] [data-nammu-app='projects'] [class*='border'][class*='bg-'] {
+  overflow: hidden;
+  border-color: var(--hz-line) !important;
+  border-radius: 16px !important;
+  background: var(--hz-surface) !important;
+  box-shadow: var(--hz-shadow-card);
+}
+
+/* The persistent music workspace is shell UI rather than a registered app, so it
+   receives the same tokens explicitly. */
+[data-theme='horizon'] .music-sidebar {
+  border-color: var(--hz-line) !important;
+  color: var(--hz-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 96px),
+    rgba(10, 9, 8, var(--music-panel-opacity, 92%)) !important;
+  box-shadow: -14px 0 42px rgba(0, 0, 0, 0.24);
+  font-family: var(--font-sans);
+  backdrop-filter: blur(var(--music-panel-blur, 24px)) saturate(125%) !important;
+}
+
+[data-theme='horizon'] .music-sidebar .font-mono {
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon']
+  .music-sidebar
+  :is(
+    [class*='text-[#e8eef4]'],
+    [class*='text-[#d5e4f0]'],
+    [class*='text-[#c5d2de]'],
+    [class*='text-[#b7c8d6]']
+  ) {
+  color: var(--hz-text) !important;
+}
+
+[data-theme='horizon']
+  .music-sidebar
+  :is(
+    [class*='text-[#8aa0b2]'],
+    [class*='text-[#7d90a2]'],
+    [class*='text-[#5a6d7c]'],
+    [class*='text-[#4a5c6c]']
+  ) {
+  color: var(--hz-text-muted) !important;
+}
+
+[data-theme='horizon'] .music-sidebar [class*='text-[#4aa3ff]'] {
+  color: var(--color-os-accent) !important;
+}
+
+[data-theme='horizon'] .music-sidebar :is(button, select),
+[data-theme='horizon'] .music-settings-section,
+[data-theme='horizon'] .music-artwork {
+  border-color: var(--hz-line) !important;
+  border-radius: 12px !important;
+}
+
+[data-theme='horizon'] .music-settings-panel {
+  color: var(--hz-text);
+  background: rgba(12, 10, 9, 0.93) !important;
+  backdrop-filter: blur(24px) saturate(120%);
+}
+
+[data-theme='horizon'] .music-play-btn {
+  color: white;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-os-accent) 82%, white 12%),
+    var(--color-os-accent)
+  ) !important;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-os-accent) 24%, transparent);
+}
+
+[data-theme='horizon'][data-appearance='light'] .music-sidebar,
+[data-theme='horizon'][data-appearance='light'] .music-settings-panel {
+  background: rgba(248, 244, 239, var(--music-panel-opacity, 92%)) !important;
+  box-shadow: -14px 0 42px rgba(53, 35, 23, 0.12);
+}
+
+[data-theme='horizon'] [data-nammu-app='maps'] > div {
+  --map-panel: rgba(0, 0, 0, 0.46);
+  --map-panel-solid: #171310;
+  --map-surface: var(--hz-surface);
+  --map-surface-hover: var(--hz-surface-hover);
+  --map-line: var(--hz-line);
+  --map-line-strong: color-mix(in srgb, var(--color-os-accent) 38%, var(--hz-line));
+  --map-text: var(--hz-text);
+  --map-muted: var(--hz-text-muted);
+  --map-faint: var(--hz-text-faint);
+  --map-accent: var(--color-os-accent);
+  --map-glow: color-mix(in srgb, var(--color-os-accent) 18%, transparent);
+  background: var(--hz-canvas) !important;
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='maps'] > div > div:first-child {
+  background-color: #201d1a !important;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='maps'] section {
+  overflow: hidden;
+  border-color: var(--hz-line-strong) !important;
+  border-radius: 20px !important;
+  background: rgba(0, 0, 0, 0.44) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 18px 52px rgba(0, 0, 0, 0.46) !important;
+  backdrop-filter: blur(20px) saturate(120%) brightness(85%) !important;
+}
+
+[data-theme='horizon'] [data-nammu-app='pdf'] > div {
+  --pdf-line: var(--hz-line);
+  --pdf-line-strong: var(--hz-line-strong);
+  --pdf-panel: rgba(255, 255, 255, 0.035);
+  --pdf-panel-2: rgba(255, 255, 255, 0.055);
+  --pdf-canvas: #26221f;
+  --void: var(--hz-canvas);
+  --navy: var(--hz-canvas);
+  --ink: #171310;
+  --line: var(--hz-line);
+  --line-strong: var(--hz-line-strong);
+  --electric: var(--color-os-accent);
+  --silver: var(--hz-text);
+  --mute: var(--hz-text-muted);
+  --faint: var(--hz-text-faint);
+  font-family: var(--font-sans);
+}
+
+[data-theme='horizon'] [data-nammu-app='pdf'] :is(button, [role='menu']) {
+  border-radius: 10px !important;
+}
+
+[data-theme='horizon'] [data-nammu-tool='subdomain-discovery'] > div {
+  --recon-bg: var(--hz-canvas);
+  --recon-panel: rgba(255, 255, 255, 0.035);
+  --recon-surface: var(--hz-surface);
+  --recon-hover: var(--hz-surface-hover);
+  --recon-line: var(--hz-line);
+  --recon-line-strong: color-mix(in srgb, var(--color-os-accent) 38%, var(--hz-line));
+  --recon-text: var(--hz-text);
+  --recon-muted: var(--hz-text-muted);
+  --recon-faint: var(--hz-text-faint);
+  --recon-accent: var(--color-os-accent);
+  background: var(--hz-canvas) !important;
+  font-family: var(--font-sans) !important;
+}
+
+[data-theme='horizon'] [data-nammu-tool='subdomain-discovery'] :is(header, section, form, table) {
+  border-color: var(--hz-line) !important;
+}
+
+[data-theme='horizon'] [data-nammu-tool='subdomain-discovery'] button:not([class*='rounded-full']) {
+  border-radius: 12px !important;
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  [data-theme='horizon'] .nammu-app-surface :is(header, nav, aside),
+  [data-theme='horizon'] .nammu-app-surface :is([role='dialog'], [role='menu'], [role='listbox']),
+  [data-theme='horizon'] [data-nammu-app='maps'] section {
+    background: var(--nammu-material-solid) !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  [data-theme='horizon'] .nammu-app-surface {
+    --hz-radius-card: 13px;
+    --hz-radius-control: 10px;
+  }
+
+  [data-theme='horizon'] [data-nammu-app='maps'] section {
+    border-radius: 16px !important;
+  }
+}
