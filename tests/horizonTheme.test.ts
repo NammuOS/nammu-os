@@ -82,6 +82,22 @@ describe('Horizon product-wide theme', () => {
     expect(applicationTheme).toContain("[data-theme='horizon'] .os-rail:hover");
     expect(applicationTheme).toContain("[data-theme='horizon'] .desktop-rail-revealed .os-rail");
     expect(applicationTheme).toContain("[data-theme='horizon'] .taskbar-button.active > .absolute");
+    expect(applicationTheme).toContain("[data-theme='horizon'] .taskbar-button-unpinned:hover");
+    expect(applicationTheme).toContain("[data-theme='horizon'] .taskbar-button-pinned:hover");
+    expect(applicationTheme).toMatch(
+      /\.taskbar-button-pinned\.active,[\s\S]*\.taskbar-button-unpinned\.active,[\s\S]*\.taskbar-button-pinned:hover/,
+    );
+    expect(applicationTheme).toMatch(
+      /\.taskbar-button-pinned:hover,[\s\S]*\.taskbar-button-unpinned:hover,[\s\S]*linear-gradient\(180deg, rgba\(255, 255, 255, 0\.13\), rgba\(255, 255, 255, 0\.055\)\)/,
+    );
+    expect(applicationTheme).toMatch(
+      /\[data-theme='horizon'\] \.taskbar-running-apps\s*\{\s*overflow:\s*visible !important;/,
+    );
+    expect(taskbar).toContain('taskbar-running-apps');
+    expect(applicationTheme).toContain('border-radius: 15px !important');
+    expect(applicationTheme).toContain(
+      'linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.055))',
+    );
     expect(applicationTheme).not.toContain(
       "[data-theme='horizon'] .desktop-has-maximized .os-rail,",
     );
@@ -95,6 +111,8 @@ describe('Horizon product-wide theme', () => {
     expect(read('src/components/os/Rail.tsx')).toContain('rail-app-button');
     expect(read('src/components/os/Rail.tsx')).toContain('is-active bg-[#4aa3ff]/10');
     expect(taskbar).toContain('taskbar-button-unpinned');
+    expect(taskbar).toContain('taskbar-button taskbar-button-unpinned active max-w-35');
+    expect(taskbar).toContain('taskbar-button taskbar-button-unpinned active"');
   });
 
   test('uses one Horizon glass system for shell popovers, side surfaces, and every context menu', () => {
@@ -204,9 +222,14 @@ describe('Horizon product-wide theme', () => {
     const contextTheme = read('src/components/context-menu/contextMenu.css');
     const contextMenu = read('src/components/context-menu/ContextMenu.tsx');
 
-    expect(applicationTheme).toContain('width: 344px !important');
-    expect(applicationTheme).toContain('max-height: min(520px, calc(100vh - 108px)) !important');
-    expect(applicationTheme).toContain('min-height: 62px');
+    expect(applicationTheme).toContain('width: min(520px, calc(100vw - 32px)) !important');
+    expect(applicationTheme).toContain('max-height: min(610px, calc(100vh - 108px)) !important');
+    expect(applicationTheme).toContain('height: 50px !important');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .start-menu-grid");
+    expect(applicationTheme).toContain('grid-template-columns: 1fr');
+    expect(applicationTheme).toContain("[data-theme='horizon'] .start-menu-footer");
+    expect(read('src/components/os/StartMenu.tsx')).toContain('draggable');
+    expect(read('src/components/os/StartMenu.tsx')).toContain('resetAppOrder');
     expect(contextTheme).not.toContain('min-width: 164px');
     expect(contextTheme).not.toContain('max-width: min(244px, calc(100vw - 16px))');
     expect(contextTheme).toContain('width: 154px');

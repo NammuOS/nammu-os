@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -11,6 +11,7 @@ const edgePath =
 const runDir = join(tmpdir(), `nammu-pdf-p4-smoke-${process.pid}`);
 const profileDir = join(runDir, 'edge-profile');
 const fixturePath = join(runDir, 'forms-smoke.pdf');
+const downloadDir = join(runDir, 'downloads');
 const debugPort = 9400 + (process.pid % 300);
 
 const isReachable = async () => {
@@ -39,7 +40,7 @@ if (!(await isReachable())) {
   if (!(await isReachable())) throw new Error('Nammu development server did not become ready.');
 }
 
-await mkdir(runDir, { recursive: true });
+await mkdir(downloadDir, { recursive: true });
 const fixture = await PDFDocument.create();
 const page = fixture.addPage([612, 792]);
 const font = await fixture.embedFont(StandardFonts.Helvetica);
@@ -152,6 +153,7 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('DOM.enable');
+  await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDir });
   await send('Page.setInterceptFileChooserDialog', { enabled: true });
   await send('Page.navigate', { url: `${baseUrl}/apps/pdf` });
   await waitFor(
@@ -173,6 +175,35 @@ try {
     backendNodeId: chooser.backendNodeId,
   });
   await waitFor(`Boolean(document.querySelector('[data-pdf-page="1"] canvas'))`, 'rendered page');
+  await clickTitle('Edit page content');
+  await waitFor(
+    `Boolean(document.querySelector('button[title="Click the page to add real PDF text"]'))`,
+    'Edit toolbar',
+  );
+  await clickTitle('Click the page to add real PDF text');
+  const editPoint = await evaluate(
+    `(() => { const r = document.querySelector('[data-pdf-edit-layer="1"]')?.getBoundingClientRect(); return r ? {x:r.left+110,y:r.top+150}:null; })()`,
+  );
+  if (!editPoint) throw new Error('Content editing layer is unavailable.');
+  await send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: editPoint.x,
+    y: editPoint.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: editPoint.x,
+    y: editPoint.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await waitFor(
+    `Boolean(document.querySelector('[data-pdf-content-object]'))`,
+    'real authored text',
+  );
+  await clickTitle('Return to Read workspace');
   await clickTitle('Create and edit PDF forms');
   await waitFor(`Boolean(document.querySelector('button[title="Text field"]'))`, 'Forms toolbar');
   await clickTitle('Text field');
@@ -222,6 +253,77 @@ try {
     `Boolean(document.querySelector('[data-pdf-form-widget] input'))`,
     'interactive form control',
   );
+  await clickTitle('Protect and redact');
+  await waitFor(`Boolean(document.querySelector('button[title="Mark a region for redaction"]'))`, 'Protect toolbar');
+  await clickTitle('Mark a region for redaction');
+  const protectPoint = await evaluate(
+    `(() => { const r = document.querySelector('[data-pdf-protect-layer="1"]')?.getBoundingClientRect(); return r ? {x:r.left+70,y:r.top+70}:null; })()`,
+  );
+  if (!protectPoint) throw new Error('Protect redaction layer is unavailable.');
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: protectPoint.x, y: protectPoint.y, button: 'left', buttons: 1, clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: protectPoint.x + 190, y: protectPoint.y + 55, button: 'left', buttons: 1 });
+  await Bun.sleep(150);
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: protectPoint.x + 190, y: protectPoint.y + 55, button: 'left', clickCount: 1 });
+  await Bun.sleep(250);
+  await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((entry) => entry.textContent?.trim() === 'Continue'); if (button) { button.click(); return true; } return false; })()`);
+  await Bun.sleep(1_000);
+  const protectDiagnostic = await evaluate(`(() => ({
+    workspace: document.querySelector('[data-testid="nammu-pdf-workspace"]')?.getAttribute('data-workspace-mode'),
+    layer: document.querySelector('[data-pdf-protect-layer="1"]')?.className,
+    marks: document.querySelectorAll('[aria-label="Pending redaction"]').length,
+    body: document.body.innerText.slice(-900)
+  }))()`);
+  if (!protectDiagnostic?.marks) throw new Error(`Protect gesture did not commit: ${JSON.stringify(protectDiagnostic)}; exceptions=${exceptions.join(' | ')}`);
+  await waitFor(`Boolean(document.querySelector('[aria-label="Pending redaction"]'))`, 'real /Redact mark');
+  await evaluate(`window.confirm = () => true`);
+  await clickTitle('Apply secure raster redactions');
+  try {
+    await waitFor(`!document.querySelector('[aria-label="Pending redaction"]') && document.body.innerText.includes('Ready')`, 'applied raster redaction', 45_000);
+  } catch (error) {
+    const diagnostic = await evaluate(`({ body: document.body.innerText.slice(-1200), marks: document.querySelectorAll('[aria-label="Pending redaction"]').length })`);
+    throw new Error(`${error.message}: ${JSON.stringify(diagnostic)}; exceptions=${exceptions.join(' | ')}`);
+  }
+  await clickTitle('Return to Read workspace');
+  await clickTitle('Convert and export');
+  await waitFor(`Boolean(document.querySelector('[data-pdf-convert-inspector]'))`, 'Convert workspace');
+  await clickTitle('Run configured export');
+  await waitFor(`document.querySelector('[data-pdf-convert-inspector]')?.getAttribute('data-conversion-status') === 'completed'`, 'PNG export', 45_000);
+  for (const label of ['JPEG', 'WebP']) {
+    const selected = await evaluate(`(() => { const b = [...document.querySelectorAll('[data-pdf-convert-inspector] button')].find((entry) => entry.querySelector('strong')?.textContent === '${label}'); b?.click(); return Boolean(b); })()`);
+    if (!selected) throw new Error(`${label} converter is unavailable.`);
+    await clickTitle('Run configured export');
+    await Bun.sleep(150);
+    await waitFor(`document.querySelector('[data-pdf-convert-inspector]')?.getAttribute('data-conversion-status') === 'completed'`, `${label} export`, 45_000);
+  }
+  await waitFor(`true`, 'download flush');
+  await Bun.sleep(500);
+  const downloads = await readdir(downloadDir);
+  const pngOutput = downloads.find((name) => name.endsWith('.png'));
+  const jpegOutput = downloads.find((name) => name.endsWith('.jpg'));
+  const webpOutput = downloads.find((name) => name.endsWith('.webp'));
+  if (!pngOutput || !jpegOutput || !webpOutput) throw new Error(`Missing rendered exports: ${downloads.join(', ')}`);
+  const [pngBytes, jpegBytes, webpBytes] = await Promise.all([readFile(join(downloadDir, pngOutput)), readFile(join(downloadDir, jpegOutput)), readFile(join(downloadDir, webpOutput))]);
+  if (pngBytes.toString('hex', 0, 8) !== '89504e470d0a1a0a') throw new Error('PNG export did not decode as a PNG artifact.');
+  if (jpegBytes[0] !== 0xff || jpegBytes[1] !== 0xd8) throw new Error('JPEG export did not decode as a JPEG artifact.');
+  if (webpBytes.toString('ascii', 0, 4) !== 'RIFF' || webpBytes.toString('ascii', 8, 12) !== 'WEBP') throw new Error('WebP export did not decode as a WebP artifact.');
+  const imageChooserPromise = new Promise((resolve) => { fileChooserResolve = resolve; });
+  await clickTitle('Create a new PDF from images');
+  const imageChooser = await Promise.race([imageChooserPromise, Bun.sleep(5_000).then(() => { throw new Error('The image picker did not open.'); })]);
+  await send('DOM.setFileInputFiles', { files: [join(downloadDir, pngOutput), join(downloadDir, jpegOutput), join(downloadDir, webpOutput)], backendNodeId: imageChooser.backendNodeId });
+  await waitFor(`Boolean(document.querySelector('[data-pdf-image-import]'))`, 'image import review');
+  await evaluate(`(() => { const button = [...document.querySelectorAll('[data-pdf-image-import] button')].find((entry) => entry.textContent?.includes('Create 3-page PDF')); button?.click(); return Boolean(button); })()`);
+  try {
+    await waitFor(`document.body.innerText.includes('Images.pdf') && document.body.innerText.includes('· 3')`, 'ordered image PDF session', 45_000);
+  } catch (error) {
+    const diagnostic = await evaluate(`({ body: document.body.innerText.slice(-1200), tabs: [...document.querySelectorAll('[role="tab"]')].map((entry) => entry.textContent) })`);
+    throw new Error(`${error.message}: ${JSON.stringify(diagnostic)}; exceptions=${exceptions.join(' | ')}`);
+  }
+  await clickTitle('Save As');
+  await Bun.sleep(600);
+  const imagePdfName = (await readdir(downloadDir)).find((name) => name === 'Images.pdf');
+  if (!imagePdfName) throw new Error('Images-to-PDF output was not saved.');
+  const imagePdf = await PDFDocument.load(await readFile(join(downloadDir, imagePdfName)));
+  if (imagePdf.getPageCount() !== 3) throw new Error(`Images-to-PDF produced ${imagePdf.getPageCount()} pages instead of 3.`);
   if (exceptions.length) throw new Error(`Browser exceptions: ${exceptions.join(' | ')}`);
   console.info(
     JSON.stringify({
@@ -229,6 +331,10 @@ try {
       workspace: 'Forms',
       document: 'rendered',
       field: 'real AcroForm text field committed',
+      contentEdit: 'real page text committed',
+      protect: 'real /Redact mark applied through affected-page raster replacement',
+      convert: 'active document exported to independently identified PNG, JPEG, and WebP artifacts',
+      imageImport: 'ordered PNG, JPEG, and WebP inputs independently reopened as a three-page PDF',
       browserExceptions: 0,
     }),
   );
@@ -244,5 +350,19 @@ try {
       await localServer.exited.catch(() => undefined);
     }
   }
-  await rm(runDir, { recursive: true, force: true });
+  let cleanupError;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await rm(runDir, { recursive: true, force: true });
+      cleanupError = undefined;
+      break;
+    } catch (error) {
+      cleanupError = error;
+      await Bun.sleep(200);
+    }
+  }
+  if (cleanupError) {
+    console.error('PDF smoke fixture cleanup failed:', cleanupError);
+    process.exitCode = 1;
+  }
 }

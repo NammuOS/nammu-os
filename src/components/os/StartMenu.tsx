@@ -128,7 +128,7 @@ export default function StartMenu({
   return (
     <div className="start-menu-layer fixed inset-x-0 bottom-[32px] top-0 z-[9997]" onClick={close}>
       <div
-        className="start-menu-panel absolute bottom-0 left-[36px] flex max-h-[70vh] w-[360px] flex-col border border-white/[0.08] bg-[#070b12]/94 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
+        className="start-menu-panel absolute bottom-0 left-[36px] flex max-h-[70vh] w-[360px] flex-col overflow-hidden border border-white/[0.08] bg-[#070b12]/94 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         onClick={(event) => event.stopPropagation()}
         onContextMenu={(event) =>
           contextMenu.openAtEvent(event, startMenuContext, {
@@ -137,37 +137,37 @@ export default function StartMenu({
           })
         }
       >
-        <div className="start-menu-search mb-3 flex items-center gap-2 border border-white/[0.07] bg-black/25 px-2 py-1.5">
-          <Search size={11} className="shrink-0 text-[#4aa3ff]" />
+        <div className="start-menu-search flex items-center gap-2 border border-white/[0.07] bg-black/25">
+          <Search size={18} className="start-menu-search-icon shrink-0" />
           <input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search apps or tools…"
-            className="cmd-input min-w-0 flex-1 bg-transparent text-[12px] text-[#d5e0ea] outline-none"
+            className="cmd-input min-w-0 flex-1 bg-transparent outline-none"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="text-[#4a5c6c] hover:text-[#c5d2de]"
+              className="start-menu-search-clear grid place-items-center"
               aria-label="Clear search"
             >
-              <X size={11} />
+              <X size={13} />
             </button>
           )}
         </div>
 
-        <div className="os-scrollbar min-h-0 overflow-y-auto">
+        <div className="start-menu-content os-scrollbar min-h-0 flex-1 overflow-y-auto">
           {!query.trim() ? (
             <>
-              <div className="mb-1.5 flex items-center justify-between px-1 font-mono text-[7.5px] uppercase tracking-[0.14em] text-os-text-dim">
+              <div className="start-menu-section-header flex items-center justify-between">
                 <span>Drag apps to arrange</span>
-                <button onClick={resetAppOrder} className="hover:text-os-accent">
+                <button onClick={resetAppOrder} className="start-menu-reset">
                   Reset
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="start-menu-grid grid grid-cols-2">
                 {orderedApps.map((app, appIndex) => {
                   const Icon = app.icon;
                   return (
@@ -228,13 +228,13 @@ export default function StartMenu({
                           { ariaLabel: `${app.title} menu` },
                         )
                       }
-                      className={`start-menu-app flex min-w-0 flex-col items-center gap-1.5 px-1 py-2.5 text-[#8aa0b2] transition-colors hover:bg-white/[0.04] hover:text-[#d5e4f0] rounded ${draggedAppId === app.id ? 'opacity-40' : ''}`}
+                      className={`start-menu-app flex min-w-0 items-center text-left transition-colors ${draggedAppId === app.id ? 'is-dragging opacity-40' : ''}`}
                       title={app.title}
                     >
-                      <span className="start-menu-app-icon grid place-items-center">
+                      <span className="start-menu-app-icon grid shrink-0 place-items-center">
                         <Icon size={16} strokeWidth={1.4} className="text-[#8ec4ff]" />
                       </span>
-                      <span className="w-full truncate text-center font-mono text-[8px] uppercase tracking-[0.12em]">
+                      <span className="start-menu-app-name min-w-0 flex-1 truncate">
                         {app.title}
                       </span>
                     </button>
@@ -243,12 +243,8 @@ export default function StartMenu({
               </div>
             </>
           ) : (
-            <div>
-              {appResults.length > 0 && (
-                <div className="mb-1 font-mono text-[8px] uppercase tracking-[0.2em] text-[#4a5c6c]">
-                  Apps
-                </div>
-              )}
+            <div className="start-menu-results">
+              {appResults.length > 0 && <div className="start-menu-section-label">Apps</div>}
               {appResults.map((app) => {
                 const Icon = app.icon;
                 return (
@@ -275,19 +271,17 @@ export default function StartMenu({
                         { ariaLabel: `${app.title} menu` },
                       )
                     }
-                    className="start-menu-result row-hover flex w-full items-center gap-2 px-2 py-1.5 text-left rounded"
+                    className="start-menu-result flex w-full items-center text-left"
                   >
                     <Icon size={13} className="text-[#4aa3ff]" />
-                    <span className="text-[11px] text-[#d5e0ea]">{app.title}</span>
+                    <span className="start-menu-result-name min-w-0 flex-1 truncate">
+                      {app.title}
+                    </span>
                   </button>
                 );
               })}
 
-              {toolResults.length > 0 && (
-                <div className="mb-1 mt-3 font-mono text-[8px] uppercase tracking-[0.2em] text-[#4a5c6c]">
-                  Tools
-                </div>
-              )}
+              {toolResults.length > 0 && <div className="start-menu-section-label">Tools</div>}
               {toolResults.map((tool) => {
                 const Icon = tool.icon;
                 return (
@@ -314,26 +308,30 @@ export default function StartMenu({
                         { ariaLabel: `${tool.name} menu` },
                       )
                     }
-                    className="start-menu-result row-hover flex w-full items-center gap-2 px-2 py-1.5 text-left rounded"
+                    className="start-menu-result flex w-full items-center text-left"
                   >
                     <Icon size={13} className="text-[#4aa3ff]" />
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-[#d5e0ea]">
+                    <span className="start-menu-result-name min-w-0 flex-1 truncate">
                       {tool.name}
                     </span>
-                    <span className="font-mono text-[8px] uppercase text-[#4a5c6c]">
-                      {tool.category}
-                    </span>
+                    <span className="start-menu-result-category shrink-0">{tool.category}</span>
                   </button>
                 );
               })}
 
               {!appResults.length && !toolResults.length && (
-                <div className="py-8 text-center font-mono text-[9px] text-[#4a5c6c]">
-                  No matches
-                </div>
+                <div className="start-menu-empty py-10 text-center">No matches</div>
               )}
             </div>
           )}
+        </div>
+        <div className="start-menu-footer flex items-center justify-between">
+          <span>
+            {query.trim()
+              ? `${appResults.length + toolResults.length} results`
+              : `${orderedApps.length} applications`}
+          </span>
+          <span>Press ESC to close</span>
         </div>
       </div>
     </div>

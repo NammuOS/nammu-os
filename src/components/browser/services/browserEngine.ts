@@ -66,6 +66,7 @@ export interface Bookmark {
   title: string;
   url: string;
   favicon?: string;
+  group?: string;
 }
 
 export interface HistoryEntry {
@@ -224,7 +225,8 @@ export function getStoredBookmarks(): Bookmark[] {
   try {
     const raw = localStorage.getItem(BOOKMARKS_STORAGE_KEY);
     if (!raw) return DEFAULT_BOOKMARKS;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sanitizeBookmarks(parsed) : DEFAULT_BOOKMARKS;
   } catch {
     return DEFAULT_BOOKMARKS;
   }
@@ -232,8 +234,48 @@ export function getStoredBookmarks(): Bookmark[] {
 
 export function saveStoredBookmarks(bookmarks: Bookmark[]): void {
   try {
-    localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(bookmarks));
+    localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(sanitizeBookmarks(bookmarks)));
   } catch {}
+}
+
+export function sanitizeBookmarks(input: unknown): Bookmark[] {
+  if (!Array.isArray(input)) return [];
+
+  const bookmarks: Bookmark[] = [];
+  const ids = new Set<string>();
+  for (const [index, candidate] of input.slice(0, 2_000).entries()) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const raw = candidate as Partial<Bookmark>;
+    if (typeof raw.url !== 'string') continue;
+
+    let url: URL;
+    try {
+      url = new URL(raw.url.trim());
+    } catch {
+      continue;
+    }
+    if (!['http:', 'https:'].includes(url.protocol)) continue;
+
+    const requestedId = typeof raw.id === 'string' ? raw.id.trim().slice(0, 120) : '';
+    let id = requestedId || `imported-${index}-${url.hostname}`;
+    while (ids.has(id)) id = `${id}-${index}`;
+    ids.add(id);
+
+    const title =
+      typeof raw.title === 'string' && raw.title.trim()
+        ? raw.title.trim().slice(0, 240)
+        : url.hostname;
+    const group =
+      typeof raw.group === 'string' && raw.group.trim()
+        ? raw.group.trim().slice(0, 120)
+        : undefined;
+    const favicon =
+      typeof raw.favicon === 'string' && /^https?:\/\//i.test(raw.favicon.trim())
+        ? raw.favicon.trim().slice(0, 2_048)
+        : undefined;
+    bookmarks.push({ id, title, url: url.href, favicon, group });
+  }
+  return bookmarks;
 }
 
 export function getStoredHistory(): HistoryEntry[] {

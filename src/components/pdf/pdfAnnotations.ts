@@ -529,7 +529,10 @@ export async function removeAllPdfAnnotations(bytes: Uint8Array): Promise<Uint8A
       const dictionary = document.context.lookupMaybe(candidate, pdf.PDFDict);
       // Form widgets are fields, not comments. Removing them here would silently
       // destroy the AcroForm tree and is intentionally outside P3.
-      if (dictionary?.get(pdf.PDFName.of('Subtype'))?.toString() === '/Widget') continue;
+      const subtype = dictionary?.get(pdf.PDFName.of('Subtype'))?.toString();
+      // Widgets are form fields and /Redact marks are pending security work.
+      // Neither belongs to the ordinary Comment "Remove all" command.
+      if (subtype === '/Widget' || subtype === '/Redact') continue;
       annots.remove(index);
       removed += 1;
     }

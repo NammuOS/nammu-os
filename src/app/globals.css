@@ -90,8 +90,61 @@ textarea {
   font-family: inherit;
 }
 
+[data-theme] .nammu-app-surface input.browser-omnibox-input.browser-omnibox-input,
+[data-theme] .nammu-app-surface input.browser-panel-search-input.browser-panel-search-input,
+[data-theme] .nammu-app-surface input.new-tab-workspace-input.new-tab-workspace-input {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+[data-theme] .nammu-app-surface input.browser-omnibox-input.browser-omnibox-input:focus,
+[data-theme] .nammu-app-surface input.browser-panel-search-input.browser-panel-search-input:focus,
+[data-theme] .nammu-app-surface input.new-tab-workspace-input.new-tab-workspace-input:focus {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 button {
   cursor: pointer;
+}
+
+.nammu-glass-dialog-backdrop {
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(7px) saturate(112%);
+}
+
+.nammu-glass-dialog {
+  color: var(--hz-text, #f6f4f2);
+  border: 0.5px solid var(--hz-shell-glass-border, rgba(255, 255, 255, 0.1));
+  background: var(--hz-shell-glass, rgba(0, 0, 0, 0.4));
+  box-shadow: var(
+    --hz-shell-glass-shadow,
+    inset 1px 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 18px 52px rgba(0, 0, 0, 0.52)
+  );
+  backdrop-filter: var(--hz-shell-glass-filter, blur(20px) saturate(120%) brightness(85%));
+}
+
+.browser-tab-strip,
+.browser-omnibox-shell,
+.browser-bookmarks-bar {
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+}
+
+.browser-tab-strip .browser-tab {
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
 }
 
 ::selection {

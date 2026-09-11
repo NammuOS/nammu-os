@@ -3,6 +3,8 @@
 import {
   ChevronLeft,
   ChevronRight,
+  ArrowDown,
+  ArrowUp,
   ChevronsUpDown,
   CopyPlus,
   FilePlus2,
@@ -13,6 +15,7 @@ import {
   LayoutGrid,
   ListChecks,
   MessageSquareText,
+  PencilRuler,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -22,7 +25,10 @@ import {
   RotateCcw,
   RotateCw,
   Save,
+  ScanText,
   Search,
+  ShieldCheck,
+  RefreshCw,
   Trash2,
   Undo2,
   X,
@@ -53,6 +59,10 @@ import {
   PdfFormsFieldList,
   PdfFormsToolbar,
 } from './PdfFormsWorkspace';
+import { PdfEditInspector, PdfEditToolbar } from './PdfEditWorkspace';
+import { PdfProtectInspector, PdfProtectToolbar } from './PdfProtectWorkspace';
+import { PdfConvertInspector, PdfConvertToolbar } from './PdfConvertWorkspace';
+import { PdfOcrInspector, PdfOcrToolbar } from './PdfOcrWorkspace';
 import {
   PDF_COMMANDS,
   PDF_MENU_ORDER,
@@ -86,6 +96,25 @@ import {
   duplicatePdfFormField,
   updatePdfFormField,
 } from './pdfForms';
+import {
+  createPdfContentObject,
+  deletePdfContentObject,
+  updatePdfContentObject,
+} from './pdfContentEditing';
+import {
+  applyRasterRedactions,
+  createPdfRedactionMark,
+  removePdfRedactionMark,
+  sanitizePdfDocument,
+} from './pdfProtection';
+import type { PdfSanitizeOptions } from './protectionModel';
+import { encryptPdfDocument } from './pdfCrypto';
+import type { PdfEncryptionRequest } from './pdfCrypto';
+import type { PdfConversionOptions, PdfExportFormat } from './conversionModel';
+import { archiveConversionArtifacts, convertPdf, createPdfFromImages, DEFAULT_IMAGE_IMPORT_OPTIONS, type PdfImageImportOptions } from './pdfConversion';
+import { makeSearchablePdf, recognizePdfPages } from './pdfOcr';
+import type { PdfOcrOptions } from './ocrModel';
+import type { PickedPlatformFile } from '../../platform/contracts';
 import { appendPdfHistory, transitionPdfHistory } from './pdfHistory';
 import type {
   PdfAppInitialData,
@@ -98,6 +127,7 @@ import type {
 } from './model';
 import type { PdfAnnotationDraft, PdfAnnotationPatch, PdfTextSelection } from './annotationModel';
 import type { PdfFormFieldDraft, PdfFormFieldPatch } from './formModel';
+import type { PdfContentObjectDraft, PdfContentObjectPatch } from './contentEditModel';
 import {
   buildPdfPageOrder,
   remapSelectedPages,
@@ -128,6 +158,11 @@ interface PageDropState {
   placement: 'before' | 'after';
 }
 
+interface ImageImportState {
+  files: readonly PickedPlatformFile[];
+  options: PdfImageImportOptions;
+}
+
 type PdfTransformResult =
   | Uint8Array
   | {
@@ -139,6 +174,8 @@ type PdfTransformResult =
       selectedFormFieldId?: string | null;
       selectedFormWidgetId?: string | null;
       selectNewFormField?: boolean;
+      selectedContentObjectId?: string | null;
+      selectNewContentObjectId?: string;
     };
 
 interface AnnotationComposerState {
@@ -189,6 +226,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
   const [annotationComposer, setAnnotationComposer] = useState<AnnotationComposerState | null>(
     null,
   );
+  const [imageImport, setImageImport] = useState<ImageImportState | null>(null);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<HTMLDivElement>(null);
   const panStartRef = useRef({ x: 0, y: 0, left: 0, top: 0 });
@@ -196,6 +234,8 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
   const hostCloseResolverRef = useRef<((allow: boolean) => void) | null>(null);
   const fidelityResolverRef = useRef<((allow: boolean) => void) | null>(null);
   const fidelityApprovedRef = useRef(new Set<string>());
+  const conversionAbortRef = useRef<AbortController | null>(null);
+  const ocrAbortRef = useRef<AbortController | null>(null);
   const initialRequestRef = useRef<PdfNativeOpenRequest | null>(initialData?.openRequest ?? null);
 
   const activeSession = useMemo(
@@ -237,6 +277,8 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
     () => () => {
       hostCloseResolverRef.current?.(false);
       fidelityResolverRef.current?.(false);
+      conversionAbortRef.current?.abort();
+      ocrAbortRef.current?.abort();
     },
     [],
   );
@@ -251,13 +293,20 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
   );
 
   const addDocument = useCallback(
-    async (name: string, bytes: Uint8Array, source: PdfDocumentSession['source']) => {
+    async (
+      name: string,
+      bytes: Uint8Array,
+      source: PdfDocumentSession['source'],
+      prepare?: (session: PdfDocumentSession) => PdfDocumentSession,
+    ) => {
       setError(null);
       setBusyLabel(`Opening ${name}`);
       try {
-        const session = await loadPdfSession(name, bytes, source);
+        const loaded = await loadPdfSession(name, bytes, source);
+        const session = prepare ? prepare(loaded) : loaded;
         setSessions((current) => [...current, session]);
         setActiveId(session.id);
+        return session.id;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : 'The PDF could not be opened.');
       } finally {
@@ -400,7 +449,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
     (
       session: PdfDocumentSession,
       label: string,
-      mutationKind: 'structural' | 'annotation' | 'form' = 'structural',
+      mutationKind: 'structural' | 'annotation' | 'form' | 'content' = 'structural',
     ): Promise<boolean> => {
       if (session.fidelity.signatures) {
         setError(
@@ -409,11 +458,14 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         return Promise.resolve(false);
       }
       const warnings =
-        mutationKind === 'annotation' || mutationKind === 'form'
+        mutationKind === 'annotation' || mutationKind === 'form' || mutationKind === 'content'
           ? session.fidelity.warnings.filter(
               (warning) =>
                 !warning.startsWith('Annotations') &&
-                !(mutationKind === 'form' && warning.startsWith('Interactive forms')) &&
+                !(
+                  (mutationKind === 'form' || mutationKind === 'content') &&
+                  warning.startsWith('Interactive forms')
+                ) &&
                 !warning.startsWith('Bookmarks') &&
                 !warning.startsWith('Custom page labels'),
             )
@@ -434,7 +486,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
     async (
       label: string,
       transform: (session: PdfDocumentSession) => Promise<PdfTransformResult>,
-      mutationKind: 'structural' | 'annotation' | 'form' = 'structural',
+      mutationKind: 'structural' | 'annotation' | 'form' | 'content' = 'structural',
     ) => {
       const session = activeSession;
       if (!session) return;
@@ -486,6 +538,21 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
             : result instanceof Uint8Array
               ? session.selectedFormWidgetId
               : (result.selectedFormWidgetId ?? session.selectedFormWidgetId);
+        const requestedContentObjectId =
+          result instanceof Uint8Array
+            ? session.contentEdit.selectedObjectId
+            : result.selectedContentObjectId;
+        const selectedContentObjectId =
+          !(result instanceof Uint8Array) && result.selectNewContentObjectId
+            ? loaded.contentEdit.objects.some(
+                (object) => object.id === result.selectNewContentObjectId,
+              )
+              ? result.selectNewContentObjectId
+              : null
+            : requestedContentObjectId &&
+                loaded.contentEdit.objects.some((object) => object.id === requestedContentObjectId)
+              ? requestedContentObjectId
+              : null;
         updateSession(session.id, (current) => ({
           ...current,
           ...loaded,
@@ -495,6 +562,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
           selectedAnnotationId,
           selectedFormFieldId,
           selectedFormWidgetId,
+          contentEdit: { ...loaded.contentEdit, selectedObjectId: selectedContentObjectId },
           textSelection: null,
           dirty: true,
           revision: current.revision + 1,
@@ -535,6 +603,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
             selectedAnnotationId: null,
             selectedFormFieldId: null,
             selectedFormWidgetId: null,
+            contentEdit: { ...loaded.contentEdit, selectedObjectId: null },
             textSelection: null,
             dirty: true,
             revision: current.revision + 1,
@@ -723,6 +792,132 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
     [activeSession, selectFormField],
   );
 
+  const saveConversionArtifact = useCallback(async (artifact: { name: string; mimeType: string; bytes: Uint8Array }) => {
+    const extension = artifact.name.split('.').pop() || 'bin';
+    const result = await platform.files.save({
+      suggestedName: artifact.name,
+      contents: artifact.bytes,
+      mimeType: artifact.mimeType,
+      filters: [{ name: `${extension.toUpperCase()} file`, extensions: [extension], mimeTypes: [artifact.mimeType.split(';')[0]] }],
+    });
+    if (result.status !== 'success' && result.status !== 'cancelled')
+      setError('reason' in result ? result.reason : result.message);
+  }, []);
+
+  const runConversion = useCallback(async (format?: PdfExportFormat) => {
+    if (!activeSession) return;
+    const options = { ...activeSession.conversion.options, ...(format ? { format } : {}) };
+    const total = options.pageScope === 'all' ? activeSession.pages.length : options.pageScope === 'current' ? 1 : activeSession.selectedPages.length;
+    const controller = new AbortController();
+    conversionAbortRef.current?.abort();
+    conversionAbortRef.current = controller;
+    setError(null); setBusyLabel(`Exporting ${options.format.toUpperCase()}`);
+    updateSession(activeSession.id, (session) => ({ ...session, conversion: { options, status: 'running', completed: 0, total } }));
+    try {
+      const output = await convertPdf(activeSession, options, controller.signal, (progress) => updateSession(activeSession.id, (session) => ({ ...session, conversion: { ...session.conversion, ...progress } })));
+      if (controller.signal.aborted) throw new DOMException('Conversion cancelled.', 'AbortError');
+      if (output.kind === 'new-document') throw new Error('The export converter returned an unexpected document result.');
+      const artifact = output.kind === 'single-file' ? output.artifact : await archiveConversionArtifacts(activeSession.name, output.artifacts);
+      await saveConversionArtifact(artifact);
+      updateSession(activeSession.id, (session) => ({ ...session, conversion: { ...session.conversion, status: 'completed', completed: total, total } }));
+    } catch (reason) {
+      const cancelled = reason instanceof DOMException && reason.name === 'AbortError';
+      updateSession(activeSession.id, (session) => ({ ...session, conversion: { ...session.conversion, status: cancelled ? 'cancelled' : 'failed' } }));
+      if (!cancelled) setError(reason instanceof Error ? reason.message : 'The conversion could not be completed.');
+    } finally {
+      if (conversionAbortRef.current === controller) conversionAbortRef.current = null;
+      setBusyLabel(null);
+    }
+  }, [activeSession, saveConversionArtifact, updateSession]);
+
+  const runOcr = useCallback(async () => {
+    if (!activeSession) return;
+    const sessionId = activeSession.id;
+    const options = activeSession.ocr.options;
+    const total = options.pageScope === 'all' ? activeSession.pages.length : options.pageScope === 'current' ? 1 : activeSession.selectedPages.length;
+    const controller = new AbortController();
+    ocrAbortRef.current?.abort();
+    ocrAbortRef.current = controller;
+    setError(null);
+    setBusyLabel('Loading local OCR');
+    updateSession(sessionId, (session) => ({ ...session, ocr: { ...session.ocr, status: 'loading', stage: 'Loading local OCR engine', completed: 0, total, results: [] } }));
+    try {
+      const results = await recognizePdfPages(activeSession, options, controller.signal, (progress) => {
+        setBusyLabel(progress.stage);
+        updateSession(sessionId, (session) => ({ ...session, ocr: { ...session.ocr, status: 'recognizing', stage: progress.stage, completed: progress.completed, total: progress.total } }));
+      });
+      updateSession(sessionId, (session) => ({ ...session, ocr: { ...session.ocr, status: 'completed', stage: results.length ? 'Recognition complete' : 'No scanned pages required OCR', completed: total, total, results } }));
+    } catch (reason) {
+      const cancelled = reason instanceof DOMException && reason.name === 'AbortError';
+      updateSession(sessionId, (session) => ({ ...session, ocr: { ...session.ocr, status: cancelled ? 'cancelled' : 'failed', stage: cancelled ? 'OCR cancelled' : 'OCR failed' } }));
+      if (!cancelled) setError(reason instanceof Error ? reason.message : 'OCR could not be completed.');
+    } finally {
+      if (ocrAbortRef.current === controller) ocrAbortRef.current = null;
+      setBusyLabel(null);
+    }
+  }, [activeSession, updateSession]);
+
+  const createSearchableCopy = useCallback(async () => {
+    if (!activeSession) return;
+    if (activeSession.fidelity.signatures) {
+      setError('A searchable text layer would invalidate this document\'s signatures. Create an explicitly unsigned derivative only after removing or resolving the signature workflow.');
+      return;
+    }
+    const source = activeSession;
+    const controller = new AbortController();
+    ocrAbortRef.current?.abort();
+    ocrAbortRef.current = controller;
+    setBusyLabel('Building searchable copy');
+    updateSession(source.id, (session) => ({ ...session, ocr: { ...session.ocr, status: 'building', stage: 'Building searchable PDF', completed: 0, total: source.ocr.results.length } }));
+    try {
+      const bytes = await makeSearchablePdf(source.bytes, source.ocr.results, controller.signal, (progress) => updateSession(source.id, (session) => ({ ...session, ocr: { ...session.ocr, stage: progress.stage, completed: progress.completed, total: progress.total } })));
+      const name = `${source.name.replace(/\.pdf$/i, '')}-searchable.pdf`;
+      const searchableSessionId = await addDocument(name, bytes, { kind: 'picker' }, (session) => ({
+        ...session,
+        dirty: true,
+        workspaceMode: 'ocr',
+      }));
+      if (!searchableSessionId) throw new Error('The searchable PDF copy could not be opened.');
+      updateSession(source.id, (session) => ({ ...session, ocr: { ...session.ocr, status: 'completed', stage: 'Searchable copy created', completed: source.ocr.results.length, total: source.ocr.results.length } }));
+    } catch (reason) {
+      const cancelled = reason instanceof DOMException && reason.name === 'AbortError';
+      updateSession(source.id, (session) => ({ ...session, ocr: { ...session.ocr, status: cancelled ? 'cancelled' : 'failed', stage: cancelled ? 'Searchable copy cancelled' : 'Searchable copy failed' } }));
+      if (!cancelled) setError(reason instanceof Error ? reason.message : 'The searchable PDF could not be created.');
+    } finally {
+      if (ocrAbortRef.current === controller) ocrAbortRef.current = null;
+      setBusyLabel(null);
+    }
+  }, [activeSession, addDocument, updateSession]);
+
+  const exportOcrText = useCallback(async () => {
+    if (!activeSession?.ocr.results.length) return;
+    const text = activeSession.ocr.results.map((page) => `--- Page ${page.pageNumber} ---\n${page.text}`).join('\n\n');
+    await saveConversionArtifact({ name: `${activeSession.name.replace(/\.pdf$/i, '')}-ocr.txt`, mimeType: 'text/plain;charset=utf-8', bytes: new TextEncoder().encode(`${text}\n`) });
+  }, [activeSession, saveConversionArtifact]);
+
+  const createDocumentFromImages = useCallback(async () => {
+    setError(null);
+    const selected = await platform.files.pick({ multiple: true, filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'], mimeTypes: ['image/png', 'image/jpeg', 'image/webp'] }] });
+    if (selected.status !== 'success') {
+      if (selected.status !== 'cancelled') setError('reason' in selected ? selected.reason : selected.message);
+      return;
+    }
+    setImageImport({ files: selected.value.files, options: { ...DEFAULT_IMAGE_IMPORT_OPTIONS } });
+  }, []);
+
+  const commitImageImport = useCallback(async () => {
+    if (!imageImport) return;
+    setBusyLabel('Creating PDF from images');
+    try {
+      const output = await createPdfFromImages(imageImport.files, imageImport.options);
+      if (output.kind !== 'new-document') throw new Error('The image converter returned an unexpected result.');
+      setImageImport(null);
+      await addDocument(output.name, output.bytes, { kind: 'picker' });
+      setSessions((current) => current.map((session, index) => index === current.length - 1 ? { ...session, dirty: true, workspaceMode: 'convert' } : session));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'The image PDF could not be created.'); }
+    finally { setBusyLabel(null); }
+  }, [addDocument, imageImport]);
+
   const actions = useMemo<PdfCommandActions>(
     () => ({
       open: openFile,
@@ -772,10 +967,25 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
                   ? String(session.tool).startsWith('form-')
                     ? session.tool
                     : 'form-select'
-                  : session.tool === 'select' || session.tool === 'hand'
-                    ? session.tool
-                    : 'select',
-            textSelection: workspaceMode === 'comment' ? session.textSelection : null,
+                  : workspaceMode === 'edit'
+                    ? String(session.tool).startsWith('edit-')
+                      ? session.tool
+                      : 'edit-select'
+                    : workspaceMode === 'protect'
+                      ? String(session.tool).startsWith('protect-') || session.tool === 'redact-region'
+                        ? session.tool
+                        : 'protect-select'
+                    : workspaceMode === 'convert'
+                      ? 'select'
+                    : workspaceMode === 'ocr'
+                      ? 'select'
+                    : session.tool === 'select' || session.tool === 'hand'
+                      ? session.tool
+                      : 'select',
+            textSelection:
+              workspaceMode === 'comment' || workspaceMode === 'protect'
+                ? session.textSelection
+                : null,
           }));
           setLeftOpen(true);
           if (workspaceMode === 'organize') setInspectorOpen(false);
@@ -968,6 +1178,214 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         );
       },
       navigateFormField,
+      createContentObject: (draft: PdfContentObjectDraft) =>
+        applyTransform(
+          `Add ${draft.kind}`,
+          async (session) => {
+            const created = await createPdfContentObject(session.bytes, draft);
+            return {
+              bytes: created.bytes,
+              activePage: draft.pageNumber,
+              selectedPages: [draft.pageNumber],
+              selectNewContentObjectId: created.objectId,
+            };
+          },
+          'content',
+        ),
+      updateSelectedContentObject: (patch: PdfContentObjectPatch) => {
+        const objectId = activeSession?.contentEdit.selectedObjectId;
+        if (!objectId) return;
+        return applyTransform(
+          'Update page content',
+          async (session) => ({
+            bytes: await updatePdfContentObject(session.bytes, objectId, patch),
+            selectedContentObjectId: objectId,
+          }),
+          'content',
+        );
+      },
+      deleteSelectedContentObject: () => {
+        const objectId = activeSession?.contentEdit.selectedObjectId;
+        if (!objectId) return;
+        return applyTransform(
+          'Delete page content',
+          async (session) => ({
+            bytes: await deletePdfContentObject(session.bytes, objectId),
+            selectedContentObjectId: null,
+          }),
+          'content',
+        );
+      },
+      addImage: async () => {
+        if (!activeSession) return;
+        const selected = await platform.files.pick({
+          filters: [
+            {
+              name: 'Images',
+              extensions: ['png', 'jpg', 'jpeg'],
+              mimeTypes: ['image/png', 'image/jpeg'],
+            },
+          ],
+        });
+        if (selected.status !== 'success' || !selected.value.files[0]) {
+          if (selected.status === 'success') setError('No image was selected.');
+          else if (selected.status !== 'cancelled')
+            setError('reason' in selected ? selected.reason : selected.message);
+          return;
+        }
+        const file = selected.value.files[0];
+        const format =
+          file.mimeType === 'image/png' || file.name.toLowerCase().endsWith('.png')
+            ? 'png'
+            : 'jpeg';
+        const page = activeSession.pages[activeSession.activePage - 1];
+        const width = Math.min(220, page.width * 0.4);
+        const height = Math.min(160, page.height * 0.3);
+        await applyTransform(
+          'Add image',
+          async (session) => {
+            const created = await createPdfContentObject(session.bytes, {
+              pageNumber: session.activePage,
+              kind: 'image',
+              x: (page.width - width) / 2,
+              y: (page.height - height) / 2,
+              width,
+              height,
+              imageBytes: file.bytes,
+              imageFormat: format,
+            });
+            return {
+              bytes: created.bytes,
+              activePage: session.activePage,
+              selectedPages: [session.activePage],
+              selectNewContentObjectId: created.objectId,
+            };
+          },
+          'content',
+        );
+      },
+      replaceSelectedImage: async () => {
+        const objectId = activeSession?.contentEdit.selectedObjectId;
+        const object = activeSession?.contentEdit.objects.find(
+          (candidate) => candidate.id === objectId,
+        );
+        if (!activeSession || !objectId || object?.kind !== 'image') return;
+        const selected = await platform.files.pick({
+          filters: [
+            {
+              name: 'Images',
+              extensions: ['png', 'jpg', 'jpeg'],
+              mimeTypes: ['image/png', 'image/jpeg'],
+            },
+          ],
+        });
+        if (selected.status !== 'success' || !selected.value.files[0]) {
+          if (selected.status === 'success') setError('No image was selected.');
+          else if (selected.status !== 'cancelled')
+            setError('reason' in selected ? selected.reason : selected.message);
+          return;
+        }
+        const file = selected.value.files[0];
+        const imageFormat =
+          file.mimeType === 'image/png' || file.name.toLowerCase().endsWith('.png')
+            ? 'png'
+            : 'jpeg';
+        await applyTransform(
+          'Replace image',
+          async (session) => ({
+            bytes: await updatePdfContentObject(session.bytes, objectId, {
+              imageBytes: file.bytes,
+              imageFormat,
+            }),
+            selectedContentObjectId: objectId,
+          }),
+          'content',
+        );
+      },
+      createRedaction: (pageNumber, rect, quadPoints) =>
+        applyTransform(
+          'Mark region for redaction',
+          async (session) => ({
+            bytes: await createPdfRedactionMark(session.bytes, { pageNumber, rect, quadPoints }),
+            activePage: pageNumber,
+            selectedPages: [pageNumber],
+          }),
+          'annotation',
+        ),
+      deleteSelectedRedaction: () => {
+        const redaction = activeSession?.protection.redactions.find(
+          (mark) => mark.id === activeSession.protection.selectedRedactionId,
+        );
+        if (!redaction) return;
+        return applyTransform(
+          'Remove redaction mark',
+          async (session) => ({
+            bytes: await removePdfRedactionMark(session.bytes, redaction.nativeRef),
+            activePage: redaction.pageNumber,
+            selectedPages: [redaction.pageNumber],
+          }),
+          'annotation',
+        );
+      },
+      applyRedactions: () => {
+        if (!activeSession?.protection.redactions.length) return;
+        const affected = [...new Set(activeSession.protection.redactions.map((mark) => mark.pageNumber))];
+        if (!window.confirm(
+          `Apply ${activeSession.protection.redactions.length} redaction mark(s)? ${affected.length} affected page(s) will be converted to pixels. Text selection, forms, links, annotations and accessibility on those pages will be permanently removed.`,
+        )) return;
+        return applyTransform(
+          'Apply secure raster redactions',
+          async (session) => ({
+            bytes: await applyRasterRedactions(session.bytes, session.renderDocument, session.protection.redactions),
+            activePage: session.activePage,
+            selectedPages: session.selectedPages,
+          }),
+          'content',
+        );
+      },
+      sanitize: (options: PdfSanitizeOptions) => {
+        if (!activeSession) return;
+        if (!window.confirm('Remove the selected document data? This changes the current document and requires Save As to preserve the source file.')) return;
+        return applyTransform(
+          'Sanitize selected document data',
+          async (session) => ({
+            bytes: await sanitizePdfDocument(session.bytes, options),
+            activePage: session.activePage,
+            selectedPages: session.selectedPages,
+          }),
+          'content',
+        );
+      },
+      encrypt: async (request: PdfEncryptionRequest) => {
+        if (!activeSession) return;
+        setError(null);
+        setBusyLabel('Creating encrypted copy');
+        try {
+          const encrypted = await encryptPdfDocument(activeSession.bytes, request);
+          const base = activeSession.name.replace(/\.pdf$/i, '');
+          const result = await platform.files.save({
+            suggestedName: `${base}-protected.pdf`,
+            contents: encrypted,
+            mimeType: 'application/pdf',
+            filters: [{ name: 'PDF document', extensions: ['pdf'], mimeTypes: ['application/pdf'] }],
+          });
+          if (result.status !== 'success' && result.status !== 'cancelled')
+            setError('reason' in result ? result.reason : result.message);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : 'The encrypted copy could not be created.');
+        } finally {
+          setBusyLabel(null);
+        }
+      },
+      convert: runConversion,
+      imagesToPdf: createDocumentFromImages,
+      runOcr,
+      makeSearchable: createSearchableCopy,
+      exportOcrText,
+      cancelOcr: () => ocrAbortRef.current?.abort(),
+      clearOcrResults: () => {
+        if (activeSession) updateSession(activeSession.id, (session) => ({ ...session, ocr: { ...session.ocr, status: 'idle', stage: '', completed: 0, total: 0, results: [] } }));
+      },
       showCommandPalette: () => {
         setPaletteQuery('');
         setPaletteOpen(true);
@@ -983,10 +1401,15 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
       applyTransform,
       closeSession,
       createAnnotationFromWorkspace,
+      createDocumentFromImages,
+      createSearchableCopy,
+      exportOcrText,
       navigateAnnotation,
       navigateFormField,
       openFile,
       restoreHistory,
+      runConversion,
+      runOcr,
       saveSessionAs,
       setZoomMode,
       updateSession,
@@ -1050,6 +1473,8 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         id = 'view.commentWorkspace';
       else if (modifier && event.shiftKey && event.key.toLowerCase() === 'f')
         id = 'view.formsWorkspace';
+      else if (modifier && event.shiftKey && event.key.toLowerCase() === 'e')
+        id = 'view.editWorkspace';
       else if (modifier && event.shiftKey && event.key.toLowerCase() === 'p')
         id = 'tools.commandPalette';
       else if (
@@ -1062,6 +1487,8 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         id = 'comment.delete';
       else if (activeSession?.workspaceMode === 'forms' && !editingText && event.key === 'Delete')
         id = 'forms.delete';
+      else if (activeSession?.workspaceMode === 'edit' && !editingText && event.key === 'Delete')
+        id = 'content.delete';
       else if (event.key === 'Escape') {
         setOpenMenu(null);
         setPaletteOpen(false);
@@ -1072,6 +1499,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
           window.getSelection()?.removeAllRanges();
         }
         if (activeSession?.workspaceMode === 'forms') actions.setTool('form-select');
+        if (activeSession?.workspaceMode === 'edit') actions.setTool('edit-select');
         return;
       }
       if (id) {
@@ -1122,6 +1550,10 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
   const organizeMode = activeSession?.workspaceMode === 'organize';
   const commentMode = activeSession?.workspaceMode === 'comment';
   const formsMode = activeSession?.workspaceMode === 'forms';
+  const editMode = activeSession?.workspaceMode === 'edit';
+  const protectMode = activeSession?.workspaceMode === 'protect';
+  const convertMode = activeSession?.workspaceMode === 'convert';
+  const ocrMode = activeSession?.workspaceMode === 'ocr';
   const pageRewriteDisabled =
     !activeSession ||
     !activeSession.selectedPages.length ||
@@ -1130,7 +1562,11 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
   const workspaceStyle = {
     '--pdf-left-panel': leftOpen ? (organizeMode ? '360px' : '188px') : '0px',
     '--pdf-right-panel':
-      inspectorOpen && !organizeMode ? (commentMode || formsMode ? '292px' : '224px') : '0px',
+      inspectorOpen && !organizeMode
+        ? commentMode || formsMode || editMode || convertMode || ocrMode
+          ? '292px'
+          : '224px'
+        : '0px',
   } as CSSProperties;
 
   const beginPan = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1413,8 +1849,16 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
               }))
             }
           />
+        ) : protectMode && activeSession ? (
+          <PdfProtectToolbar session={activeSession} busy={Boolean(busyLabel)} execute={execute} />
+        ) : convertMode && activeSession ? (
+          <PdfConvertToolbar session={activeSession} busy={Boolean(busyLabel)} execute={execute} />
+        ) : ocrMode && activeSession ? (
+          <PdfOcrToolbar busy={Boolean(busyLabel)} execute={execute} />
         ) : formsMode && activeSession ? (
           <PdfFormsToolbar session={activeSession} busy={Boolean(busyLabel)} execute={execute} />
+        ) : editMode && activeSession ? (
+          <PdfEditToolbar session={activeSession} busy={Boolean(busyLabel)} execute={execute} />
         ) : (
           <>
             <button
@@ -1476,7 +1920,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
           Fit page
         </button>
         <span className={styles.toolSeparator} />
-        {!commentMode && !formsMode ? (
+        {!commentMode && !formsMode && !editMode && !protectMode && !convertMode ? (
           <>
             <button
               type="button"
@@ -1514,6 +1958,16 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         ) : null}
         <button
           type="button"
+          className={`${styles.toolButton} ${editMode ? styles.toolButtonActive : ''}`}
+          disabled={!activeSession}
+          onClick={() => execute(editMode ? 'view.readWorkspace' : 'view.editWorkspace')}
+          title={editMode ? 'Return to Read workspace' : 'Edit page content'}
+        >
+          <PencilRuler size={14} />
+          <span className={styles.toolLabel}>{editMode ? 'Read' : 'Edit'}</span>
+        </button>
+        <button
+          type="button"
           className={`${styles.toolButton} ${organizeMode ? styles.toolButtonActive : ''}`}
           disabled={!activeSession}
           onClick={() => execute(organizeMode ? 'view.readWorkspace' : 'view.organizeWorkspace')}
@@ -1541,6 +1995,36 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         >
           <MessageSquareText size={14} />
           <span className={styles.toolLabel}>{commentMode ? 'Read' : 'Comment'}</span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.toolButton} ${protectMode ? styles.toolButtonActive : ''}`}
+          disabled={!activeSession}
+          onClick={() => execute(protectMode ? 'view.readWorkspace' : 'view.protectWorkspace')}
+          title={protectMode ? 'Return to Read workspace' : 'Protect and redact'}
+        >
+          <ShieldCheck size={14} />
+          <span className={styles.toolLabel}>{protectMode ? 'Read' : 'Protect'}</span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.toolButton} ${convertMode ? styles.toolButtonActive : ''}`}
+          disabled={!activeSession}
+          onClick={() => execute(convertMode ? 'view.readWorkspace' : 'view.convertWorkspace')}
+          title={convertMode ? 'Return to Read workspace' : 'Convert and export'}
+        >
+          <RefreshCw size={14} />
+          <span className={styles.toolLabel}>{convertMode ? 'Read' : 'Convert'}</span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.toolButton} ${ocrMode ? styles.toolButtonActive : ''}`}
+          disabled={!activeSession}
+          onClick={() => execute(ocrMode ? 'view.readWorkspace' : 'view.ocrWorkspace')}
+          title={ocrMode ? 'Return to Read workspace' : 'Recognize scanned pages'}
+        >
+          <ScanText size={14} />
+          <span className={styles.toolLabel}>{ocrMode ? 'Read' : 'OCR'}</span>
         </button>
         {organizeMode ? (
           <>
@@ -1684,6 +2168,8 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
                   commentMode={commentMode}
                   formsMode={formsMode}
                   formsVisible={activeSession.workspaceMode === 'read' || formsMode}
+                  editMode={editMode}
+                  protectMode={protectMode}
                   form={activeSession.form}
                   tool={activeSession.tool}
                   annotations={activeSession.annotations}
@@ -1702,6 +2188,36 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
                   onCreateFormField={(draft) => execute('forms.create', { formFieldDraft: draft })}
                   onUpdateFormField={(fieldId, patch) =>
                     execute('forms.update', { formFieldId: fieldId, formFieldPatch: patch })
+                  }
+                  editableContent={activeSession.contentEdit.objects}
+                  selectedContentObjectId={activeSession.contentEdit.selectedObjectId}
+                  onSelectContentObject={(id) =>
+                    updateSession(activeSession.id, (session) => ({
+                      ...session,
+                      contentEdit: { ...session.contentEdit, selectedObjectId: id },
+                    }))
+                  }
+                  onCreateContentObject={(draft) =>
+                    execute('content.create', { contentDraft: draft })
+                  }
+                  onUpdateContentObject={(patch) =>
+                    execute('content.update', { contentPatch: patch })
+                  }
+                  redactions={activeSession.protection.redactions}
+                  selectedRedactionId={activeSession.protection.selectedRedactionId}
+                  onSelectRedaction={(id) =>
+                    updateSession(activeSession.id, (session) => {
+                      const mark = session.protection.redactions.find((entry) => entry.id === id);
+                      return {
+                        ...session,
+                        activePage: mark?.pageNumber ?? session.activePage,
+                        selectedPages: mark ? [mark.pageNumber] : session.selectedPages,
+                        protection: { ...session.protection, selectedRedactionId: mark?.id ?? null },
+                      };
+                    })
+                  }
+                  onCreateRedaction={(pageNumber, rect) =>
+                    execute('redact.create', { redactionPageNumber: pageNumber, redactionRect: rect })
                   }
                 />
               ))}
@@ -1737,13 +2253,35 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
           aria-label={
             commentMode
               ? 'Comments inspector'
+              : ocrMode
+                ? 'OCR inspector'
+              : convertMode
+                ? 'Conversion inspector'
+              : protectMode
+                ? 'Protection inspector'
               : formsMode
                 ? 'Form field inspector'
-                : 'Document inspector'
+                : editMode
+                  ? 'Content inspector'
+                  : 'Document inspector'
           }
         >
           <div className={styles.panelHeader}>
-            <span>{commentMode ? 'Comments' : formsMode ? 'Field Inspector' : 'Inspector'}</span>
+            <span>
+              {commentMode
+                ? 'Comments'
+                : ocrMode
+                  ? 'OCR'
+                : convertMode
+                  ? 'Convert'
+                : protectMode
+                  ? 'Protect'
+                : formsMode
+                  ? 'Field Inspector'
+                  : editMode
+                    ? 'Content Inspector'
+                    : 'Inspector'}
+            </span>
             <ChevronsUpDown size={11} />
           </div>
           {activeSession && page ? (
@@ -1756,6 +2294,46 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
                 onDelete={() => execute('comment.delete')}
                 onNavigate={(direction) => actions.navigateAnnotation(direction)}
               />
+            ) : ocrMode ? (
+              <PdfOcrInspector
+                session={activeSession}
+                busy={Boolean(busyLabel)}
+                onOptionsChange={(options: PdfOcrOptions) => updateSession(activeSession.id, (session) => ({ ...session, ocr: { ...session.ocr, options } }))}
+                onRecognize={() => execute('ocr.recognizePages')}
+                onMakeSearchable={() => execute('ocr.makeSearchable')}
+                onExportText={() => execute('ocr.exportText')}
+                onCancel={() => execute('ocr.cancel')}
+                onClear={() => execute('ocr.clearResults')}
+                onNavigate={(pageNumber) => updateSession(activeSession.id, (session) => ({ ...session, activePage: pageNumber, selectedPages: [pageNumber] }))}
+              />
+            ) : protectMode ? (
+              <PdfProtectInspector
+                session={activeSession}
+                busy={Boolean(busyLabel)}
+                onSelect={(id) =>
+                  updateSession(activeSession.id, (session) => {
+                    const mark = session.protection.redactions.find((entry) => entry.id === id);
+                    return {
+                      ...session,
+                      activePage: mark?.pageNumber ?? session.activePage,
+                      selectedPages: mark ? [mark.pageNumber] : session.selectedPages,
+                      protection: { ...session.protection, selectedRedactionId: id },
+                    };
+                  })
+                }
+                onDelete={() => execute('redact.delete')}
+                onSanitize={(sanitizeOptions) => execute('sanitize.document', { sanitizeOptions })}
+                onEncrypt={(encryptionRequest) => execute('security.encrypt', { encryptionRequest })}
+              />
+            ) : convertMode ? (
+              <PdfConvertInspector
+                session={activeSession}
+                busy={Boolean(busyLabel)}
+                onOptionsChange={(options: PdfConversionOptions) => updateSession(activeSession.id, (session) => ({ ...session, conversion: { ...session.conversion, options } }))}
+                onExport={() => execute('convert.run')}
+                onCancel={() => conversionAbortRef.current?.abort()}
+                onImagesToPdf={() => execute('convert.imagesToPdf')}
+              />
             ) : formsMode ? (
               <PdfFormPropertiesInspector
                 session={activeSession}
@@ -1763,6 +2341,20 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
                 onApply={(patch) => execute('forms.update', { formFieldPatch: patch })}
                 onDelete={() => execute('forms.delete')}
                 onDuplicate={() => execute('forms.duplicate')}
+              />
+            ) : editMode ? (
+              <PdfEditInspector
+                session={activeSession}
+                busy={Boolean(busyLabel)}
+                onSelect={(id) =>
+                  updateSession(activeSession.id, (session) => ({
+                    ...session,
+                    contentEdit: { ...session.contentEdit, selectedObjectId: id },
+                  }))
+                }
+                onApply={(patch) => execute('content.update', { contentPatch: patch })}
+                onDelete={() => execute('content.delete')}
+                onReplaceImage={() => execute('content.replaceImage')}
               />
             ) : (
               <div className="h-[calc(100%-31px)] overflow-auto p-3 text-[10px]">
@@ -2083,6 +2675,25 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
         </div>
       ) : null}
 
+      {imageImport ? (
+        <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Create PDF from images">
+          <div className={`${styles.dialog} p-5`} data-pdf-image-import>
+            <h2 className="text-[14px] text-os-text">Create PDF from images</h2>
+            <p className="mt-2 text-[9px] leading-4 text-os-text-dim">Review order and page layout before creating a new document tab.</p>
+            <ol className="mt-3 max-h-44 overflow-auto border-y border-os-line py-1">
+              {imageImport.files.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center gap-2 px-2 py-1.5 text-[9px]"><span className="w-5 font-mono text-os-text-dim">{index + 1}</span><span className="min-w-0 flex-1 truncate text-os-text">{file.name}</span><button type="button" title="Move image up" disabled={index === 0} className={styles.toolButton} onClick={() => setImageImport((current) => { if (!current || index === 0) return current; const files = [...current.files]; [files[index - 1], files[index]] = [files[index], files[index - 1]]; return { ...current, files }; })}><ArrowUp size={11} /></button><button type="button" title="Move image down" disabled={index === imageImport.files.length - 1} className={styles.toolButton} onClick={() => setImageImport((current) => { if (!current || index >= current.files.length - 1) return current; const files = [...current.files]; [files[index + 1], files[index]] = [files[index], files[index + 1]]; return { ...current, files }; })}><ArrowDown size={11} /></button></li>)}
+            </ol>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <label className={styles.annotationInspectorField}>Page size<select value={imageImport.options.pageSize} onChange={(event) => setImageImport((current) => current ? { ...current, options: { ...current.options, pageSize: event.target.value as PdfImageImportOptions['pageSize'] } } : null)}><option value="original">Image size</option><option value="a4">A4</option><option value="letter">Letter</option></select></label>
+              <label className={styles.annotationInspectorField}>Orientation<select value={imageImport.options.orientation} onChange={(event) => setImageImport((current) => current ? { ...current, options: { ...current.options, orientation: event.target.value as PdfImageImportOptions['orientation'] } } : null)}><option value="auto">Automatic</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+              <label className={styles.annotationInspectorField}>Placement<select value={imageImport.options.placement} onChange={(event) => setImageImport((current) => current ? { ...current, options: { ...current.options, placement: event.target.value as PdfImageImportOptions['placement'] } } : null)}><option value="fit">Fit entire image</option><option value="fill">Fill page</option></select></label>
+              <label className={styles.annotationInspectorField}>Margins<select value={imageImport.options.margin} onChange={(event) => setImageImport((current) => current ? { ...current, options: { ...current.options, margin: Number(event.target.value) as PdfImageImportOptions['margin'] } } : null)}><option value={0}>None</option><option value={18}>Narrow</option><option value={36}>Standard</option></select></label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" className="border border-os-line-strong px-3 py-1.5 text-[9px]" onClick={() => setImageImport(null)}>Cancel</button><button type="button" className="border border-os-accent/50 bg-os-accent/10 px-3 py-1.5 text-[9px] text-os-text" onClick={() => void commitImageImport()}>Create {imageImport.files.length}-page PDF</button></div>
+          </div>
+        </div>
+      ) : null}
+
       {pendingClose ? (
         <div className={styles.overlay}>
           <div className={`${styles.dialog} p-5`}>
@@ -2210,6 +2821,7 @@ export default function PdfApp({ initialData }: { initialData?: PdfAppInitialDat
       {error ? (
         <button
           type="button"
+          data-testid="nammu-pdf-error"
           className="absolute bottom-8 left-1/2 z-[85] max-w-[min(560px,80%)] -translate-x-1/2 border border-red-400/30 bg-os-window px-3 py-2 text-left text-[9px] text-red-200 shadow-2xl"
           onClick={() => setError(null)}
         >

@@ -472,7 +472,7 @@ export default function Taskbar({
 
         {/* Open/running apps (unpinned) - Supports Mouse Wheel Window Switching */}
         <div
-          className="flex items-center gap-0.5 flex-1 overflow-hidden"
+          className="taskbar-running-apps flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
           onWheel={handleTaskbarWheel}
           title="Scroll with mouse wheel to switch open apps"
         >
@@ -496,7 +496,7 @@ export default function Taskbar({
                   event.preventDefault();
                   onCloseWindow(win.id);
                 }}
-                className={`taskbar-button taskbar-button-unpinned max-w-35 ${win.isFocused ? 'active' : ''}`}
+                className="taskbar-button taskbar-button-unpinned active max-w-35"
                 title={win.title}
                 onContextMenu={(event) =>
                   contextMenu.openAtEvent(
@@ -571,7 +571,7 @@ export default function Taskbar({
                   event.preventDefault();
                   onCloseWindow(win.id);
                 }}
-                className="taskbar-button taskbar-button-unpinned"
+                className="taskbar-button taskbar-button-unpinned active"
                 title={win.title}
                 onContextMenu={(event) =>
                   contextMenu.openAtEvent(

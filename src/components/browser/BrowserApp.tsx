@@ -9,6 +9,7 @@ import {
   Lock,
   Search,
   Star,
+  Bookmark as BookmarkIcon,
   Globe,
   Share2,
   Terminal,
@@ -21,7 +22,6 @@ import {
   AlertTriangle,
   ZoomIn,
   ZoomOut,
-  Sparkles,
   Copy,
   Scissors,
   Clipboard,
@@ -39,6 +39,9 @@ import {
   BookOpen,
   Printer,
   FileDown,
+  Download,
+  Upload,
+  Pencil,
   Network,
 } from 'lucide-react';
 import {
@@ -56,6 +59,7 @@ import {
   getStoredBrowserPreferences,
   saveStoredBrowserPreferences,
   reconcileBrowserHistoryPosition,
+  sanitizeBookmarks,
   type BrowserPreferences,
 } from './services/browserEngine';
 import BrowserMenu from './BrowserMenu';
@@ -70,8 +74,15 @@ import { getPlatformCapabilities, type WebSurfaceSnapshot } from '../../platform
 import { getBrowserRuntimeUrl } from './services/geckoRuntimeUrl';
 import { useWindowRuntime } from '../os/WindowRuntimeContext';
 import NativeWebSurface, { type NativeWebSurfaceHandle } from '../web-surfaces/NativeWebSurface';
+import NammuNewTab from './new-tab/NammuNewTab';
 
 const RUNTIME_HOME_URL = 'about:blank';
+const SEARCH_ENGINE_INFO: Record<SearchEngine, { label: string; home: string }> = {
+  google: { label: 'Google', home: 'https://www.google.com' },
+  duckduckgo: { label: 'DuckDuckGo', home: 'https://duckduckgo.com' },
+  bing: { label: 'Bing', home: 'https://www.bing.com' },
+  ecosia: { label: 'Ecosia', home: 'https://www.ecosia.org' },
+};
 const INTERNAL_PAGE_TITLES: Record<string, string> = {
   'about:addons': 'Extensions & Themes',
   'about:config': 'Advanced Configuration',
@@ -247,7 +258,7 @@ function createBrowserTabId() {
 
 function getBrowserTabTitle(url: string, isPrivate = false) {
   if (isPrivate) return 'Private Browsing';
-  if (url === 'about:home') return 'Nammu OS · Web Home';
+  if (url === 'about:home') return 'New Tab';
   return INTERNAL_PAGE_TITLES[url] || url;
 }
 
@@ -260,6 +271,14 @@ interface ContextMenuState {
   targetBookmarkId?: string;
 }
 
+interface BookmarkDraft {
+  id: string;
+  title: string;
+  url: string;
+  group: string;
+  error: string;
+}
+
 export default function BrowserApp() {
   const windowRuntime = useWindowRuntime();
   const platform = getPlatformCapabilities();
@@ -268,7 +287,7 @@ export default function BrowserApp() {
   const [tabs, setTabs] = useState<BrowserTab[]>([
     {
       id: 'tab-1',
-      title: 'Nammu OS · Web Home',
+      title: 'New Tab',
       url: 'about:home',
       favicon: '',
       isLoading: false,
@@ -298,6 +317,10 @@ export default function BrowserApp() {
 
   // Bookmarks & History State
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(getStoredBookmarks);
+  const [bookmarkQuery, setBookmarkQuery] = useState('');
+  const [bookmarkDraft, setBookmarkDraft] = useState<BookmarkDraft | null>(null);
+  const [bookmarkDeleteAllPending, setBookmarkDeleteAllPending] = useState(false);
+  const [bookmarkTransferStatus, setBookmarkTransferStatus] = useState('');
   const [history, setHistory] = useState<HistoryEntry[]>(getStoredHistory);
   const showBookmarksBar = preferences.showBookmarksBar;
   const [sidePanel, setSidePanel] = useState<
@@ -326,6 +349,10 @@ export default function BrowserApp() {
   const [findStatus, setFindStatus] = useState('');
   const [closedTabs, setClosedTabs] = useState<BrowserTab[]>([]);
   const findInputRef = useRef<HTMLInputElement>(null);
+  const filteredBookmarks = bookmarks.filter((bookmark) => {
+    const query = bookmarkQuery.trim().toLocaleLowerCase();
+    return !query || `${bookmark.title} ${bookmark.url}`.toLocaleLowerCase().includes(query);
+  });
 
   // Optimized In-Browser Context Menu State
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -1404,7 +1431,7 @@ export default function BrowserApp() {
       const replacementTabs: BrowserTab[] = [
         {
           id: replacementTabId,
-          title: 'Nammu OS · Web Home',
+          title: 'New Tab',
           url: 'about:home',
           favicon: '',
           isLoading: false,
@@ -1554,6 +1581,102 @@ export default function BrowserApp() {
       const updated = [...bookmarks, newBm];
       setBookmarks(updated);
       saveStoredBookmarks(updated);
+    }
+  };
+
+  const openBookmarkEditor = (bookmark: Bookmark) => {
+    setBookmarkDraft({
+      id: bookmark.id,
+      title: bookmark.title,
+      url: bookmark.url,
+      group: bookmark.group || '',
+      error: '',
+    });
+  };
+
+  const saveBookmarkDraft = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!bookmarkDraft) return;
+    let normalizedUrl = '';
+    try {
+      const parsed = new URL(bookmarkDraft.url.trim());
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Unsupported URL');
+      normalizedUrl = parsed.href;
+    } catch {
+      setBookmarkDraft((current) =>
+        current ? { ...current, error: 'Enter a valid HTTP or HTTPS address.' } : current,
+      );
+      return;
+    }
+
+    const updated = bookmarks.map((bookmark) =>
+      bookmark.id === bookmarkDraft.id
+        ? {
+            ...bookmark,
+            title: bookmarkDraft.title.trim().slice(0, 240) || new URL(normalizedUrl).hostname,
+            url: normalizedUrl,
+            group: bookmarkDraft.group.trim().slice(0, 120) || undefined,
+            favicon: getDomainFavicon(normalizedUrl),
+          }
+        : bookmark,
+    );
+    setBookmarks(updated);
+    saveStoredBookmarks(updated);
+    setBookmarkDraft(null);
+  };
+
+  const exportBookmarks = async () => {
+    setBookmarkTransferStatus('Exporting…');
+    const result = await platform.files.save({
+      suggestedName: 'nammu-browser-bookmarks.json',
+      contents: JSON.stringify(
+        { version: 1, exportedAt: new Date().toISOString(), bookmarks },
+        null,
+        2,
+      ),
+      mimeType: 'application/json',
+      filters: [{ name: 'JSON', extensions: ['json'], mimeTypes: ['application/json'] }],
+    });
+    setBookmarkTransferStatus(
+      result.status === 'success'
+        ? `Exported ${bookmarks.length} bookmarks`
+        : result.status === 'cancelled'
+          ? ''
+          : 'Bookmarks could not be exported',
+    );
+  };
+
+  const importBookmarks = async () => {
+    setBookmarkTransferStatus('Importing…');
+    const result = await platform.files.pick({
+      multiple: false,
+      filters: [{ name: 'JSON', extensions: ['json'], mimeTypes: ['application/json'] }],
+    });
+    if (result.status !== 'success') {
+      setBookmarkTransferStatus(
+        result.status === 'cancelled' ? '' : 'Bookmarks could not be imported',
+      );
+      return;
+    }
+    const file = result.value.files[0];
+    if (!file || file.size > 2 * 1024 * 1024) {
+      setBookmarkTransferStatus('Choose a bookmark JSON file smaller than 2 MB');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(new TextDecoder().decode(file.bytes));
+      const imported = sanitizeBookmarks(Array.isArray(parsed) ? parsed : parsed?.bookmarks);
+      if (!imported.length) throw new Error('No valid bookmarks');
+      const existingUrls = new Set(bookmarks.map((bookmark) => bookmark.url));
+      const additions = imported.filter((bookmark) => !existingUrls.has(bookmark.url));
+      const updated = [...bookmarks, ...additions];
+      setBookmarks(updated);
+      saveStoredBookmarks(updated);
+      setBookmarkTransferStatus(
+        additions.length ? `Imported ${additions.length} bookmarks` : 'No new bookmarks found',
+      );
+    } catch {
+      setBookmarkTransferStatus('This file does not contain valid Nammu bookmarks');
     }
   };
 
@@ -1719,7 +1842,15 @@ export default function BrowserApp() {
   const effectiveProxyConnection = tabProxyConnections[activeTabId] || browserProxyConnection;
   const nativeInternalPage =
     nativeSurfaceEnabled && activeTab?.url.startsWith('about:') && activeTab.url !== 'about:home';
-  const browserOverlayActive = menuOpen || findOpen || showSuggestions || contextMenu.isOpen;
+  const browserOverlayActive =
+    menuOpen ||
+    findOpen ||
+    showSuggestions ||
+    contextMenu.isOpen ||
+    Boolean(bookmarkDraft) ||
+    bookmarkDeleteAllPending;
+  const browserContentTop = 60 + (showBookmarksBar && bookmarks.length > 0 ? 24 : 0);
+  const browserContentRight = sidePanel === 'none' ? 0 : 320;
 
   return (
     <div
@@ -1730,11 +1861,11 @@ export default function BrowserApp() {
       {/* 1. Multi-Tab Header Bar */}
       <div
         onContextMenu={(e) => handleOpenContextMenu(e, 'page')}
-        className="flex h-8 shrink-0 items-center bg-[#070c14] px-1.5 pt-1 border-b border-white/6 gap-1 overflow-x-auto os-scrollbar overflow-hidden"
+        className="browser-tab-strip flex shrink-0 basis-6 items-stretch gap-0 overflow-x-auto overflow-y-hidden border-b border-white/6 bg-[#070c14] p-0 os-scrollbar"
+        style={{ height: 24, minHeight: 24, maxHeight: 24 }}
       >
-        {tabs.map((tab, tabIndex) => {
+        {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const isLastPinned = tab.isPinned && !tabs[tabIndex + 1]?.isPinned;
           return (
             <div
               key={tab.id}
@@ -1742,9 +1873,9 @@ export default function BrowserApp() {
               onContextMenu={(e) => handleOpenContextMenu(e, 'tab', tab.id)}
               title={tab.isPinned ? `${tab.title || 'New Tab'} — Pinned tab` : undefined}
               aria-label={tab.isPinned ? `${tab.title || 'New Tab'}, pinned tab` : undefined}
-              className={`group relative flex h-7 items-center border-t border-x text-[10.5px] cursor-pointer transition-[width,background-color,border-color,color] ${
+              className={`browser-tab group relative flex h-full min-h-0 items-center border-x text-[10.5px] cursor-pointer transition-[width,background-color,border-color,color] ${
                 tab.isPinned
-                  ? `w-8 min-w-8 max-w-8 flex-none justify-center px-0 ${isLastPinned ? 'mr-1' : ''}`
+                  ? 'w-7 min-w-7 max-w-7 flex-none justify-center px-0'
                   : 'max-w-50 min-w-30 flex-1 justify-between px-2'
               } ${
                 isActive
@@ -1812,10 +1943,11 @@ export default function BrowserApp() {
         {/* New Tab Button */}
         <button
           onClick={() => handleNewTab()}
-          className="grid h-6 w-6 shrink-0 place-items-center border border-white/6 text-[#71889d] hover:bg-white/4 hover:text-[#bcd0df] transition-colors"
+          className="ml-1 grid h-6 w-6 shrink-0 self-center place-items-center border border-white/6 text-[#8fa5b8] transition-colors hover:bg-white/4 hover:text-[#d6e5f0]"
           title="New Tab (Ctrl+T)"
+          aria-label="New tab"
         >
-          <Plus size={12} />
+          <Plus size={11} />
         </button>
       </div>
 
@@ -1859,12 +1991,17 @@ export default function BrowserApp() {
         {/* Smart Omnibox (Address Bar) */}
         <div
           onContextMenu={(e) => handleOpenContextMenu(e, 'omnibox')}
-          className="relative flex min-w-0 flex-1 items-center border border-white/8 bg-black/50 px-2 py-1 focus-within:border-electric/50 transition-colors"
+          className="browser-omnibox-shell relative flex min-w-0 flex-1 items-center border border-white/8 bg-black/50 px-2 focus-within:border-electric/50 transition-colors"
         >
           {/* SSL / Protocol Badge */}
           <div className="mr-2 flex items-center gap-1 shrink-0 font-mono text-[8px]">
             {activeTab?.url === 'about:home' || activeTab?.url.startsWith('about:') ? (
-              <Sparkles size={10} className="text-electric" />
+              <img
+                src={getDomainFavicon(SEARCH_ENGINE_INFO[searchEngine].home)}
+                alt=""
+                className="h-3 w-3 object-contain"
+                title={`${SEARCH_ENGINE_INFO[searchEngine].label} search`}
+              />
             ) : isSecure ? (
               <Lock size={10} className="text-emerald" />
             ) : (
@@ -1887,8 +2024,8 @@ export default function BrowserApp() {
                 handleNavigate(omniboxInput);
               }
             }}
-            placeholder="Search Google, YouTube, ChatGPT, or enter any web address (Ctrl+L)"
-            className="min-w-0 flex-1 bg-transparent text-[11px] text-[#e0ecf7] outline-none placeholder:text-[#3d5568]"
+            placeholder={`Search ${SEARCH_ENGINE_INFO[searchEngine].label} or enter a web address (Ctrl+L)`}
+            className="browser-omnibox-input min-w-0 flex-1 bg-transparent text-[11px] text-[#e0ecf7] outline-none placeholder:text-[#3d5568]"
           />
 
           {/* Bookmark Action in Omnibox */}
@@ -1927,7 +2064,7 @@ export default function BrowserApp() {
               ? 'bg-electric/15 text-[#a0d2ff] border-electric/50'
               : 'text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
-          title="Toggle DevTools & Inspector"
+          title="Developer Tools"
         >
           <Terminal size={11} />
         </button>
@@ -1944,9 +2081,9 @@ export default function BrowserApp() {
           title={
             effectiveProxyConnection
               ? `Public proxy active for ${tabProxyConnections[activeTabId] ? 'this tab' : 'the whole browser'}`
-              : 'Public Proxy Manager'
+              : 'Proxy Manager'
           }
-          aria-label="Open Public Proxy Manager"
+          aria-label="Open Proxy Manager"
         >
           <Network size={11} />
           {effectiveProxyConnection && (
@@ -1961,7 +2098,7 @@ export default function BrowserApp() {
               ? 'bg-electric/15 text-[#a0d2ff] border-electric/50'
               : 'text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
-          title="Browsing History"
+          title="History"
         >
           <HistoryIcon size={11} />
         </button>
@@ -2073,7 +2210,7 @@ export default function BrowserApp() {
 
       {/* 3. Bookmarks Quick Access Bar */}
       {showBookmarksBar && bookmarks.length > 0 && (
-        <div className="flex h-6 shrink-0 items-center gap-1 border-b border-white/4 bg-[#060a12] px-2 overflow-x-auto os-scrollbar">
+        <div className="browser-bookmarks-bar flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/4 bg-[#060a12] px-2 os-scrollbar">
           {bookmarks.map((bm) => (
             <button
               key={bm.id}
@@ -2104,69 +2241,14 @@ export default function BrowserApp() {
         {/* Web Viewport */}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[#05080d]">
           {activeTab?.url === 'about:home' && (
-            /* Home / Speed Dial Launchpad */
-            <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center p-6 overflow-y-auto os-scrollbar bg-[#05080d]">
-              <div className="w-full max-w-2xl space-y-6 text-center">
-                {/* Logo & Branding */}
-                <div className="space-y-1">
-                  <div className="mx-auto grid h-12 w-12 place-items-center border border-electric/40 bg-electric/10 text-electric">
-                    <Globe size={24} />
-                  </div>
-                  <h1 className="text-xl font-bold text-white tracking-tight">Nammu Browser</h1>
-                  <p className="font-mono text-[9.5px] text-[#69849b]">
-                    {nativeSurfaceEnabled
-                      ? 'Native Windows Web Engine'
-                      : 'Full Gecko WebAssembly Engine'}
-                  </p>
-                </div>
-
-                {/* Central Search Bar */}
-                <div className="relative mx-auto max-w-lg">
-                  <div className="flex items-center border border-white/10 bg-black/60 px-3 py-2.5 shadow-2xl focus-within:border-electric">
-                    <Search size={14} className="mr-2.5 text-electric shrink-0" />
-                    <input
-                      type="text"
-                      placeholder="Search Google, YouTube, ChatGPT, or enter any web URL..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleNavigate((e.target as HTMLInputElement).value);
-                        }
-                      }}
-                      className="min-w-0 flex-1 bg-transparent text-[12px] text-[#e0ecf7] outline-none placeholder:text-[#415a6e]"
-                      autoFocus
-                    />
-                  </div>
-                </div>
-
-                {/* Quick Dial Grid */}
-                <div className="space-y-2 pt-2">
-                  <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-[#476077]">
-                    Speed Dial Shortcuts
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-left">
-                    {DEFAULT_QUICK_DIALS.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNavigate(item.url)}
-                        className="group flex flex-col p-3 border border-white/6 bg-white/1.5 hover:border-electric/50 hover:bg-white/4 transition-all"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-lg">{item.icon}</span>
-                          <ExternalLink
-                            size={10}
-                            className="text-[#415a6e] group-hover:text-electric transition-colors"
-                          />
-                        </div>
-                        <div className="mt-2 font-medium text-[11.5px] text-[#e0ecf7] group-hover:text-white">
-                          {item.title}
-                        </div>
-                        <div className="text-[9.5px] text-[#69849b] truncate">{item.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <NammuNewTab
+              bookmarks={bookmarks}
+              history={history}
+              quickDials={DEFAULT_QUICK_DIALS}
+              searchEngine={searchEngine}
+              onNavigate={handleNavigate}
+              onOpenInNewTab={(url) => handleNewTab(url)}
+            />
           )}
 
           <div
@@ -2286,7 +2368,7 @@ export default function BrowserApp() {
               <div className="space-y-3 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-white/6 pb-2">
                   <span className="font-mono text-[8.5px] uppercase tracking-wider text-electric">
-                    Page DevTools & Inspector
+                    Developer Tools
                   </span>
                   <button
                     onClick={() => setSidePanel('none')}
@@ -2388,12 +2470,12 @@ export default function BrowserApp() {
               </div>
             )}
 
-            {/* Browsing History Panel */}
+            {/* History Panel */}
             {sidePanel === 'history' && (
               <div className="space-y-3 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-white/6 pb-2">
                   <span className="font-mono text-[8.5px] uppercase tracking-wider text-electric">
-                    Browsing History
+                    History
                   </span>
                   <button
                     onClick={() => {
@@ -2439,47 +2521,130 @@ export default function BrowserApp() {
 
             {/* Bookmarks Library */}
             {sidePanel === 'bookmarks' && (
-              <div className="flex min-h-0 flex-1 flex-col space-y-3">
-                <div className="flex items-center justify-between border-b border-white/6 pb-2">
-                  <span className="font-mono text-[8.5px] uppercase tracking-wider text-electric">
-                    Bookmarks Library
-                  </span>
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                <div className="flex items-center justify-between border-b border-white/8 pb-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/6 text-[#dce8f2] shadow-[inset_0_1px_rgba(255,255,255,0.07)]">
+                      <BookmarkIcon size={13} />
+                    </span>
+                    <span className="min-w-0">
+                      <strong className="block text-[11px] font-semibold text-[#edf4fa]">
+                        Bookmarks
+                      </strong>
+                      <small className="block text-[8px] text-[#71889b]">
+                        {bookmarks.length} saved {bookmarks.length === 1 ? 'page' : 'pages'}
+                      </small>
+                    </span>
+                  </div>
                   <button
                     onClick={() => setSidePanel('none')}
-                    className="text-[#69849b] hover:text-white"
+                    className="grid h-7 w-7 place-items-center rounded-lg text-[#71889b] hover:bg-white/7 hover:text-white"
                     aria-label="Close bookmarks"
                   >
                     <X size={12} />
                   </button>
                 </div>
-                <div className="flex-1 space-y-1 overflow-auto os-scrollbar">
-                  {bookmarks.map((bookmark) => (
+
+                <label className="flex h-8 shrink-0 items-center gap-2 rounded-xl border border-white/9 bg-white/5 px-2.5 shadow-[inset_0_1px_rgba(255,255,255,0.045)] focus-within:border-white/16">
+                  <Search size={11} className="shrink-0 text-[#71889b]" />
+                  <input
+                    value={bookmarkQuery}
+                    onChange={(event) => setBookmarkQuery(event.target.value)}
+                    className="browser-panel-search-input min-w-0 flex-1 text-[9.5px] text-[#e5eef6] outline-none placeholder:text-[#657b8e]"
+                    placeholder="Search bookmarks"
+                    aria-label="Search bookmarks"
+                  />
+                  {bookmarkQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setBookmarkQuery('')}
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-[#71889b] hover:bg-white/7 hover:text-white"
+                      aria-label="Clear bookmark search"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </label>
+
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void importBookmarks()}
+                    className="flex h-7 items-center gap-1.5 rounded-lg border border-white/8 bg-white/4 px-2 text-[8.5px] text-[#9eb1c0] hover:bg-white/8 hover:text-white"
+                  >
+                    <Upload size={10} /> Import
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void exportBookmarks()}
+                    className="flex h-7 items-center gap-1.5 rounded-lg border border-white/8 bg-white/4 px-2 text-[8.5px] text-[#9eb1c0] hover:bg-white/8 hover:text-white"
+                  >
+                    <Download size={10} /> Export
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBookmarkDeleteAllPending(true)}
+                    disabled={!bookmarks.length}
+                    className="flex h-7 items-center gap-1.5 rounded-lg border border-[#ff7777]/12 bg-[#ff6464]/5 px-2 text-[8.5px] text-[#d99898] hover:bg-[#ff6464]/10 hover:text-[#ffb0b0] disabled:pointer-events-none disabled:opacity-35"
+                  >
+                    <Trash2 size={10} /> Delete all
+                  </button>
+                  {bookmarkTransferStatus && (
+                    <span className="min-w-0 flex-1 truncate text-right text-[8px] text-[#71889b]">
+                      {bookmarkTransferStatus}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-auto os-scrollbar">
+                  {filteredBookmarks.map((bookmark) => (
                     <div
                       key={bookmark.id}
-                      className="group flex items-center gap-2 border-b border-white/4 px-1 py-2 hover:bg-white/2.5"
+                      onContextMenu={(event) =>
+                        handleOpenContextMenu(event, 'bookmark', undefined, bookmark.id)
+                      }
+                      className="group flex items-center gap-2 border-b border-white/4 px-1 py-2.5 transition-colors hover:bg-white/4"
                     >
                       <button
                         type="button"
                         onClick={() => handleNavigate(bookmark.url)}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                       >
-                        {bookmark.favicon ? (
-                          <img
-                            src={bookmark.favicon}
-                            alt=""
-                            className="h-3.5 w-3.5 shrink-0 object-contain"
-                          />
-                        ) : (
-                          <Globe size={11} className="shrink-0 text-electric" />
-                        )}
+                        <img
+                          src={bookmark.favicon || getDomainFavicon(bookmark.url)}
+                          alt=""
+                          className="h-4 w-4 shrink-0 object-contain"
+                        />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[10.5px] text-[#e0ecf7]">
+                          <span className="block truncate text-[10px] font-medium text-[#e4edf5]">
                             {bookmark.title}
                           </span>
-                          <span className="block truncate font-mono text-[8px] text-[#557087]">
-                            {bookmark.url}
+                          <span className="mt-0.5 block truncate text-[8px] text-[#6f8699]">
+                            {(() => {
+                              try {
+                                return new URL(bookmark.url).hostname.replace(/^www\./, '');
+                              } catch {
+                                return bookmark.url;
+                              }
+                            })()}
                           </span>
                         </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openBookmarkEditor(bookmark)}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[#6f8598] opacity-0 hover:bg-white/7 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+                        aria-label={`Edit ${bookmark.title}`}
+                      >
+                        <Pencil size={10} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNewTab(bookmark.url)}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[#6f8598] opacity-0 hover:bg-white/7 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+                        aria-label={`Open ${bookmark.title} in new tab`}
+                      >
+                        <ExternalLink size={10} />
                       </button>
                       <button
                         type="button"
@@ -2488,15 +2653,25 @@ export default function BrowserApp() {
                           setBookmarks(updated);
                           saveStoredBookmarks(updated);
                         }}
-                        className="grid h-5 w-5 shrink-0 place-items-center text-[#5b7184] opacity-0 hover:text-[#f87171] group-hover:opacity-100"
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[#6f8598] opacity-0 hover:bg-[#ef6262]/10 hover:text-[#ff9a9a] group-hover:opacity-100 focus-visible:opacity-100"
                         aria-label={`Delete ${bookmark.title}`}
                       >
                         <Trash2 size={10} />
                       </button>
                     </div>
                   ))}
-                  {bookmarks.length === 0 && (
-                    <div className="py-8 text-center text-[#415a6e]">No bookmarks saved</div>
+                  {filteredBookmarks.length === 0 && (
+                    <div className="grid place-items-center gap-1 py-10 text-center">
+                      <BookmarkIcon size={17} className="text-[#52697b]" />
+                      <strong className="text-[10px] font-medium text-[#aebfcd]">
+                        {bookmarks.length ? 'No matching bookmarks' : 'No bookmarks saved'}
+                      </strong>
+                      <span className="text-[8px] text-[#61788b]">
+                        {bookmarks.length
+                          ? 'Try another title or address.'
+                          : 'Star a page to keep it here.'}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2653,6 +2828,136 @@ export default function BrowserApp() {
           </aside>
         )}
       </div>
+
+      {bookmarkDraft && (
+        <div
+          className="nammu-glass-dialog-backdrop absolute inset-x-0 bottom-0 z-[85] grid place-items-center p-4"
+          style={{ top: browserContentTop, right: browserContentRight }}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setBookmarkDraft(null);
+          }}
+        >
+          <form
+            onSubmit={saveBookmarkDraft}
+            className="nammu-glass-dialog w-full max-w-sm rounded-2xl p-4"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <strong className="block text-[12px] font-semibold text-white">
+                  Edit bookmark
+                </strong>
+                <span className="text-[8.5px] text-[#71889b]">
+                  Update its name, address or group.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBookmarkDraft(null)}
+                className="grid h-7 w-7 place-items-center rounded-lg text-[#71889b] hover:bg-white/8 hover:text-white"
+                aria-label="Close bookmark editor"
+              >
+                <X size={12} />
+              </button>
+            </div>
+            <div className="grid gap-2.5">
+              {[
+                { key: 'title' as const, label: 'Name', placeholder: 'Bookmark name' },
+                { key: 'url' as const, label: 'Address', placeholder: 'https://example.com' },
+                { key: 'group' as const, label: 'Group', placeholder: 'Optional group' },
+              ].map((field) => (
+                <label key={field.key} className="grid gap-1">
+                  <span className="text-[8px] font-medium uppercase tracking-[0.12em] text-[#71889b]">
+                    {field.label}
+                  </span>
+                  <input
+                    value={bookmarkDraft[field.key]}
+                    onChange={(event) =>
+                      setBookmarkDraft((current) =>
+                        current
+                          ? { ...current, [field.key]: event.target.value, error: '' }
+                          : current,
+                      )
+                    }
+                    placeholder={field.placeholder}
+                    className="h-8 rounded-lg border border-white/9 bg-white/5 px-2.5 text-[10px] text-white outline-none placeholder:text-[#52697b] focus:border-white/20"
+                    autoFocus={field.key === 'title'}
+                  />
+                </label>
+              ))}
+            </div>
+            {bookmarkDraft.error && (
+              <p className="mt-2 text-[8.5px] text-[#ff9a9a]">{bookmarkDraft.error}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBookmarkDraft(null)}
+                className="h-7 rounded-lg px-3 text-[9px] text-[#91a5b6] hover:bg-white/6 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="h-7 rounded-lg border border-white/13 bg-white/10 px-3 text-[9px] font-medium text-white hover:bg-white/15"
+              >
+                Save changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {bookmarkDeleteAllPending && (
+        <div
+          className="nammu-glass-dialog-backdrop absolute inset-x-0 bottom-0 z-[86] grid place-items-center p-4"
+          style={{ top: browserContentTop, right: browserContentRight }}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setBookmarkDeleteAllPending(false);
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-all-bookmarks-title"
+            className="nammu-glass-dialog w-full max-w-xs rounded-2xl p-4"
+          >
+            <span className="mb-3 grid h-8 w-8 place-items-center rounded-xl border border-[#ff7777]/15 bg-[#ff6464]/8 text-[#ff9999]">
+              <Trash2 size={14} />
+            </span>
+            <strong id="delete-all-bookmarks-title" className="block text-[12px] text-white">
+              Delete all bookmarks?
+            </strong>
+            <p className="mt-1 text-[9px] leading-relaxed text-[#8196a8]">
+              This will permanently remove all {bookmarks.length} saved bookmarks from Nammu
+              Browser. This action cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBookmarkDeleteAllPending(false)}
+                className="h-7 rounded-lg px-3 text-[9px] text-[#91a5b6] hover:bg-white/6 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const deletedCount = bookmarks.length;
+                  setBookmarks([]);
+                  saveStoredBookmarks([]);
+                  setBookmarkDeleteAllPending(false);
+                  setBookmarkTransferStatus(`Deleted ${deletedCount} bookmarks`);
+                }}
+                className="h-7 rounded-lg border border-[#ff7777]/20 bg-[#ff6464]/10 px-3 text-[9px] font-medium text-[#ffaaaa] hover:bg-[#ff6464]/18 hover:text-white"
+              >
+                Delete all
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* 6. Optimized In-Browser Context Menu */}
       {contextMenu.isOpen && (
@@ -3043,7 +3348,7 @@ export default function BrowserApp() {
               >
                 <div className="flex items-center gap-2">
                   <FileCode size={11} className="text-electric" />
-                  <span>Inspect DevTools</span>
+                  <span>Developer Tools</span>
                 </div>
                 <span className="text-[8.5px] text-[#567289]">Ctrl+Shift+I</span>
               </button>
@@ -3074,6 +3379,22 @@ export default function BrowserApp() {
                 <div className="flex items-center gap-2">
                   <ExternalLink size={11} className="text-electric" />
                   <span>Open in New Tab</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  const bookmark = bookmarks.find(
+                    (item) => item.id === contextMenu.targetBookmarkId,
+                  );
+                  if (bookmark) openBookmarkEditor(bookmark);
+                  setContextMenu((previous) => ({ ...previous, isOpen: false }));
+                }}
+                className="flex w-full items-center justify-between px-2.5 py-1.5 text-left transition-colors hover:bg-electric/15 hover:text-white"
+              >
+                <div className="flex items-center gap-2">
+                  <Pencil size={11} className="text-electric" />
+                  <span>Edit Bookmark</span>
                 </div>
               </button>
 

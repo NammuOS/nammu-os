@@ -7,9 +7,18 @@ import type {
 } from './model';
 import type { PdfAnnotationDraft, PdfAnnotationPatch, PdfAnnotationTool } from './annotationModel';
 import type { PdfFormFieldDraft, PdfFormFieldPatch, PdfFormTool } from './formModel';
+import type {
+  PdfContentObjectDraft,
+  PdfContentObjectPatch,
+  PdfContentTool,
+} from './contentEditModel';
+import type { PdfRect } from './annotationModel';
+import type { PdfSanitizeOptions } from './protectionModel';
+import type { PdfEncryptionRequest } from './pdfCrypto';
+import type { PdfExportFormat } from './conversionModel';
 
 export type PdfMenuId =
-  'file' | 'edit' | 'view' | 'document' | 'comment' | 'forms' | 'tools' | 'help';
+  'file' | 'edit' | 'view' | 'document' | 'comment' | 'forms' | 'protect' | 'convert' | 'tools' | 'help';
 
 export type PdfCommandId =
   | 'file.open'
@@ -32,6 +41,10 @@ export type PdfCommandId =
   | 'view.organizeWorkspace'
   | 'view.commentWorkspace'
   | 'view.formsWorkspace'
+  | 'view.editWorkspace'
+  | 'view.protectWorkspace'
+  | 'view.convertWorkspace'
+  | 'view.ocrWorkspace'
   | 'document.rotateLeft'
   | 'document.rotateRight'
   | 'document.deletePages'
@@ -69,6 +82,35 @@ export type PdfCommandId =
   | 'forms.duplicate'
   | 'forms.previous'
   | 'forms.next'
+  | 'content.select'
+  | 'content.addText'
+  | 'content.addImage'
+  | 'content.replaceImage'
+  | 'content.create'
+  | 'content.update'
+  | 'content.delete'
+  | 'redact.select'
+  | 'redact.markRegion'
+  | 'redact.markSelection'
+  | 'redact.create'
+  | 'redact.delete'
+  | 'redact.apply'
+  | 'security.inspect'
+  | 'security.encrypt'
+  | 'sanitize.document'
+  | 'convert.run'
+  | 'convert.toPng'
+  | 'convert.toJpeg'
+  | 'convert.toWebp'
+  | 'convert.toText'
+  | 'convert.toMarkdown'
+  | 'convert.toJson'
+  | 'convert.imagesToPdf'
+  | 'ocr.recognizePages'
+  | 'ocr.makeSearchable'
+  | 'ocr.exportText'
+  | 'ocr.cancel'
+  | 'ocr.clearResults'
   | 'tools.commandPalette'
   | 'help.about';
 
@@ -101,6 +143,23 @@ export interface PdfCommandActions {
   deleteSelectedFormField(): void | Promise<void>;
   duplicateSelectedFormField(): void | Promise<void>;
   navigateFormField(direction: -1 | 1): void;
+  createContentObject(draft: PdfContentObjectDraft): void | Promise<void>;
+  updateSelectedContentObject(patch: PdfContentObjectPatch): void | Promise<void>;
+  deleteSelectedContentObject(): void | Promise<void>;
+  addImage(): void | Promise<void>;
+  replaceSelectedImage(): void | Promise<void>;
+  createRedaction(pageNumber: number, rect: PdfRect, quadPoints?: readonly number[]): void | Promise<void>;
+  deleteSelectedRedaction(): void | Promise<void>;
+  applyRedactions(): void | Promise<void>;
+  sanitize(options: PdfSanitizeOptions): void | Promise<void>;
+  encrypt(request: PdfEncryptionRequest): void | Promise<void>;
+  convert(format?: PdfExportFormat): void | Promise<void>;
+  imagesToPdf(): void | Promise<void>;
+  runOcr(): void | Promise<void>;
+  makeSearchable(): void | Promise<void>;
+  exportOcrText(): void | Promise<void>;
+  cancelOcr(): void;
+  clearOcrResults(): void;
   showCommandPalette(): void;
   showAbout(): void;
 }
@@ -115,6 +174,14 @@ export interface PdfCommandContext {
   formFieldDraft?: PdfFormFieldDraft;
   formFieldPatch?: PdfFormFieldPatch;
   formFieldId?: string;
+  contentDraft?: PdfContentObjectDraft;
+  contentPatch?: PdfContentObjectPatch;
+  redactionPageNumber?: number;
+  redactionRect?: PdfRect;
+  redactionQuadPoints?: readonly number[];
+  sanitizeOptions?: PdfSanitizeOptions;
+  encryptionRequest?: PdfEncryptionRequest;
+  conversionFormat?: PdfExportFormat;
 }
 
 export interface PdfCommandDefinition {
@@ -140,6 +207,26 @@ const canAnnotate = ({ session, busy }: PdfCommandContext) =>
   Boolean(session && !session.fidelity.signatures) && !busy;
 const canAuthorForms = ({ session, busy }: PdfCommandContext) =>
   Boolean(session && session.form.editable && !session.fidelity.signatures) && !busy;
+const canEditContent = ({ session, busy }: PdfCommandContext) =>
+  Boolean(session && !session.fidelity.signatures) && !busy;
+
+function contentToolCommand(
+  id: PdfCommandId,
+  label: string,
+  tool: PdfContentTool,
+): PdfCommandDefinition {
+  return {
+    id,
+    label,
+    menu: 'edit',
+    enabled: canEditContent,
+    checked: ({ session }) => session?.workspaceMode === 'edit' && session.tool === tool,
+    execute: ({ actions }) => {
+      actions.setWorkspaceMode('edit');
+      actions.setTool(tool);
+    },
+  };
+}
 
 function annotationToolCommand(
   id: PdfCommandId,
@@ -362,6 +449,34 @@ export const PDF_COMMANDS: readonly PdfCommandDefinition[] = [
     enabled: hasDocument,
     checked: ({ session }) => session?.workspaceMode === 'forms',
     execute: ({ actions }) => actions.setWorkspaceMode('forms'),
+  },
+  {
+    id: 'view.editWorkspace',
+    label: 'Edit Workspace',
+    menu: 'view',
+    shortcut: 'Ctrl+Shift+E',
+    enabled: hasDocument,
+    checked: ({ session }) => session?.workspaceMode === 'edit',
+    execute: ({ actions }) => actions.setWorkspaceMode('edit'),
+  },
+  {
+    id: 'view.protectWorkspace',
+    label: 'Protect Workspace',
+    menu: 'view',
+    shortcut: 'Ctrl+Shift+R',
+    enabled: hasDocument,
+    checked: ({ session }) => session?.workspaceMode === 'protect',
+    execute: ({ actions }) => actions.setWorkspaceMode('protect'),
+  },
+  {
+    id: 'view.convertWorkspace', label: 'Convert Workspace', menu: 'view', shortcut: 'Ctrl+Shift+X',
+    enabled: hasDocument, checked: ({ session }) => session?.workspaceMode === 'convert',
+    execute: ({ actions }) => actions.setWorkspaceMode('convert'),
+  },
+  {
+    id: 'view.ocrWorkspace', label: 'OCR Workspace', menu: 'view', shortcut: 'Ctrl+Shift+G',
+    enabled: hasDocument, checked: ({ session }) => session?.workspaceMode === 'ocr',
+    execute: ({ actions }) => actions.setWorkspaceMode('ocr'),
   },
   {
     id: 'document.rotateLeft',
@@ -603,6 +718,154 @@ export const PDF_COMMANDS: readonly PdfCommandDefinition[] = [
     enabled: ({ session, busy }) => Boolean(session?.form.fields.length) && !busy,
     execute: ({ actions }) => actions.navigateFormField(1),
   },
+  contentToolCommand('content.select', 'Select Content', 'edit-select'),
+  contentToolCommand('content.addText', 'Add Text', 'edit-text'),
+  {
+    id: 'content.addImage',
+    label: 'Add Image…',
+    menu: 'edit',
+    enabled: canEditContent,
+    execute: ({ actions }) => actions.addImage(),
+  },
+  {
+    id: 'content.replaceImage',
+    label: 'Replace Selected Image…',
+    menu: 'edit',
+    enabled: (context) =>
+      Boolean(
+        context.session?.contentEdit.objects.some(
+          (object) =>
+            object.id === context.session?.contentEdit.selectedObjectId && object.kind === 'image',
+        ),
+      ) && canEditContent(context),
+    execute: ({ actions }) => actions.replaceSelectedImage(),
+  },
+  {
+    id: 'content.create',
+    label: 'Create Content Object',
+    menu: 'edit',
+    hidden: true,
+    enabled: (context) => Boolean(context.contentDraft) && canEditContent(context),
+    execute: ({ actions, contentDraft }) => {
+      if (contentDraft) return actions.createContentObject(contentDraft);
+    },
+  },
+  {
+    id: 'content.update',
+    label: 'Update Selected Content',
+    menu: 'edit',
+    hidden: true,
+    enabled: (context) =>
+      Boolean(context.session?.contentEdit.selectedObjectId && context.contentPatch) &&
+      canEditContent(context),
+    execute: ({ actions, contentPatch }) => {
+      if (contentPatch) return actions.updateSelectedContentObject(contentPatch);
+    },
+  },
+  {
+    id: 'content.delete',
+    label: 'Delete Selected Content',
+    menu: 'edit',
+    shortcut: 'Delete',
+    danger: true,
+    enabled: (context) =>
+      Boolean(context.session?.contentEdit.selectedObjectId) && canEditContent(context),
+    execute: ({ actions }) => actions.deleteSelectedContentObject(),
+  },
+  {
+    id: 'redact.select', label: 'Review Redaction Marks', menu: 'protect', enabled: hasDocument,
+    checked: ({ session }) => session?.workspaceMode === 'protect' && session.tool === 'protect-select',
+    execute: ({ actions }) => { actions.setWorkspaceMode('protect'); actions.setTool('protect-select'); },
+  },
+  {
+    id: 'redact.markRegion', label: 'Mark Region for Redaction', menu: 'protect',
+    enabled: canAnnotate,
+    checked: ({ session }) => session?.workspaceMode === 'protect' && session.tool === 'redact-region',
+    execute: ({ actions }) => { actions.setWorkspaceMode('protect'); actions.setTool('redact-region'); },
+  },
+  {
+    id: 'redact.markSelection', label: 'Mark Selected Text for Redaction', menu: 'protect',
+    enabled: ({ session, busy }) => Boolean(session?.textSelection && !session.fidelity.signatures) && !busy,
+    execute: ({ actions, session }) => {
+      if (session?.textSelection) return actions.createRedaction(session.textSelection.pageNumber, session.textSelection.rect, session.textSelection.quadPoints);
+    },
+  },
+  {
+    id: 'redact.create', label: 'Create Redaction Mark', menu: 'protect', hidden: true,
+    enabled: ({ redactionPageNumber, redactionRect, ...context }) => Boolean(redactionPageNumber && redactionRect) && canAnnotate(context),
+    execute: ({ actions, redactionPageNumber, redactionRect, redactionQuadPoints }) => {
+      if (redactionPageNumber && redactionRect) return actions.createRedaction(redactionPageNumber, redactionRect, redactionQuadPoints);
+    },
+  },
+  {
+    id: 'redact.delete', label: 'Remove Selected Redaction Mark', menu: 'protect', danger: true,
+    enabled: ({ session, busy }) => Boolean(session?.protection.selectedRedactionId && !session.fidelity.signatures) && !busy,
+    execute: ({ actions }) => actions.deleteSelectedRedaction(),
+  },
+  {
+    id: 'redact.apply', label: 'Apply Secure Raster Redactions…', menu: 'protect', danger: true, dividerBefore: true,
+    enabled: ({ session, busy }) => Boolean(session?.protection.redactions.length && !session.fidelity.signatures) && !busy,
+    execute: ({ actions }) => actions.applyRedactions(),
+  },
+  {
+    id: 'security.inspect', label: 'Inspect Document Security', menu: 'protect', dividerBefore: true,
+    enabled: hasDocument, execute: ({ actions }) => actions.setWorkspaceMode('protect'),
+  },
+  {
+    id: 'security.encrypt', label: 'Protect a Copy with Password…', menu: 'protect',
+    enabled: ({ encryptionRequest, ...context }) => Boolean(encryptionRequest) && canAnnotate(context),
+    hidden: true,
+    execute: ({ actions, encryptionRequest }) => { if (encryptionRequest) return actions.encrypt(encryptionRequest); },
+  },
+  {
+    id: 'sanitize.document', label: 'Remove Selected Document Data', menu: 'protect', hidden: true,
+    enabled: ({ sanitizeOptions, ...context }) => Boolean(sanitizeOptions && Object.values(sanitizeOptions).some(Boolean)) && canAnnotate(context),
+    execute: ({ actions, sanitizeOptions }) => { if (sanitizeOptions) return actions.sanitize(sanitizeOptions); },
+  },
+  {
+    id: 'convert.run', label: 'Run Configured Export', menu: 'convert', hidden: true,
+    enabled: hasDocument, execute: ({ actions }) => actions.convert(),
+  },
+  ...([
+    ['convert.toPng', 'Export Pages as PNG', 'png'],
+    ['convert.toJpeg', 'Export Pages as JPEG', 'jpeg'],
+    ['convert.toWebp', 'Export Pages as WebP', 'webp'],
+    ['convert.toText', 'Export Text', 'text'],
+    ['convert.toMarkdown', 'Export Markdown', 'markdown'],
+    ['convert.toJson', 'Export Structured JSON', 'json'],
+  ] as const).map(([id, label, format], index) => ({
+    id, label, menu: 'convert' as const, dividerBefore: index === 3,
+    enabled: hasDocument,
+    execute: ({ actions }: PdfCommandContext) => actions.convert(format),
+  })),
+  {
+    id: 'convert.imagesToPdf', label: 'Create PDF from Images…', menu: 'convert', dividerBefore: true,
+    enabled: always, execute: ({ actions }) => actions.imagesToPdf(),
+  },
+  {
+    id: 'ocr.recognizePages', label: 'Recognize Scanned Pages', menu: 'tools', dividerBefore: true,
+    enabled: hasDocument, execute: ({ actions }) => actions.runOcr(),
+  },
+  {
+    id: 'ocr.makeSearchable', label: 'Make Searchable Copy', menu: 'tools',
+    enabled: ({ session, busy }) => Boolean(session?.ocr.results.length && !session.fidelity.signatures) && !busy,
+    execute: ({ actions }) => actions.makeSearchable(),
+  },
+  {
+    id: 'ocr.exportText', label: 'Export OCR Text', menu: 'tools',
+    enabled: ({ session, busy }) => Boolean(session?.ocr.results.length) && !busy,
+    execute: ({ actions }) => actions.exportOcrText(),
+  },
+  {
+    id: 'ocr.cancel', label: 'Cancel OCR', menu: 'tools', hidden: true,
+    enabled: ({ session }) => session?.ocr.status === 'loading' || session?.ocr.status === 'recognizing' || session?.ocr.status === 'building',
+    execute: ({ actions }) => actions.cancelOcr(),
+  },
+  {
+    id: 'ocr.clearResults', label: 'Clear OCR Results', menu: 'tools', hidden: true,
+    enabled: ({ session, busy }) => Boolean(session?.ocr.results.length) && !busy,
+    execute: ({ actions }) => actions.clearOcrResults(),
+  },
   {
     id: 'tools.commandPalette',
     label: 'Command Palette…',
@@ -627,6 +890,8 @@ export const PDF_MENU_ORDER: readonly { id: PdfMenuId; label: string }[] = [
   { id: 'document', label: 'Document' },
   { id: 'comment', label: 'Comment' },
   { id: 'forms', label: 'Forms' },
+  { id: 'protect', label: 'Protect' },
+  { id: 'convert', label: 'Convert' },
   { id: 'tools', label: 'Tools' },
   { id: 'help', label: 'Help' },
 ];

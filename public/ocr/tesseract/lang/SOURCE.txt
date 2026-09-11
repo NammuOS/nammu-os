@@ -1,0 +1,6 @@
+English traineddata source: @tesseract.js-data/eng 1.0.0, 4.0.0_best_int.
+Package repository: https://github.com/naptha/tessdata
+Package license declaration: MIT.
+
+The checked-in file is decompressed so the local Tesseract worker can load it
+without a runtime gzip dependency or a network request.

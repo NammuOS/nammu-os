@@ -25,9 +25,12 @@
 }
 
 .menuBar {
+  position: relative;
+  z-index: 200;
   display: flex;
   align-items: center;
   gap: 1px;
+  overflow: visible;
   border-bottom: 1px solid var(--pdf-line);
   padding: 0 7px;
 }
@@ -49,8 +52,9 @@
 
 .menuPopover {
   position: absolute;
-  z-index: 80;
+  z-index: 220;
   top: 26px;
+  left: 0;
   min-width: 218px;
   border: 1px solid var(--pdf-line-strong);
   background: color-mix(in srgb, var(--ink, #0b121c) 96%, transparent);
@@ -380,6 +384,28 @@
   pointer-events: none;
 }
 
+.protectLayer { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+.protectLayerDrawing { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.redactionMark { position: absolute; border: 1px dashed #ef4444; background: repeating-linear-gradient(135deg, rgba(239,68,68,.22) 0 6px, rgba(239,68,68,.08) 6px 12px); pointer-events: auto; }
+.redactionMarkSelected { border-style: solid; box-shadow: 0 0 0 2px rgba(239,68,68,.35); }
+.redactionPreview { position: absolute; border: 2px dashed #ef4444; background: rgba(239,68,68,.16); pointer-events: none; }
+.protectInspector { height: calc(100% - 31px); overflow: auto; }
+.protectSection { display: grid; gap: 7px; border-bottom: 1px solid var(--pdf-line); padding: 12px; font-size: 9px; color: var(--os-text-muted); }
+.protectSection h2 { display: flex; align-items: center; gap: 6px; color: var(--os-text); font-size: 10px; font-weight: 500; }
+.protectSection h2 span { margin-left: auto; font-family: monospace; color: var(--os-text-dim); }
+.protectSection p { line-height: 1.45; color: var(--os-text-dim); }
+.securityRow { display: flex; justify-content: space-between; gap: 10px; }
+.securityRow strong { color: var(--os-text); font-weight: 500; }
+.securityAlert { color: #fbbf24 !important; }
+.redactionListItem { display: flex; align-items: center; justify-content: space-between; border: 1px solid transparent; padding: 6px 7px; color: var(--os-text-muted); text-align: left; }
+.redactionListItem small { font-family: monospace; color: var(--os-text-dim); }
+.redactionListItem:hover, .redactionListItemActive { border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.08); color: var(--os-text); }
+.sanitizeOption { display: flex; align-items: center; gap: 7px; }
+.primaryAction, .dangerAction { display: inline-flex; min-height: 28px; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--pdf-line-strong); padding: 0 9px; color: var(--os-text); }
+.primaryAction:hover:not(:disabled) { border-color: var(--os-accent); background: color-mix(in srgb, var(--os-accent) 10%, transparent); }
+.dangerAction { border-color: rgba(239,68,68,.35); color: #fca5a5; }
+.primaryAction:disabled, .dangerAction:disabled { opacity: .42; }
+
 .commentToolGroup {
   display: flex;
   min-width: 0;
@@ -446,6 +472,31 @@
   pointer-events: none;
 }
 
+.editLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.editLayerPlacement {
+  cursor: text;
+}
+
+.editObjectHit {
+  position: absolute;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: move;
+}
+
+.editObjectHit:hover,
+.editObjectSelected {
+  border-color: var(--os-accent, #4aa3ff);
+  background: color-mix(in srgb, var(--os-accent, #4aa3ff) 6%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--os-accent, #4aa3ff) 30%, transparent);
+}
+
 .formLayerAuthoring {
   pointer-events: auto;
   touch-action: none;
@@ -495,6 +546,132 @@
   border: 1px solid white;
   background: var(--os-accent, #4aa3ff);
   cursor: nwse-resize;
+}
+
+.convertInspector {
+  height: calc(100% - 31px);
+  overflow: auto;
+  padding: 10px;
+}
+
+.convertFormatGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.convertFormat {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--pdf-line);
+  background: var(--pdf-panel);
+  padding: 7px;
+  color: var(--mute, #8190a0);
+  text-align: left;
+}
+
+.convertFormat:hover:not(:disabled),
+.convertFormatActive {
+  border-color: color-mix(in srgb, var(--os-accent, #4aa3ff) 55%, var(--pdf-line));
+  background: color-mix(in srgb, var(--os-accent, #4aa3ff) 10%, var(--pdf-panel));
+  color: var(--os-text, #e2e8f0);
+}
+
+.convertFormat span {
+  display: grid;
+  min-width: 0;
+}
+
+.convertFormat strong {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.convertFormat small {
+  overflow: hidden;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convertProgress {
+  height: 3px;
+  overflow: hidden;
+  background: var(--pdf-line);
+}
+
+.convertProgress span {
+  display: block;
+  height: 100%;
+  background: var(--os-accent, #4aa3ff);
+  transition: width 120ms ease;
+}
+
+.ocrCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--os-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ocrCheck input {
+  margin-top: 2px;
+  accent-color: var(--os-accent);
+}
+
+.ocrResultList {
+  display: grid;
+  max-height: 210px;
+  gap: 4px;
+  overflow: auto;
+}
+
+.ocrResultList button {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--os-line);
+  background: color-mix(in srgb, var(--os-window) 84%, transparent);
+  padding: 8px;
+  text-align: left;
+}
+
+.ocrResultList strong,
+.ocrResultList small {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  color: var(--os-text-dim);
+}
+
+.ocrResultList span {
+  overflow: hidden;
+  color: var(--os-text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondaryAction {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--pdf-line);
+  background: var(--pdf-panel);
+  padding: 5px 8px;
+  color: var(--os-text-muted);
+  font-size: 9px;
+}
+
+.secondaryAction:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--os-accent) 45%, var(--pdf-line));
+  color: var(--os-text);
 }
 
 .formGesturePreview {

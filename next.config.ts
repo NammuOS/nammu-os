@@ -2,6 +2,24 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    resolveAlias: {
+      fs: { browser: './src/shims/emptyNodeModule.ts' },
+      path: { browser: './src/shims/emptyNodeModule.ts' },
+      crypto: { browser: './src/shims/emptyNodeModule.ts' },
+    },
+  },
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        crypto: false,
+      };
+    }
+    return config;
+  },
   serverExternalPackages: [
     'better-sqlite3',
     'pdf-lib',

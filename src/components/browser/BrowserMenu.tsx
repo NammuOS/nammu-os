@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Terminal,
   UserRoundPlus,
-  X,
 } from 'lucide-react';
 
 interface BrowserMenuProps {
@@ -81,19 +80,7 @@ export default function BrowserMenu({
 
   return (
     <div className="browser-main-menu absolute right-2 top-[69px] z-[70] w-64 rounded-lg border border-white/[0.1] bg-[#080d15]/98 p-1.5 font-mono shadow-2xl backdrop-blur-xl">
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-2 pb-1.5 pt-0.5">
-        <span className="text-[8px] uppercase tracking-[0.18em] text-[#557087]">Browser Menu</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="grid h-5 w-5 place-items-center rounded text-[#69849b] hover:bg-white/[0.05] hover:text-white"
-          aria-label="Close browser menu"
-        >
-          <X size={11} />
-        </button>
-      </div>
-
-      <div className="py-1">
+      <div className="pb-1">
         <button type="button" onClick={run(onNewTab)} className={menuButtonClass}>
           <span className="flex items-center gap-2">
             <Plus size={11} className="text-[#4aa3ff]" />
@@ -224,7 +211,7 @@ export default function BrowserMenu({
         <button type="button" onClick={run(onShowProxyManager)} className={menuButtonClass}>
           <span className="flex items-center gap-2">
             <Network size={11} className="text-[#4aa3ff]" />
-            Public Proxy Manager
+            Proxy Manager
           </span>
           <span className="text-[8px] text-[#557087]">UNTRUSTED</span>
         </button>

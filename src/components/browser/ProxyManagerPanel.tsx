@@ -251,7 +251,7 @@ export default function ProxyManagerPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-3 font-sans">
       <div className="flex items-center justify-between border-b border-white/6 pb-2">
         <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-electric">
-          <Network size={12} /> Public Proxy Manager
+          <Network size={12} /> Proxy Manager
         </span>
         <button
           onClick={onClose}

@@ -15,6 +15,14 @@ import type { PdfPageSelectionModifiers } from './pageSelection';
 import { PdfAnnotationLayer } from './PdfAnnotationLayer';
 import { PdfFormLayer } from './PdfFormLayer';
 import type { PdfFormFieldDraft, PdfFormFieldPatch, PdfFormModel, PdfFormTool } from './formModel';
+import type {
+  PdfContentObjectDraft,
+  PdfContentObjectPatch,
+  PdfEditableContentObject,
+} from './contentEditModel';
+import { PdfEditLayer } from './PdfEditWorkspace';
+import { PdfProtectLayer } from './PdfProtectWorkspace';
+import type { PdfRedactionMark } from './protectionModel';
 
 interface PageCanvasProps {
   document: PDFDocumentProxy;
@@ -25,6 +33,8 @@ interface PageCanvasProps {
   commentMode: boolean;
   formsMode: boolean;
   formsVisible: boolean;
+  editMode: boolean;
+  protectMode: boolean;
   form: PdfFormModel;
   tool: PdfWorkspaceTool;
   annotations: readonly PdfAnnotation[];
@@ -40,6 +50,15 @@ interface PageCanvasProps {
   onSelectFormField(fieldId: string | null, widgetId: string | null): void;
   onCreateFormField(draft: PdfFormFieldDraft): void;
   onUpdateFormField(fieldId: string, patch: PdfFormFieldPatch): void;
+  editableContent: readonly PdfEditableContentObject[];
+  selectedContentObjectId: string | null;
+  onSelectContentObject(id: string | null): void;
+  onCreateContentObject(draft: PdfContentObjectDraft): void;
+  onUpdateContentObject(patch: PdfContentObjectPatch): void;
+  redactions: readonly PdfRedactionMark[];
+  selectedRedactionId: string | null;
+  onSelectRedaction(id: string | null): void;
+  onCreateRedaction(pageNumber: number, rect: PdfRedactionMark['rect']): void;
 }
 
 export function PdfPageCanvas({
@@ -51,6 +70,8 @@ export function PdfPageCanvas({
   commentMode,
   formsMode,
   formsVisible,
+  editMode,
+  protectMode,
   form,
   tool,
   annotations,
@@ -66,6 +87,15 @@ export function PdfPageCanvas({
   onSelectFormField,
   onCreateFormField,
   onUpdateFormField,
+  editableContent,
+  selectedContentObjectId,
+  onSelectContentObject,
+  onCreateContentObject,
+  onUpdateContentObject,
+  redactions,
+  selectedRedactionId,
+  onSelectRedaction,
+  onCreateRedaction,
 }: PageCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -176,6 +206,23 @@ export function PdfPageCanvas({
           onCreateAnnotation={onCreateAnnotation}
         />
       ) : null}
+      {protectMode && pageProxy && pageViewport ? (
+        <>
+          <PdfAnnotationLayer
+            page={pageProxy}
+            viewport={pageViewport}
+            pageNumber={pageNumber}
+            tool="select"
+            annotations={[]}
+            selectedAnnotationId={null}
+            appearance={annotationAppearance}
+            onSelectAnnotation={() => undefined}
+            onTextSelection={onTextSelection}
+            onCreateAnnotation={() => undefined}
+          />
+          <PdfProtectLayer viewport={pageViewport} pageNumber={pageNumber} tool={tool} marks={redactions} selectedId={selectedRedactionId} onSelect={onSelectRedaction} onCreate={onCreateRedaction} />
+        </>
+      ) : null}
       {!commentMode &&
       formsVisible &&
       pageProxy &&
@@ -193,6 +240,18 @@ export function PdfPageCanvas({
           onSelect={onSelectFormField}
           onCreate={onCreateFormField}
           onUpdate={onUpdateFormField}
+        />
+      ) : null}
+      {editMode && pageViewport ? (
+        <PdfEditLayer
+          viewport={pageViewport}
+          pageNumber={pageNumber}
+          objects={editableContent}
+          selectedId={selectedContentObjectId}
+          tool={tool}
+          onSelect={onSelectContentObject}
+          onPlaceText={onCreateContentObject}
+          onUpdate={onUpdateContentObject}
         />
       ) : null}
       {!visible ? <span className="absolute inset-0 bg-[#e7e7e7]" aria-hidden="true" /> : null}

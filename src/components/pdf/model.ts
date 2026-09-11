@@ -6,11 +6,15 @@ import type {
   PdfTextSelection,
 } from './annotationModel';
 import type { PdfFormModel, PdfFormTool } from './formModel';
+import type { PdfContentEditModel, PdfContentTool } from './contentEditModel';
+import type { PdfProtectionModel, PdfProtectionTool } from './protectionModel';
+import type { PdfConversionState } from './conversionModel';
+import type { PdfOcrState } from './ocrModel';
 
 export type PdfZoomMode = 'custom' | 'actual' | 'fit-width' | 'fit-page';
 export type PdfViewMode = 'continuous' | 'single-page';
-export type PdfWorkspaceTool = 'select' | 'hand' | PdfAnnotationTool | PdfFormTool;
-export type PdfWorkspaceMode = 'read' | 'organize' | 'comment' | 'forms';
+export type PdfWorkspaceTool = 'select' | 'hand' | PdfAnnotationTool | PdfFormTool | PdfContentTool | PdfProtectionTool;
+export type PdfWorkspaceMode = 'read' | 'organize' | 'comment' | 'forms' | 'edit' | 'protect' | 'convert' | 'ocr';
 
 export interface PdfFidelityProfile {
   forms: boolean;
@@ -74,6 +78,10 @@ export interface PdfDocumentSession {
   form: PdfFormModel;
   selectedFormFieldId: string | null;
   selectedFormWidgetId: string | null;
+  contentEdit: PdfContentEditModel;
+  protection: PdfProtectionModel;
+  conversion: PdfConversionState;
+  ocr: PdfOcrState;
   fidelity: PdfFidelityProfile;
   dirty: boolean;
   revision: number;

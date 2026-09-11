@@ -10,6 +10,10 @@ import type {
 import { DEFAULT_ANNOTATION_APPEARANCE } from './annotationModel';
 import { readPdfAnnotations } from './pdfAnnotations';
 import { inspectPdfForms } from './pdfForms';
+import { inspectEditablePdfContent } from './pdfContentEditing';
+import { inspectPdfProtection } from './pdfProtection';
+import { DEFAULT_CONVERSION_STATE } from './conversionModel';
+import { DEFAULT_OCR_STATE } from './ocrModel';
 
 const PDF_WORKER_URL = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
@@ -127,10 +131,12 @@ export async function loadPdfSession(
   });
   let renderDocument: PDFDocumentProxy | null = null;
   try {
-    const [loaded, inspected, form] = await Promise.all([
+    const [loaded, inspected, form, editableContent, protection] = await Promise.all([
       loadingTask.promise,
       inspectPdfStructure(bytes),
       inspectPdfForms(bytes),
+      inspectEditablePdfContent(bytes),
+      inspectPdfProtection(bytes),
     ]);
     renderDocument = loaded;
     if (loaded.numPages !== inspected.pages.length) {
@@ -161,6 +167,10 @@ export async function loadPdfSession(
       form,
       selectedFormFieldId: null,
       selectedFormWidgetId: null,
+      contentEdit: { objects: editableContent, selectedObjectId: null },
+      protection,
+      conversion: { ...DEFAULT_CONVERSION_STATE, options: { ...DEFAULT_CONVERSION_STATE.options } },
+      ocr: { ...DEFAULT_OCR_STATE, options: { ...DEFAULT_OCR_STATE.options }, results: [] },
       fidelity: inspected.fidelity,
       dirty: false,
       revision: 0,
@@ -183,7 +193,16 @@ export async function reloadPdfContent(
 ): Promise<
   Pick<
     PdfDocumentSession,
-    'bytes' | 'size' | 'renderDocument' | 'pages' | 'metadata' | 'fidelity' | 'annotations' | 'form'
+    | 'bytes'
+    | 'size'
+    | 'renderDocument'
+    | 'pages'
+    | 'metadata'
+    | 'fidelity'
+    | 'annotations'
+    | 'form'
+    | 'contentEdit'
+    | 'protection'
   >
 > {
   const loaded = await loadPdfSession(session.name, bytes, session.source);
@@ -196,6 +215,8 @@ export async function reloadPdfContent(
     fidelity: loaded.fidelity,
     annotations: loaded.annotations,
     form: loaded.form,
+    contentEdit: loaded.contentEdit,
+    protection: loaded.protection,
   };
 }
 

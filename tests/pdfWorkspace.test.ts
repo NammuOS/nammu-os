@@ -38,6 +38,12 @@ import {
   inspectPdfForms,
   updatePdfFormField,
 } from '../src/components/pdf/pdfForms';
+import {
+  createPdfContentObject,
+  deletePdfContentObject,
+  inspectEditablePdfContent,
+  updatePdfContentObject,
+} from '../src/components/pdf/pdfContentEditing';
 
 async function fixture(pageCount: number): Promise<Uint8Array> {
   const { PDFDocument } = await import('pdf-lib');
@@ -58,6 +64,212 @@ async function inspect(bytes: Uint8Array) {
 }
 
 describe('Nammu PDF workspace foundation', () => {
+  test('keeps application menus above every document workspace layer', () => {
+    const styles = readFileSync(
+      new URL('../src/components/pdf/PdfApp.module.css', import.meta.url),
+      'utf8',
+    );
+
+    expect(styles).toMatch(/\.menuBar\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*200;/s);
+    expect(styles).toMatch(/\.menuBar\s*\{[^}]*overflow:\s*visible;/s);
+    expect(styles).toMatch(/\.menuPopover\s*\{[^}]*z-index:\s*220;/s);
+  });
+
+  test('writes, reloads, edits and deletes real tagged PDF text content', async () => {
+    const source = await fixture(1);
+    const created = await createPdfContentObject(source, {
+      pageNumber: 1,
+      kind: 'text',
+      x: 48,
+      y: 72,
+      text: 'Nammu authored text',
+      fontSize: 20,
+      color: '#123456',
+    });
+    const [initial] = await inspectEditablePdfContent(created.bytes);
+    expect(initial).toMatchObject({
+      id: created.objectId,
+      kind: 'text',
+      pageNumber: 1,
+      x: 48,
+      y: 72,
+      text: 'Nammu authored text',
+      fontSize: 20,
+      color: '#123456',
+    });
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const renderTask = pdfjs.getDocument({ data: created.bytes.slice(), isEvalSupported: false });
+    const rendered = await renderTask.promise;
+    try {
+      const text = await (await rendered.getPage(1)).getTextContent();
+      expect(text.items.some((item) => 'str' in item && item.str === 'Nammu authored text')).toBe(
+        true,
+      );
+    } finally {
+      await rendered.destroy();
+    }
+
+    const changed = await updatePdfContentObject(created.bytes, created.objectId, {
+      text: 'Updated real content',
+      x: 96,
+      y: 120,
+      rotation: 12,
+      opacity: 0.55,
+    });
+    expect((await inspectEditablePdfContent(changed))[0]).toMatchObject({
+      id: created.objectId,
+      text: 'Updated real content',
+      x: 96,
+      y: 120,
+      rotation: 12,
+      opacity: 0.55,
+    });
+    const removed = await deletePdfContentObject(changed, created.objectId);
+    expect(await inspectEditablePdfContent(removed)).toEqual([]);
+  });
+
+  test('rejects unsafe content mutations and malformed custom metadata', async () => {
+    const source = await fixture(1);
+    await expect(
+      createPdfContentObject(source, {
+        pageNumber: 1,
+        kind: 'text',
+        x: 20,
+        y: 20,
+        text: '<script>alert(1)</script> 😀',
+      }),
+    ).rejects.toThrow('Unicode font embedding');
+    await expect(updatePdfContentObject(source, 'missing', { x: 1 })).rejects.toThrow(
+      'no longer exists',
+    );
+    await expect(deletePdfContentObject(source, 'missing')).rejects.toThrow('no longer exists');
+
+    const valid = await createPdfContentObject(source, {
+      pageNumber: 1,
+      kind: 'text',
+      x: 20,
+      y: 20,
+      text: 'Safe',
+    });
+    const { PDFArray, PDFDocument, PDFHexString, PDFName, PDFStream } = await import('pdf-lib');
+    const malformed = await PDFDocument.load(valid.bytes);
+    const contents = malformed.getPage(0).node.Contents();
+    expect(contents).toBeInstanceOf(PDFArray);
+    if (!(contents instanceof PDFArray)) throw new Error('Expected normalized page contents.');
+    const streams = contents;
+    for (let index = 0; index < streams.size(); index += 1) {
+      const stream = malformed.context.lookupMaybe(streams.get(index), PDFStream);
+      if (stream?.dict.has(PDFName.of('NammuEditData'))) {
+        stream.dict.set(PDFName.of('NammuEditData'), PDFHexString.fromText('{invalid-json'));
+      }
+    }
+    expect(await inspectEditablePdfContent(new Uint8Array(await malformed.save()))).toEqual([]);
+  });
+
+  test('places and transforms a real embedded image content stream', async () => {
+    const png = Uint8Array.from(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    );
+    const created = await createPdfContentObject(await fixture(1), {
+      pageNumber: 1,
+      kind: 'image',
+      x: 30,
+      y: 40,
+      width: 160,
+      height: 90,
+      imageBytes: png,
+      imageFormat: 'png',
+    });
+    const [image] = await inspectEditablePdfContent(created.bytes);
+    expect(image).toMatchObject({ kind: 'image', width: 160, height: 90, imageFormat: 'png' });
+    expect(image.resourceName).toBeTruthy();
+    const changed = await updatePdfContentObject(created.bytes, created.objectId, {
+      x: 80,
+      y: 100,
+      width: 240,
+      height: 135,
+      rotation: 30,
+    });
+    expect((await inspectEditablePdfContent(changed))[0]).toMatchObject({
+      x: 80,
+      y: 100,
+      width: 240,
+      height: 135,
+      rotation: 30,
+    });
+  });
+
+  test('preserves annotations and AcroForm fields while editing page content', async () => {
+    let bytes = await fixture(1);
+    bytes = await createPdfFormField(bytes, {
+      pageNumber: 1,
+      type: 'text',
+      rect: [30, 30, 180, 55],
+    });
+    bytes = await createPdfAnnotation(bytes, {
+      pageNumber: 1,
+      type: 'note',
+      rect: [220, 220, 245, 245],
+      content: 'Preserve me',
+      appearance: DEFAULT_ANNOTATION_APPEARANCE,
+    });
+    const created = await createPdfContentObject(bytes, {
+      pageNumber: 1,
+      kind: 'text',
+      x: 70,
+      y: 100,
+      text: 'Real content',
+    });
+    const profile = (await inspectPdfStructure(created.bytes)).fidelity;
+    expect(profile.forms).toBe(true);
+    expect(profile.annotations).toBe(true);
+    expect((await inspectPdfForms(created.bytes)).fields).toHaveLength(1);
+  });
+
+  test('keeps content addressable through page reorder and scopes duplicated-stream deletion', async () => {
+    const created = await createPdfContentObject(await fixture(2), {
+      pageNumber: 1,
+      kind: 'text',
+      x: 40,
+      y: 50,
+      text: 'Follow this page',
+    });
+    const reordered = await reorderPdfPages(created.bytes, [2, 1]);
+    expect((await inspectEditablePdfContent(reordered))[0].pageNumber).toBe(2);
+
+    const duplicated = await duplicatePdfPages(created.bytes, [1]);
+    const copies = await inspectEditablePdfContent(duplicated);
+    expect(copies).toHaveLength(2);
+    expect(new Set(copies.map((object) => object.id)).size).toBe(2);
+    const removedCopy = await deletePdfContentObject(duplicated, copies[1].id);
+    expect(
+      (await inspectEditablePdfContent(removedCopy)).map((object) => object.pageNumber),
+    ).toEqual([1]);
+  });
+
+  test('fails closed when direct engine calls target a signed PDF', async () => {
+    const { PDFDict, PDFDocument, PDFName } = await import('pdf-lib');
+    const document = await PDFDocument.create();
+    const page = document.addPage([600, 800]);
+    const signature = document.context.obj({ FT: 'Sig', T: 'Signature1' });
+    const ref = document.context.register(signature);
+    document.catalog.set(PDFName.of('AcroForm'), document.context.obj({ Fields: [ref] }));
+    expect(signature).toBeInstanceOf(PDFDict);
+    await expect(
+      createPdfContentObject(new Uint8Array(await document.save()), {
+        pageNumber: 1,
+        kind: 'text',
+        x: 20,
+        y: 20,
+        text: 'Blocked',
+      }),
+    ).rejects.toThrow('digital signature');
+    expect(page.getWidth()).toBe(600);
+  });
+
   test('keeps menu actions backed by one unique command registry', () => {
     expect(PDF_MENU_ORDER.map((menu) => menu.id)).toEqual([
       'file',
@@ -66,6 +278,8 @@ describe('Nammu PDF workspace foundation', () => {
       'document',
       'comment',
       'forms',
+      'protect',
+      'convert',
       'tools',
       'help',
     ]);
