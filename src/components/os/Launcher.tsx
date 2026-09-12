@@ -68,6 +68,7 @@ const SYSTEM_APP_DESCRIPTIONS: Record<SystemAppId, string> = {
   settings: 'System configuration, appearance and performance',
   projects: 'Portfolio of shipped websites and application work',
   ai: 'Nammu OS AI copilot and assistant',
+  'app-store': 'Discover and install applications from the Nammu App Store',
 };
 
 const SYSTEM_APP_ITEMS: LauncherItem[] = SYSTEM_APPS.map((app: SystemAppDefinition) => ({

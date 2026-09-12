@@ -17,6 +17,7 @@ import {
   FileText,
   Music2,
   Send,
+  ShoppingBag,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,7 +39,8 @@ export type SystemAppId =
   | 'calculator'
   | 'qr-gen'
   | 'youtube-music'
-  | 'pdf';
+  | 'pdf'
+  | 'app-store';
 
 export interface SystemAppDefinition {
   id: SystemAppId;
@@ -207,6 +209,14 @@ export const SYSTEM_APPS: SystemAppDefinition[] = [
     icon: Sparkles,
     startMenu: true,
     keywords: ['ai', 'nammu ai', 'copilot', 'assistant', 'chat', 'intelligence', 'bot'],
+  },
+  {
+    id: 'app-store',
+    windowId: 'system:app-store',
+    title: 'App Store',
+    icon: ShoppingBag,
+    startMenu: true,
+    keywords: ['app store', 'apps', 'applications', 'install', 'download', 'store', 'marketplace'],
   },
 ];
 

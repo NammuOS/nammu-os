@@ -15,6 +15,7 @@ src-tauri/resources/local-server/
 
 # Testing & Coverage
 coverage/
+/build.log
 
 # Environment Files
 .env

@@ -8,6 +8,7 @@ import { projectsRouter } from './projects';
 import { settingsRouter } from './settings';
 import { browserRouter } from './browser';
 import { systemRouter } from './system';
+import { appStoreRouter } from './appStore';
 
 export const appRouter = router({
   auth: authRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   settings: settingsRouter,
   browser: browserRouter,
   system: systemRouter,
+  appStore: appStoreRouter,
 });
 
 export type AppRouter = typeof appRouter;

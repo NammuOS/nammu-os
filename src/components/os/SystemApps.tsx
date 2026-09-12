@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, type ReactNode } from 'react';
 import type { SystemAppId } from './systemAppRegistry';
 
 const AIApp = lazy(() => import('./RailApps').then((module) => ({ default: module.AIApp })));
+const AppStoreApp = lazy(() => import('../app-store/AppStoreApp'));
 const BrowserApp = lazy(() => import('../browser/BrowserApp'));
 const CalculatorTool = lazy(() =>
   import('../../tools/CalculatorSuite').then((module) => ({ default: module.CalculatorTool })),
@@ -229,6 +230,9 @@ export function SystemAppContent({
       break;
     case 'ai':
       content = <AIApp />;
+      break;
+    case 'app-store':
+      content = <AppStoreApp />;
       break;
   }
 
