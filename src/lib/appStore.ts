@@ -1,5 +1,3 @@
-export const NAMMU_APP_STORE_REPO = 'https://apps.umbrel.com/api/v3/umbrelos/app-store';
-
 export interface NammuAppManifest {
   manifestVersion: string;
   id: string;

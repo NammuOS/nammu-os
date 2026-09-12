@@ -19,6 +19,7 @@ export default defineConfig([
     'firefox-wasm/**',
     'bentopdf/**',
     'umbrel/**',
+    'AppStore Reference/**',
   ]),
   {
     files: ['**/*.{ts,tsx,js,mjs}'],

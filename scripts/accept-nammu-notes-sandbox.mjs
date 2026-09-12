@@ -49,7 +49,7 @@ try {
   assert.ok(origin, 'Vite did not publish a loopback acceptance URL.');
 
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 15_000 });
@@ -81,6 +81,15 @@ try {
   await notes.locator('[data-title]').waitFor();
   assert.equal(await notes.locator('[data-title]').inputValue(), 'Independent package note');
   assert.deepEqual(pageErrors, []);
+
+  const screenshotPath = process.env.NAMMU_NOTES_SCREENSHOT_PATH;
+  if (screenshotPath) {
+    await page.addStyleTag({
+      content:
+        'html,body,#root,main,main>div{width:100%;height:100%;margin:0;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}',
+    });
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+  }
 
   process.stdout.write(
     'Nammu Notes sandbox acceptance passed: signed package install, AppSandboxHost launch, real editing, private userdata persistence, close, and reopen.\n',

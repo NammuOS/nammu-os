@@ -43,6 +43,7 @@ const routeSamples: Readonly<Record<string, string>> = {
   'music-lyrics': '/api/music/lyrics',
   'music-sponsorblock': '/api/music/sponsorblock',
   'subdomain-inspector': '/api/tools/subdomains',
+  'official-store-package': '/api/app-store/packages/os.nammu.notes/1.0.0',
   trpc: '/api/trpc/example.query',
 };
 
@@ -126,11 +127,13 @@ describe('desktop route policy', () => {
       'music-lyrics',
       'music-sponsorblock',
       'subdomain-inspector',
+      'official-store-package',
     ]);
     expect(
       desktopRoutePolicy.filter((entry) => entry.enabled).every((entry) => entry.execution),
     ).toBe(true);
     expect(classifyDesktopRoute('/api/maps/search')?.execution).toBe(DesktopRouteExecution.NEXT);
     expect(classifyDesktopRoute('/api/preferences')?.execution).toBe(DesktopRouteExecution.LOCAL);
+    expect(classifyDesktopRoute('/api/app-store/packages/evil%2Fid/1.0.0')).toBeNull();
   });
 });

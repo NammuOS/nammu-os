@@ -309,6 +309,14 @@ export const desktopRoutePolicy = Object.freeze([
     true,
     DesktopRouteExecution.NEXT,
   ),
+  route(
+    'official-store-package',
+    /^\/api\/app-store\/packages\/[A-Za-z0-9.-]+\/[0-9A-Za-z.-]+$/,
+    DesktopRouteClass.LOCAL_AUTHENTICATED,
+    ['GET'],
+    true,
+    DesktopRouteExecution.NEXT,
+  ),
   route('trpc', /^\/api\/trpc(?:\/.*)?$/, DesktopRouteClass.WEB_ONLY, ['GET', 'POST']),
 ]);
 

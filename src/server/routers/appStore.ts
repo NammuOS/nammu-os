@@ -1,117 +1,94 @@
-import { router, publicProcedure, protectedProcedure } from '../trpc';
+import { router, publicProcedure } from '../trpc';
 import { z } from 'zod';
+import { OFFICIAL_NAMMU_REGISTRY } from '@/platform/store/storeRegistry';
 
-const NAMMU_APP_STORE_REPO = 'https://apps.umbrel.com/api/v3/umbrelos/app-store';
-
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 10000): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-async function fetchAppRegistry(): Promise<{ meta: { id: string; name: string }; apps: any[] }[]> {
-  try {
-    const response = await fetchWithTimeout(`${NAMMU_APP_STORE_REPO}/index.json`);
-    if (!response.ok) throw new Error(`Failed to fetch registry: ${response.status}`);
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Failed to fetch app registry:', error);
-    return [];
-  }
-}
-
-async function fetchStorefront(): Promise<any> {
-  try {
-    const response = await fetchWithTimeout(`${NAMMU_APP_STORE_REPO}/storefront.json`);
-    if (!response.ok) throw new Error(`Failed to fetch storefront: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.error('Failed to fetch storefront:', error);
-    return null;
-  }
-}
-
-async function fetchAppReleases(appId: string): Promise<any[]> {
-  try {
-    const response = await fetchWithTimeout(`${NAMMU_APP_STORE_REPO}/apps/${appId}/releases.json`);
-    if (!response.ok) throw new Error(`Failed to fetch releases: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.error(`Failed to fetch releases for ${appId}:`, error);
-    return [];
-  }
-}
+const apps = OFFICIAL_NAMMU_REGISTRY.apps;
+const legacyCompatibleApps = apps.map((app) => ({
+  manifestVersion: '1',
+  id: app.id,
+  name: app.name,
+  tagline: app.tagline,
+  icon: app.icon,
+  category: app.category.toLowerCase(),
+  version: app.release.version,
+  description: app.description,
+  website: app.repository,
+  developer: app.developer,
+  repo: app.repository,
+  support: app.repository,
+  gallery: app.screenshots,
+  releaseNotes: app.release.releaseNotes,
+  permissions: app.permissions,
+  installSize: app.release.size,
+  appStoreId: OFFICIAL_NAMMU_REGISTRY.id,
+}));
 
 export const appStoreRouter = router({
-  registry: publicProcedure.query(async () => {
-    const registries = await fetchAppRegistry();
-    return registries;
-  }),
+  registry: publicProcedure.query(() => [
+    {
+      meta: { id: OFFICIAL_NAMMU_REGISTRY.id, name: OFFICIAL_NAMMU_REGISTRY.name },
+      apps: legacyCompatibleApps,
+    },
+  ]),
 
-  storefront: publicProcedure.query(async () => {
-    const storefront = await fetchStorefront();
-    return storefront;
-  }),
+  storefront: publicProcedure.query(() => ({
+    sections: [
+      {
+        id: 'official-applications',
+        type: 'app-list' as const,
+        title: 'Applications',
+        layout: 'grid' as const,
+        appIds: apps.map((app) => app.id),
+      },
+    ],
+    categories: [{ id: 'productivity', featuredAppIds: apps.map((app) => app.id) }],
+    apps: apps.map((app) => ({
+      id: app.id,
+      version: app.release.version,
+      createdAt: app.release.publishedAt,
+      updatedAt: app.release.publishedAt,
+    })),
+  })),
 
   appReleases: publicProcedure
-    .input(z.object({ appId: z.string() }))
-    .query(async ({ input }) => {
-      const releases = await fetchAppReleases(input.appId);
-      return releases;
+    .input(z.object({ appId: z.string().min(1).max(160) }))
+    .query(({ input }) => {
+      const app = apps.find((candidate) => candidate.id === input.appId);
+      return app
+        ? [
+            {
+              version: app.release.version,
+              date: app.release.publishedAt,
+              notes: app.release.releaseNotes,
+            },
+          ]
+        : [];
     }),
 
   app: publicProcedure
-    .input(z.object({ appId: z.string() }))
-    .query(async ({ input }) => {
-      const registries = await fetchAppRegistry();
-      for (const registry of registries) {
-        const app = registry.apps.find((a: any) => a.id === input.appId);
-        if (app) return app;
-      }
-      return null;
-    }),
+    .input(z.object({ appId: z.string().min(1).max(160) }))
+    .query(({ input }) => legacyCompatibleApps.find((app) => app.id === input.appId) ?? null),
 
   search: publicProcedure
-    .input(z.object({ query: z.string(), limit: z.number().optional() }))
-    .query(async ({ input }) => {
-      const registries = await fetchAppRegistry();
-      const allApps = registries.flatMap((r) => r.apps);
+    .input(
+      z.object({ query: z.string().max(200), limit: z.number().int().min(1).max(50).optional() }),
+    )
+    .query(({ input }) => {
       const query = input.query.toLowerCase().trim();
-      if (!query) return allApps.slice(0, input.limit || 20);
-
-      const results = allApps
-        .filter((app: any) =>
-          app.name.toLowerCase().includes(query) ||
-          app.tagline.toLowerCase().includes(query) ||
-          app.description.toLowerCase().includes(query) ||
-          app.category.toLowerCase().includes(query) ||
-          app.developer?.toString().toLowerCase().includes(query),
+      if (!query) return legacyCompatibleApps.slice(0, input.limit ?? 20);
+      return legacyCompatibleApps
+        .filter((app) =>
+          [app.name, app.tagline, app.description, app.category, app.developer].some((value) =>
+            value.toLowerCase().includes(query),
+          ),
         )
-        .sort((a: any, b: any) => {
-          const aName = a.name.toLowerCase().startsWith(query) ? 0 : 1;
-          const bName = b.name.toLowerCase().startsWith(query) ? 0 : 1;
-          return aName - bName;
-        });
-
-      return results.slice(0, input.limit || 20);
+        .slice(0, input.limit ?? 20);
     }),
 
-  categories: publicProcedure.query(async () => {
-    const registries = await fetchAppRegistry();
-    const allApps = registries.flatMap((r) => r.apps);
-    const categoryCounts: Record<string, number> = {};
-
-    for (const app of allApps) {
-      categoryCounts[app.category] = (categoryCounts[app.category] || 0) + 1;
-    }
-
-    return Object.entries(categoryCounts)
-      .map(([id, count]) => ({ id, count }))
-      .sort((a, b) => b.count - a.count);
-  }),
+  categories: publicProcedure.query(() =>
+    Array.from(new Set(apps.map((app) => app.category))).map((id) => ({
+      id: id.toLowerCase(),
+      count: apps.filter((app) => app.category === id).length,
+    })),
+  ),
 });

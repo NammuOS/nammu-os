@@ -1,6 +1,5 @@
-import Category from '@/features/app-store/components/category';
-import { ErrorBoundaryCardFallback } from '@/components/ui/error-boundary-card-fallback';
+import AppStoreApp from '@/components/app-store/AppStoreApp';
 
-export default function CategoryPage({ params }: { params: Promise<{ categoryId: string }> }) {
-  return <Category />;
+export default function AppStoreCategoryPage() {
+  return <AppStoreApp />;
 }

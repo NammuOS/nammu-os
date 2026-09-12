@@ -50,6 +50,7 @@ next-env.d.ts
 
 # Local design/capability donor checkouts (not product source)
 umbrel/
+AppStore Reference/
 
 # Local rendered UI review artifacts
 .codex-edge-*/

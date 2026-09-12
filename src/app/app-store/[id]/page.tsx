@@ -1,6 +1,6 @@
-import AppPage from '@/features/app-store/components/app-page';
-import { ErrorBoundaryCardFallback } from '@/components/ui/error-boundary-card-fallback';
+import AppStoreApp from '@/components/app-store/AppStoreApp';
 
-export default function AppPageRoute({ params }: { params: Promise<{ id: string }> }) {
-  return <AppPage />;
+export default async function AppStoreDetailsPage({ params }: PageProps<'/app-store/[id]'>) {
+  const { id } = await params;
+  return <AppStoreApp initialAppId={id} />;
 }

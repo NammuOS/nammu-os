@@ -1,6 +1,5 @@
-// The app store layout provides all necessary providers
-// This page is intentionally minimal - the layout renders the actual content
+import AppStoreApp from '@/components/app-store/AppStoreApp';
 
 export default function AppStorePage() {
-  return null;
+  return <AppStoreApp />;
 }
