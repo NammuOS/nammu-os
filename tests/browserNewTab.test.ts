@@ -40,7 +40,7 @@ describe('Nammu Browser new tab workspace', () => {
     );
 
     expect(browserSource).toContain(
-      'className="nammu-glass-dialog-backdrop absolute inset-0 z-[86] grid place-items-center p-4"',
+      'className="nammu-glass-dialog-backdrop absolute inset-0 z-86 grid place-items-center p-4"',
     );
     expect(newTabStyles).toContain('transform: translateZ(0)');
   });
