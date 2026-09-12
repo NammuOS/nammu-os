@@ -81,8 +81,6 @@ export default function MatrixWallpaper({ variant, settings }: MatrixWallpaperPr
     let timer = 0;
     let resizeFrame = 0;
     let lastFrame = performance.now();
-    let lastWindowActivityCheck = 0;
-    let hasVisibleApplicationWindow = false;
     let documentVisible = document.visibilityState === 'visible';
     let reducedMotion = shouldReduceMotion();
 
@@ -133,20 +131,11 @@ export default function MatrixWallpaper({ variant, settings }: MatrixWallpaperPr
       }
 
       const now = performance.now();
-      if (now - lastWindowActivityCheck >= 1_000) {
-        hasVisibleApplicationWindow = Boolean(
-          document.querySelector('.os-window-chrome:not([aria-hidden="true"])'),
-        );
-        lastWindowActivityCheck = now;
-      }
-
       const frameInterval = reducedMotion
-        ? 250
-        : hasVisibleApplicationWindow
-          ? 125
-          : variant === 'synth-rain'
-            ? 50
-            : 42;
+        ? 200
+        : variant === 'synth-rain'
+          ? 33
+          : 25;
       const elapsed = Math.min(250, Math.max(1, now - lastFrame));
       const currentSettings = settingsRef.current;
       if (renderedFontSize !== currentSettings.size) resetColumns();

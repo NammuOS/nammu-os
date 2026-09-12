@@ -1849,8 +1849,6 @@ export default function BrowserApp() {
     contextMenu.isOpen ||
     Boolean(bookmarkDraft) ||
     bookmarkDeleteAllPending;
-  const browserContentTop = 60 + (showBookmarksBar && bookmarks.length > 0 ? 24 : 0);
-  const browserContentRight = sidePanel === 'none' ? 0 : 320;
 
   return (
     <div
@@ -2075,7 +2073,7 @@ export default function BrowserApp() {
             sidePanel === 'proxy'
               ? 'border-electric/50 bg-electric/15 text-[#a0d2ff]'
               : effectiveProxyConnection
-                ? 'border-[#2ee6a6]/45 bg-[#2ee6a6]/10 text-[#61e8b8]'
+                ? 'border-emerald/45 bg-emerald/10 text-[#61e8b8]'
                 : 'border-white/6 text-[#8fa5b8] hover:bg-white/4 hover:text-[#d6e5f0]'
           }`}
           title={
@@ -2087,7 +2085,7 @@ export default function BrowserApp() {
         >
           <Network size={11} />
           {effectiveProxyConnection && (
-            <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-[#2ee6a6] shadow-[0_0_5px_#2ee6a6]" />
+            <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-emerald shadow-[0_0_5px_#2ee6a6]" />
           )}
         </button>
 
@@ -2345,6 +2343,134 @@ export default function BrowserApp() {
               />
             )}
           </div>
+
+          {bookmarkDraft && (
+            <div
+              className="nammu-glass-dialog-backdrop absolute inset-0 z-85 grid place-items-center p-4"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.currentTarget === event.target) setBookmarkDraft(null);
+              }}
+            >
+              <form
+                onSubmit={saveBookmarkDraft}
+                className="nammu-glass-dialog w-full max-w-sm rounded-2xl p-4"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <strong className="block text-[12px] font-semibold text-white">
+                      Edit bookmark
+                    </strong>
+                    <span className="text-[8.5px] text-[#71889b]">
+                      Update its name, address or group.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBookmarkDraft(null)}
+                    className="grid h-7 w-7 place-items-center rounded-lg text-[#71889b] hover:bg-white/8 hover:text-white"
+                    aria-label="Close bookmark editor"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                <div className="grid gap-2.5">
+                  {[
+                    { key: 'title' as const, label: 'Name', placeholder: 'Bookmark name' },
+                    { key: 'url' as const, label: 'Address', placeholder: 'https://example.com' },
+                    { key: 'group' as const, label: 'Group', placeholder: 'Optional group' },
+                  ].map((field) => (
+                    <label key={field.key} className="grid gap-1">
+                      <span className="text-[8px] font-medium uppercase tracking-[0.12em] text-[#71889b]">
+                        {field.label}
+                      </span>
+                      <input
+                        value={bookmarkDraft[field.key]}
+                        onChange={(event) =>
+                          setBookmarkDraft((current) =>
+                            current
+                              ? { ...current, [field.key]: event.target.value, error: '' }
+                              : current,
+                          )
+                        }
+                        placeholder={field.placeholder}
+                        className="h-8 rounded-lg border border-white/9 bg-white/5 px-2.5 text-[10px] text-white outline-none placeholder:text-[#52697b] focus:border-white/20"
+                        autoFocus={field.key === 'title'}
+                      />
+                    </label>
+                  ))}
+                </div>
+                {bookmarkDraft.error && (
+                  <p className="mt-2 text-[8.5px] text-[#ff9a9a]">{bookmarkDraft.error}</p>
+                )}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBookmarkDraft(null)}
+                    className="h-7 rounded-lg px-3 text-[9px] text-[#91a5b6] hover:bg-white/6 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="h-7 rounded-lg border border-white/13 bg-white/10 px-3 text-[9px] font-medium text-white hover:bg-white/15"
+                  >
+                    Save changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {bookmarkDeleteAllPending && (
+            <div
+              className="nammu-glass-dialog-backdrop absolute inset-0 z-86 grid place-items-center p-4"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.currentTarget === event.target) setBookmarkDeleteAllPending(false);
+              }}
+            >
+              <section
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="delete-all-bookmarks-title"
+                className="nammu-glass-dialog w-full max-w-xs rounded-2xl p-4"
+              >
+                <span className="mb-3 grid h-8 w-8 place-items-center rounded-xl border border-[#ff7777]/15 bg-[#ff6464]/8 text-[#ff9999]">
+                  <Trash2 size={14} />
+                </span>
+                <strong id="delete-all-bookmarks-title" className="block text-[12px] text-white">
+                  Delete all bookmarks?
+                </strong>
+                <p className="mt-1 text-[9px] leading-relaxed text-[#8196a8]">
+                  This will permanently remove all {bookmarks.length} saved bookmarks from Nammu
+                  Browser. This action cannot be undone.
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBookmarkDeleteAllPending(false)}
+                    className="h-7 rounded-lg px-3 text-[9px] text-[#91a5b6] hover:bg-white/6 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const deletedCount = bookmarks.length;
+                      setBookmarks([]);
+                      saveStoredBookmarks([]);
+                      setBookmarkDeleteAllPending(false);
+                      setBookmarkTransferStatus(`Deleted ${deletedCount} bookmarks`);
+                    }}
+                    className="h-7 rounded-lg border border-[#ff7777]/20 bg-[#ff6464]/10 px-3 text-[9px] font-medium text-[#ffaaaa] hover:bg-[#ff6464]/18 hover:text-white"
+                  >
+                    Delete all
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
         </div>
 
         {/* 5. Side Panels (Proxy Manager, DevTools, History, Bookmarks) */}
@@ -2829,135 +2955,7 @@ export default function BrowserApp() {
         )}
       </div>
 
-      {bookmarkDraft && (
-        <div
-          className="nammu-glass-dialog-backdrop absolute inset-x-0 bottom-0 z-[85] grid place-items-center p-4"
-          style={{ top: browserContentTop, right: browserContentRight }}
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setBookmarkDraft(null);
-          }}
-        >
-          <form
-            onSubmit={saveBookmarkDraft}
-            className="nammu-glass-dialog w-full max-w-sm rounded-2xl p-4"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <strong className="block text-[12px] font-semibold text-white">
-                  Edit bookmark
-                </strong>
-                <span className="text-[8.5px] text-[#71889b]">
-                  Update its name, address or group.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBookmarkDraft(null)}
-                className="grid h-7 w-7 place-items-center rounded-lg text-[#71889b] hover:bg-white/8 hover:text-white"
-                aria-label="Close bookmark editor"
-              >
-                <X size={12} />
-              </button>
-            </div>
-            <div className="grid gap-2.5">
-              {[
-                { key: 'title' as const, label: 'Name', placeholder: 'Bookmark name' },
-                { key: 'url' as const, label: 'Address', placeholder: 'https://example.com' },
-                { key: 'group' as const, label: 'Group', placeholder: 'Optional group' },
-              ].map((field) => (
-                <label key={field.key} className="grid gap-1">
-                  <span className="text-[8px] font-medium uppercase tracking-[0.12em] text-[#71889b]">
-                    {field.label}
-                  </span>
-                  <input
-                    value={bookmarkDraft[field.key]}
-                    onChange={(event) =>
-                      setBookmarkDraft((current) =>
-                        current
-                          ? { ...current, [field.key]: event.target.value, error: '' }
-                          : current,
-                      )
-                    }
-                    placeholder={field.placeholder}
-                    className="h-8 rounded-lg border border-white/9 bg-white/5 px-2.5 text-[10px] text-white outline-none placeholder:text-[#52697b] focus:border-white/20"
-                    autoFocus={field.key === 'title'}
-                  />
-                </label>
-              ))}
-            </div>
-            {bookmarkDraft.error && (
-              <p className="mt-2 text-[8.5px] text-[#ff9a9a]">{bookmarkDraft.error}</p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setBookmarkDraft(null)}
-                className="h-7 rounded-lg px-3 text-[9px] text-[#91a5b6] hover:bg-white/6 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="h-7 rounded-lg border border-white/13 bg-white/10 px-3 text-[9px] font-medium text-white hover:bg-white/15"
-              >
-                Save changes
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
-      {bookmarkDeleteAllPending && (
-        <div
-          className="nammu-glass-dialog-backdrop absolute inset-x-0 bottom-0 z-[86] grid place-items-center p-4"
-          style={{ top: browserContentTop, right: browserContentRight }}
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setBookmarkDeleteAllPending(false);
-          }}
-        >
-          <section
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="delete-all-bookmarks-title"
-            className="nammu-glass-dialog w-full max-w-xs rounded-2xl p-4"
-          >
-            <span className="mb-3 grid h-8 w-8 place-items-center rounded-xl border border-[#ff7777]/15 bg-[#ff6464]/8 text-[#ff9999]">
-              <Trash2 size={14} />
-            </span>
-            <strong id="delete-all-bookmarks-title" className="block text-[12px] text-white">
-              Delete all bookmarks?
-            </strong>
-            <p className="mt-1 text-[9px] leading-relaxed text-[#8196a8]">
-              This will permanently remove all {bookmarks.length} saved bookmarks from Nammu
-              Browser. This action cannot be undone.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setBookmarkDeleteAllPending(false)}
-                className="h-7 rounded-lg px-3 text-[9px] text-[#91a5b6] hover:bg-white/6 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const deletedCount = bookmarks.length;
-                  setBookmarks([]);
-                  saveStoredBookmarks([]);
-                  setBookmarkDeleteAllPending(false);
-                  setBookmarkTransferStatus(`Deleted ${deletedCount} bookmarks`);
-                }}
-                className="h-7 rounded-lg border border-[#ff7777]/20 bg-[#ff6464]/10 px-3 text-[9px] font-medium text-[#ffaaaa] hover:bg-[#ff6464]/18 hover:text-white"
-              >
-                Delete all
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
 
       {/* 6. Optimized In-Browser Context Menu */}
       {contextMenu.isOpen && (

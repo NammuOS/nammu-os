@@ -117,6 +117,7 @@ button {
 .nammu-glass-dialog-backdrop {
   background: rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(7px) saturate(112%);
+  -webkit-backdrop-filter: blur(7px) saturate(112%);
 }
 
 .nammu-glass-dialog {
