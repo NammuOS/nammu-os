@@ -41,6 +41,7 @@ export interface SandboxContext {
   instanceNonce?: string;
   grantedPermissions: Set<PermissionIdentifier>;
   requestedPermissions: Set<PermissionIdentifier>;
+  legacyStorageKeys?: Set<string>;
   scopedVfs: ScopedVFS;
   postMessage?: (msg: IPCResponse | IPCEventNotification) => void;
 }
@@ -60,6 +61,15 @@ export interface HostServices {
   onPermissionGranted?: (appId: string, permission: PermissionIdentifier) => void | Promise<void>;
   onAppReady?: (instanceId: string, appId: string) => void | Promise<void>;
   onEmitEvent?: (eventName: string, payload: any) => void;
+  onClipboardReadText?: () => Promise<string>;
+  onClipboardWriteText?: (text: string) => Promise<void>;
+  onSaveTextFile?: (
+    suggestedName: string,
+    content: string,
+    mimeType: string,
+  ) => Promise<{ saved: boolean; fileName?: string }>;
+  onLegacyStorageRead?: (key: string) => Promise<string | null>;
+  onLegacyStorageComplete?: (key: string) => Promise<void>;
 }
 
 export class CapabilityBroker {
@@ -147,11 +157,67 @@ export class CapabilityBroker {
         return this.handleFiles(context, action, params);
       case 'events':
         return this.handleEvents(context, action, params);
+      case 'clipboard':
+        return this.handleClipboard(context, action, params);
+      case 'migration':
+        return this.handleMigration(context, action, params);
       default:
         throw {
           code: 'INVALID_METHOD',
           message: `Unknown subsystem or method: ${method}`,
         };
+    }
+  }
+
+  private async handleMigration(context: SandboxContext, action: string, params: any) {
+    this.assertPermission(context, 'migration.legacy-storage');
+    const key = String(params.key ?? '');
+    if (!key || !context.legacyStorageKeys?.has(key)) {
+      throw { code: 'INVALID_INPUT', message: 'Legacy storage key is not declared by this app.' };
+    }
+    if (action === 'readLegacyStorage') {
+      if (!this.hostServices.onLegacyStorageRead) {
+        throw { code: 'UNAVAILABLE', message: 'Legacy storage migration is unavailable.' };
+      }
+      return { value: await this.hostServices.onLegacyStorageRead(key) };
+    }
+    if (action === 'completeLegacyStorage') {
+      if (!this.hostServices.onLegacyStorageComplete) {
+        throw { code: 'UNAVAILABLE', message: 'Legacy storage migration is unavailable.' };
+      }
+      await this.hostServices.onLegacyStorageComplete(key);
+      return { completed: true };
+    }
+    throw { code: 'INVALID_METHOD', message: `Unknown migration action: ${action}` };
+  }
+
+  private async handleClipboard(
+    context: SandboxContext,
+    action: string,
+    params: any,
+  ): Promise<any> {
+    switch (action) {
+      case 'readText': {
+        this.assertPermission(context, 'clipboard.read');
+        if (!this.hostServices.onClipboardReadText) {
+          throw { code: 'UNAVAILABLE', message: 'Text clipboard reading is unavailable.' };
+        }
+        return { text: await this.hostServices.onClipboardReadText() };
+      }
+      case 'writeText': {
+        this.assertPermission(context, 'clipboard.write');
+        const text = String(params.text ?? '');
+        if (new TextEncoder().encode(text).byteLength > 1024 * 1024) {
+          throw { code: 'INVALID_INPUT', message: 'Clipboard text exceeds the 1 MiB limit.' };
+        }
+        if (!this.hostServices.onClipboardWriteText) {
+          throw { code: 'UNAVAILABLE', message: 'Text clipboard writing is unavailable.' };
+        }
+        await this.hostServices.onClipboardWriteText(text);
+        return { written: true };
+      }
+      default:
+        throw { code: 'INVALID_METHOD', message: `Unknown clipboard action: ${action}` };
     }
   }
 
@@ -298,6 +364,26 @@ export class CapabilityBroker {
         this.assertPermission(context, 'filesystem.appdata.read');
         const files = await context.scopedVfs.listUserData(path);
         return { files };
+      }
+      case 'saveText': {
+        this.assertPermission(context, 'filesystem.user-selected.write');
+        const suggestedName = String(params.suggestedName ?? 'document.txt');
+        const content = String(params.content ?? '');
+        const mimeType = String(params.mimeType ?? 'text/plain');
+        const hasUnsafeCharacter = Array.from(suggestedName).some((character) => {
+          const code = character.charCodeAt(0);
+          return code <= 0x1f || '\\/:*?"<>|'.includes(character);
+        });
+        if (!suggestedName || suggestedName.length > 160 || hasUnsafeCharacter) {
+          throw { code: 'INVALID_INPUT', message: 'A safe suggested file name is required.' };
+        }
+        if (new TextEncoder().encode(content).byteLength > 10 * 1024 * 1024) {
+          throw { code: 'INVALID_INPUT', message: 'Text export exceeds the 10 MiB limit.' };
+        }
+        if (!this.hostServices.onSaveTextFile) {
+          throw { code: 'UNAVAILABLE', message: 'Saving a user-selected file is unavailable.' };
+        }
+        return this.hostServices.onSaveTextFile(suggestedName, content, mimeType);
       }
       default:
         throw { code: 'INVALID_METHOD', message: `Unknown files action: ${action}` };

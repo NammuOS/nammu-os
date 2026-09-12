@@ -44,6 +44,8 @@
     "nmu:sandbox:accept": "node scripts/accept-nmu-sandbox.mjs",
     "nmu:release:accept": "bun scripts/accept-nmu-release-signing.ts",
     "nmu:release:sign": "bun scripts/sign-nammu-release.ts",
+    "notes:package:accept": "bun scripts/accept-nammu-notes-package.ts",
+    "notes:sandbox:accept": "node scripts/accept-nammu-notes-sandbox.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests src/server/services/cloudProviderContracts.test.ts src/server/services/uploadTicketService.test.ts",
     "db:generate": "drizzle-kit generate",

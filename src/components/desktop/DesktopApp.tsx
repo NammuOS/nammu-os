@@ -12,6 +12,7 @@ import Rail from '../os/Rail';
 import ContextMenu from '../context-menu/ContextMenu';
 import { ContextMenuProvider } from '../context-menu/contextMenuStore';
 import { SystemAppContent } from '../os/SystemApps';
+import { AppSandboxHost } from '../os/sandbox/AppSandboxHost';
 import { findSystemApp, findSystemAppByWindowId, type SystemAppId } from '../os/systemAppRegistry';
 import { findToolById, findToolsByFileType } from '../../lib/toolRegistry';
 import { Music } from '../os/Music';
@@ -20,6 +21,7 @@ import LockScreen from '../os/LockScreen';
 import { OS_LOCK_STATE_KEY, getStoredLockState, saveLockState } from '../../lib/osLock';
 import { applyIconSettings } from '../../lib/iconSettings';
 import { getPlatformCapabilities } from '../../platform';
+import { getNMUDatabase } from '../../platform/nmu/nmuDatabase';
 import { NAMMU_OPEN_DOCUMENT_EVENT, type NammuOpenDocumentDetail } from '../../lib/appLaunch';
 import { getSavedWallpaper, getWallpaperAccent } from '../../lib/wallpapers';
 import {
@@ -176,6 +178,28 @@ export default function DesktopApp() {
     },
     [focusWindow, minimizeWindow, musicOpen, openWindow, restoreWindow, windows],
   );
+
+  useEffect(() => {
+    const handleOpenInstalledApp = (event: Event) => {
+      const appId = (event as CustomEvent<{ appId?: unknown }>).detail?.appId;
+      if (typeof appId !== 'string' || !appId.trim()) return;
+      const toolId = `app:${appId}`;
+      const existing = windows.find((windowState) => windowState.toolId === toolId);
+      if (existing) {
+        if (existing.isMinimized) restoreWindow(existing.id);
+        else focusWindow(existing.id);
+        return;
+      }
+      void getNMUDatabase()
+        .getApp(appId)
+        .then((record) => {
+          if (!record || record.state === 'Disabled') return;
+          openWindow(toolId, record.name, undefined, musicOpen ? 292 : 0);
+        });
+    };
+    window.addEventListener('nammu-open-app', handleOpenInstalledApp);
+    return () => window.removeEventListener('nammu-open-app', handleOpenInstalledApp);
+  }, [focusWindow, musicOpen, openWindow, restoreWindow, windows]);
 
   useEffect(() => {
     const handleOpenDocument = (event: Event) => {
@@ -534,8 +558,9 @@ export default function DesktopApp() {
         {windows.map((win) => {
           const tool = findToolById(win.toolId);
           const systemApp = findSystemAppByWindowId(win.toolId);
+          const installedAppId = win.toolId.startsWith('app:') ? win.toolId.slice(4) : null;
           const Component = tool ? TOOL_COMPONENTS[tool.component] : null;
-          if (!Component && !systemApp) return null;
+          if (!Component && !systemApp && !installedAppId) return null;
           return (
             <Window
               key={win.id}
@@ -552,7 +577,14 @@ export default function DesktopApp() {
                 launcherOpen || startMenuOpen || taskbarFlyoutOpen || railRevealed
               }
             >
-              {systemApp ? (
+              {installedAppId ? (
+                <AppSandboxHost
+                  appId={installedAppId}
+                  windowId={win.id}
+                  title={win.title}
+                  onClose={() => closeWindow(win.id)}
+                />
+              ) : systemApp ? (
                 <SystemAppContent appId={systemApp.id} initialData={win.data} />
               ) : Component ? (
                 <Suspense

@@ -54,6 +54,7 @@ function asVersionRecord(record: InstalledAppRecord): InstalledVersionRecord {
     installedAt: record.lastUpdatedAt,
     signatureVerified: record.signatureVerified,
     isOfficial: record.isOfficial,
+    legacyStorageKeys: record.legacyStorageKeys ? [...record.legacyStorageKeys] : undefined,
   };
 }
 
@@ -131,6 +132,7 @@ export class NMUEngine {
     manifest: NammuAppManifest,
     approved: PermissionIdentifier[] = [],
     existing: PermissionIdentifier[] = [],
+    isOfficial = false,
   ) {
     const approvedSet = new Set(approved);
     const existingSet = new Set(existing);
@@ -138,6 +140,7 @@ export class NMUEngine {
       (permission) =>
         existingSet.has(permission) ||
         SAFE_PERMISSIONS.has(permission) ||
+        (permission === 'migration.legacy-storage' && isOfficial) ||
         approvedSet.has(permission),
     );
   }
@@ -184,6 +187,11 @@ export class NMUEngine {
       );
     const manifest = validation.manifest;
     const trust = await this.verifyTrust(manifest, unpacked.files, unpacked.signature, 'install');
+    if (manifest.legacyStorageKeys?.length && !trust.isOfficial) {
+      throw new Error(
+        '[nmu install] Legacy Core storage migration is restricted to official packages.',
+      );
+    }
     const existing = await this.db.getApp(manifest.id);
     if (existing) {
       if (compareSemver(manifest.version, existing.version) > 0)
@@ -211,13 +219,19 @@ export class NMUEngine {
       publisherKeyId: trust.verified ? trust.keyId : undefined,
       dataSchemaVersion: manifest.dataSchemaVersion,
       requestedPermissions: [...manifest.permissions],
-      grantedPermissions: this.grantedPermissions(manifest, options.approvedPermissions),
+      grantedPermissions: this.grantedPermissions(
+        manifest,
+        options.approvedPermissions,
+        [],
+        trust.isOfficial,
+      ),
       state: 'Installed',
       activeVersion: manifest.version,
       activeVersionDir: dir,
       installedSize: packageBytes.length,
       signatureVerified: trust.verified,
       isOfficial: trust.isOfficial,
+      legacyStorageKeys: manifest.legacyStorageKeys ? [...manifest.legacyStorageKeys] : undefined,
     };
     const pointer = this.pointerFor(record);
     await this.db.saveVersion(asVersionRecord(record));
@@ -254,6 +268,11 @@ export class NMUEngine {
       );
     }
     const trust = await this.verifyTrust(manifest, unpacked.files, unpacked.signature, 'update');
+    if (manifest.legacyStorageKeys?.length && !trust.isOfficial) {
+      throw new Error(
+        '[nmu update] Legacy Core storage migration is restricted to official packages.',
+      );
+    }
     this.assertSignerContinuity(existing, trust, 'update');
     const dir = await this.writeImmutableVersion(appId, manifest.version, unpacked.files);
     const snapshot =
@@ -277,6 +296,7 @@ export class NMUEngine {
         manifest,
         options.approvedPermissions,
         existing.grantedPermissions,
+        trust.isOfficial,
       ),
       activeVersion: manifest.version,
       activeVersionDir: dir,
@@ -285,6 +305,7 @@ export class NMUEngine {
       signatureVerified: trust.verified,
       isOfficial: trust.isOfficial,
       installedSize: packageBytes.length,
+      legacyStorageKeys: manifest.legacyStorageKeys ? [...manifest.legacyStorageKeys] : undefined,
     };
     const previousPointer =
       (await this.vfs.getActiveAppVersion(appId)) ?? this.pointerFor(existing);

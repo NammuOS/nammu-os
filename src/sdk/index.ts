@@ -39,6 +39,21 @@ export interface FilesApi {
   writeText(path: string, content: string): Promise<{ written: boolean }>;
   delete(path: string): Promise<{ deleted: boolean }>;
   list(path?: string): Promise<string[]>;
+  saveText(
+    suggestedName: string,
+    content: string,
+    mimeType?: string,
+  ): Promise<{ saved: boolean; fileName?: string }>;
+}
+
+export interface ClipboardApi {
+  readText(): Promise<string>;
+  writeText(text: string): Promise<{ written: boolean }>;
+}
+
+export interface MigrationApi {
+  readLegacyStorage(key: string): Promise<string | null>;
+  completeLegacyStorage(key: string): Promise<{ completed: boolean }>;
 }
 
 export interface EventsApi {
@@ -54,6 +69,8 @@ export interface NammuApp {
   readonly notifications: NotificationsApi;
   readonly permissions: PermissionsApi;
   readonly files: FilesApi;
+  readonly clipboard: ClipboardApi;
+  readonly migration: MigrationApi;
   readonly events: EventsApi;
   ready(): Promise<{ ready: boolean }>;
 }
@@ -91,6 +108,8 @@ export class NammuSDKClient implements NammuApp {
   readonly notifications: NotificationsApi;
   readonly permissions: PermissionsApi;
   readonly files: FilesApi;
+  readonly clipboard: ClipboardApi;
+  readonly migration: MigrationApi;
   readonly events: EventsApi;
 
   constructor(options: SDKInitOptions = {}) {
@@ -149,6 +168,24 @@ export class NammuSDKClient implements NammuApp {
         const res = await this.call('files.list', { path });
         return res?.files || [];
       },
+      saveText: (suggestedName, content, mimeType = 'text/plain') =>
+        this.call('files.saveText', { suggestedName, content, mimeType }),
+    };
+
+    this.clipboard = {
+      readText: async () => {
+        const result = await this.call('clipboard.readText', {});
+        return result?.text ?? '';
+      },
+      writeText: (text) => this.call('clipboard.writeText', { text }),
+    };
+
+    this.migration = {
+      readLegacyStorage: async (key) => {
+        const result = await this.call('migration.readLegacyStorage', { key });
+        return result?.value ?? null;
+      },
+      completeLegacyStorage: (key) => this.call('migration.completeLegacyStorage', { key }),
     };
 
     this.events = {

@@ -1,10 +1,11 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { Suspense, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Minus, Square, X } from 'lucide-react';
 import { findToolById } from '../../lib/toolRegistry';
 import { SYSTEM_APPS } from '../os/systemAppRegistry';
 import { SystemAppContent } from '../os/SystemApps';
+import { AppSandboxHost } from '../os/sandbox/AppSandboxHost';
 import ContextMenu from '../context-menu/ContextMenu';
 import { ContextMenuProvider } from '../context-menu/contextMenuStore';
 import { TOOL_COMPONENTS } from './toolComponents';
@@ -29,8 +30,10 @@ const getServerReadySnapshot = () => false;
 export default function StandaloneWindowContent({ kind, id }: StandaloneWindowContentProps) {
   const systemApp = kind === 'app' ? SYSTEM_APPS.find((app) => app.id === id) : undefined;
   const tool = kind === 'tool' ? findToolById(id) : undefined;
+  const installedAppId = kind === 'app' && id.includes('.') ? id : undefined;
   const ToolComponent = tool ? TOOL_COMPONENTS[tool.component] : undefined;
-  const title = systemApp?.title || tool?.name || 'Unavailable';
+  const [installedTitle, setInstalledTitle] = useState('Application');
+  const title = systemApp?.title || tool?.name || (installedAppId ? installedTitle : 'Unavailable');
   const platform = useMemo(() => getPlatformCapabilities(), []);
   const safeArea = useMemo(() => ({ left: 0, right: 0, top: 0, bottom: 0, margin: 6 }), []);
   const clientReady = useSyncExternalStore(
@@ -163,6 +166,14 @@ export default function StandaloneWindowContent({ kind, id }: StandaloneWindowCo
                 <span />
               </div>
             </div>
+          ) : installedAppId ? (
+            <AppSandboxHost
+              appId={installedAppId}
+              windowId={`standalone:${installedAppId}`}
+              title={title}
+              onTitleChange={setInstalledTitle}
+              onClose={() => void platform.window.close()}
+            />
           ) : systemApp ? (
             <SystemAppContent appId={systemApp.id} />
           ) : ToolComponent ? (

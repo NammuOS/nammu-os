@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import type { SystemAppId } from './systemAppRegistry';
+import { AppSandboxHost } from './sandbox/AppSandboxHost';
 
 const AIApp = lazy(() => import('./RailApps').then((module) => ({ default: module.AIApp })));
 const AppStoreApp = lazy(() => import('../app-store/AppStoreApp'));
@@ -13,7 +14,6 @@ const CalendarApp = lazy(() =>
 const CloudApp = lazy(() => import('../cloud/CloudApp'));
 const FilesApp = lazy(() => import('../files/FilesApp'));
 const MapApp = lazy(() => import('../maps/MapApp'));
-const NotesApp = lazy(() => import('./NotesApp').then((module) => ({ default: module.NotesApp })));
 const PdfApp = lazy(() => import('../pdf/PdfApp'));
 const ProjectsApp = lazy(() =>
   import('./ProjectsApp').then((module) => ({ default: module.ProjectsApp })),
@@ -211,7 +211,7 @@ export function SystemAppContent({
       content = <EditorApp />;
       break;
     case 'notes':
-      content = <NotesApp />;
+      content = <AppSandboxHost appId="os.nammu.notes" windowId="system:notes" title="Notes" />;
       break;
     case 'mail':
       content = <MailApp />;

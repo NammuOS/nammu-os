@@ -470,6 +470,24 @@ describe('Nammu Package Manager - Adversarial & Failure Injection Suite', () => 
         ).error?.code,
       ).toBe('UNDECLARED_PERMISSION');
     });
+
+    it('reserves declared legacy Core storage migration for verified official packages', async () => {
+      const unsigned = createHelloNammuPackage({
+        permissions: ['migration.legacy-storage'],
+        legacyStorageKeys: ['nammu-notes'],
+      });
+      await expect(nmu.install(unsigned)).rejects.toThrow(/restricted to official packages/);
+
+      const official = await createSignedHelloNammuPackage({
+        appId: 'os.nammu.notes',
+        name: 'Notes',
+        permissions: ['migration.legacy-storage'],
+        legacyStorageKeys: ['nammu-notes'],
+      });
+      const record = await nmu.install(official);
+      expect(record.grantedPermissions).toContain('migration.legacy-storage');
+      expect(record.legacyStorageKeys).toEqual(['nammu-notes']);
+    });
   });
 
   describe('9. Hardened Repair Verification', () => {

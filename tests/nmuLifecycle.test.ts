@@ -208,16 +208,30 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
       expect(replacementPort.posted).toHaveLength(0);
     });
 
-    it('materializes packaged scripts into the srcDoc and rejects remote script sources', async () => {
-      const html = '<html><head></head><body><script src="main.js"></script></body></html>';
+    it('materializes packaged scripts and styles into srcDoc while rejecting remote assets', async () => {
+      const html =
+        '<html><head><link rel="stylesheet" href="styles.css"></head><body><script src="main.js"></script></body></html>';
       const materialized = await materializeSandboxDocument(html, 'app/index.html', async (path) =>
-        path === 'app/main.js' ? 'window.referenceAppExecuted = true;' : '',
+        path === 'app/main.js'
+          ? 'window.referenceAppExecuted = true;'
+          : path === 'app/styles.css'
+            ? '.reference-app { color: orange; }'
+            : '',
       );
       expect(materialized).toContain('window.referenceAppExecuted = true;');
+      expect(materialized).toContain('.reference-app { color: orange; }');
       expect(materialized).not.toContain('src="main.js"');
+      expect(materialized).not.toContain('href="styles.css"');
       await expect(
         materializeSandboxDocument(
           '<script src="https://attacker.example/payload.js"></script>',
+          'app/index.html',
+          async () => '',
+        ),
+      ).rejects.toThrow(/External or absolute/);
+      await expect(
+        materializeSandboxDocument(
+          '<link href="https://attacker.example/payload.css" rel="stylesheet">',
           'app/index.html',
           async () => '',
         ),
@@ -233,6 +247,9 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
       let lastWindowTitle = '';
       let deliveredNotification: any = null;
       let appReadySignaled = false;
+      let clipboardText = '';
+      let savedTextFile: { suggestedName: string; content: string; mimeType: string } | null = null;
+      const legacyStorage = new Map([['nammu-notes', '[{"id":"legacy"}]']]);
 
       const broker = new CapabilityBroker({
         onWindowTitleChange: (_, __, title) => {
@@ -244,6 +261,17 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
         onAppReady: () => {
           appReadySignaled = true;
         },
+        onClipboardWriteText: async (text) => {
+          clipboardText = text;
+        },
+        onSaveTextFile: async (suggestedName, content, mimeType) => {
+          savedTextFile = { suggestedName, content, mimeType };
+          return { saved: true, fileName: suggestedName };
+        },
+        onLegacyStorageRead: async (key) => legacyStorage.get(key) ?? null,
+        onLegacyStorageComplete: async (key) => {
+          legacyStorage.delete(key);
+        },
       });
 
       const scopedVfs = vfs.createScopedVFS('dev.nammu.hello');
@@ -251,6 +279,9 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
         'notifications.send',
         'filesystem.appdata.read',
         'filesystem.appdata.write',
+        'clipboard.write',
+        'filesystem.user-selected.write',
+        'migration.legacy-storage',
       ]);
 
       // 3. Connect SDK client to CapabilityBroker via instance-keyed transport
@@ -265,6 +296,7 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
           ...grantedPermissions,
           'clipboard.read',
         ]),
+        legacyStorageKeys: new Set(['nammu-notes']),
         scopedVfs,
         postMessage: (msg) => {
           if (sdkMessageListener) sdkMessageListener(msg);
@@ -328,16 +360,37 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
       expect(readContent).toBe('Hello from isolated sandbox!');
       expect(await vfs.exists('/userdata/dev.nammu.hello/documents/welcome.txt')).toBe(true);
 
-      // (e) Permissions API: check granted vs ungranted
+      // (e) Explicit host capabilities: clipboard and user-selected save.
+      expect(await app.clipboard.writeText('A private note')).toEqual({ written: true });
+      expect(clipboardText).toBe('A private note');
+      expect(await app.files.saveText('note.md', '# Note', 'text/markdown')).toEqual({
+        saved: true,
+        fileName: 'note.md',
+      });
+      expect(
+        savedTextFile as { suggestedName: string; content: string; mimeType: string } | null,
+      ).toEqual({
+        suggestedName: 'note.md',
+        content: '# Note',
+        mimeType: 'text/markdown',
+      });
+      expect(await app.migration.readLegacyStorage('nammu-notes')).toBe('[{"id":"legacy"}]');
+      await app.migration.completeLegacyStorage('nammu-notes');
+      expect(legacyStorage.has('nammu-notes')).toBe(false);
+      await expect(app.migration.readLegacyStorage('other-app-data')).rejects.toThrow(
+        /not declared by this app/,
+      );
+
+      // (f) Permissions API: check granted vs ungranted
       expect(await app.permissions.check('notifications.send')).toBe(true);
       expect(await app.permissions.check('clipboard.read')).toBe(false);
 
-      // (f) Startup readiness signal
+      // (g) Startup readiness signal
       const readyRes = await app.ready();
       expect(readyRes.ready).toBe(true);
       expect(appReadySignaled).toBe(true);
 
-      // (g) Events API: namespaced event broadcast
+      // (h) Events API: namespaced event broadcast
       let receivedEventPayload: any = null;
       app.events.on('app.dev.nammu.hello.ping', (payload) => {
         receivedEventPayload = payload;

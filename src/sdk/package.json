@@ -1,0 +1,6 @@
+{
+  "name": "@nammu/sdk",
+  "version": "0.8.0",
+  "type": "module",
+  "exports": "./index.ts"
+}

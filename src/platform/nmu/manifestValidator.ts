@@ -133,14 +133,20 @@ export function validateNammuAppManifest(
 
   // 1. Manifest Specification Version
   if (obj.manifestVersion !== 1) {
-    errors.push(`Unsupported or missing manifestVersion: expected 1, got ${String(obj.manifestVersion)}`);
+    errors.push(
+      `Unsupported or missing manifestVersion: expected 1, got ${String(obj.manifestVersion)}`,
+    );
   }
 
   // 2. Application Identifier
   if (typeof obj.id !== 'string' || !APP_ID_REGEX.test(obj.id)) {
-    errors.push('Invalid application "id": must be a lowercase reverse-domain string (e.g. "dev.nammu.hello")');
+    errors.push(
+      'Invalid application "id": must be a lowercase reverse-domain string (e.g. "dev.nammu.hello")',
+    );
   } else if (obj.id.startsWith('os.nammu.') && !options.allowOfficialNamespace) {
-    errors.push('Reserved namespace violation: "os.nammu.*" is reserved for official signed packages');
+    errors.push(
+      'Reserved namespace violation: "os.nammu.*" is reserved for official signed packages',
+    );
   }
 
   // 3. Name
@@ -150,12 +156,16 @@ export function validateNammuAppManifest(
 
   // 4. Version
   if (typeof obj.version !== 'string' || !SEMVER_REGEX.test(obj.version)) {
-    errors.push('Invalid application "version": must follow Semantic Versioning 2.0.0 (e.g. "1.0.0")');
+    errors.push(
+      'Invalid application "version": must follow Semantic Versioning 2.0.0 (e.g. "1.0.0")',
+    );
   }
 
   // 5. Runtime Class
   if (typeof obj.runtime !== 'string' || !VALID_RUNTIMES.has(obj.runtime as RuntimeClass)) {
-    errors.push(`Invalid application "runtime": must be one of ${Array.from(VALID_RUNTIMES).join(', ')}`);
+    errors.push(
+      `Invalid application "runtime": must be one of ${Array.from(VALID_RUNTIMES).join(', ')}`,
+    );
   }
 
   // 6. Entry Path
@@ -170,7 +180,9 @@ export function validateNammuAppManifest(
       return code <= 0x1f || code === 0x7f;
     })
   ) {
-    errors.push('Invalid application "entry": must be a safe relative path within package without directory traversal');
+    errors.push(
+      'Invalid application "entry": must be a safe relative path within package without directory traversal',
+    );
   }
 
   // 7. Minimum NammuOS Core Version
@@ -200,7 +212,9 @@ export function validateNammuAppManifest(
       if (typeof perm !== 'string' || perm.trim().length === 0) {
         errors.push(`Invalid permission identifier: ${String(perm)}`);
       } else if (!KNOWN_PERMISSIONS.has(perm as PermissionIdentifier)) {
-        errors.push(`Unknown permission identifier "${perm}". Must be one of: ${Array.from(KNOWN_PERMISSIONS).join(', ')}`);
+        errors.push(
+          `Unknown permission identifier "${perm}". Must be one of: ${Array.from(KNOWN_PERMISSIONS).join(', ')}`,
+        );
       } else if (seenPerms.has(perm)) {
         errors.push(`Duplicate permission requested: "${perm}"`);
       }
@@ -236,7 +250,9 @@ export function validateNammuAppManifest(
           } else {
             for (const ext of c.extensions) {
               if (typeof ext !== 'string' || !ext.startsWith('.') || ext.length < 2) {
-                errors.push(`Invalid file extension "${ext}" in file-handler capability (must start with ".")`);
+                errors.push(
+                  `Invalid file extension "${ext}" in file-handler capability (must start with ".")`,
+                );
               }
             }
           }
@@ -275,6 +291,28 @@ export function validateNammuAppManifest(
 
   validateCapStrings('providesCapabilities', obj.providesCapabilities);
   validateCapStrings('optionalCapabilities', obj.optionalCapabilities);
+
+  if (obj.legacyStorageKeys !== undefined) {
+    if (!Array.isArray(obj.legacyStorageKeys) || obj.legacyStorageKeys.length > 8) {
+      errors.push('Field "legacyStorageKeys" must be an array containing at most 8 keys');
+    } else {
+      const seenKeys = new Set<string>();
+      for (const key of obj.legacyStorageKeys) {
+        if (typeof key !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,79}$/i.test(key)) {
+          errors.push(`Invalid legacy storage key: "${String(key)}"`);
+        } else if (seenKeys.has(key)) {
+          errors.push(`Duplicate legacy storage key: "${key}"`);
+        }
+        seenKeys.add(String(key));
+      }
+      if (
+        obj.legacyStorageKeys.length > 0 &&
+        (!Array.isArray(obj.permissions) || !obj.permissions.includes('migration.legacy-storage'))
+      ) {
+        errors.push('legacyStorageKeys requires the "migration.legacy-storage" permission');
+      }
+    }
+  }
 
   // 12. Publisher & Key Consistency
   if (typeof obj.id === 'string' && obj.id.startsWith('os.nammu.')) {

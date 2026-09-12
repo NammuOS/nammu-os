@@ -14,6 +14,7 @@ import {
   createSandboxBridgeScript,
   materializeSandboxDocument,
 } from '@/platform/sandbox/sandboxBridge';
+import { getPlatformCapabilities } from '@/platform';
 
 export interface AppSandboxHostProps {
   appId: string;
@@ -23,6 +24,10 @@ export interface AppSandboxHostProps {
   onClose?: () => void;
   onNotification?: (notification: NotificationPayload) => void;
   className?: string;
+}
+
+function capabilityFailureMessage(result: { status: string; message?: string; reason?: string }) {
+  return result.message || result.reason || 'The requested platform capability is unavailable.';
 }
 
 export function AppSandboxHost({
@@ -133,6 +138,7 @@ export function AppSandboxHost({
     const vfs = getNammuVFS();
     const db = getNMUDatabase();
     const engine = getNMUEngine();
+    const platform = getPlatformCapabilities();
 
     async function initBroker() {
       const appRecord = await db.getApp(appId);
@@ -153,6 +159,23 @@ export function AppSandboxHost({
         onPermissionGranted: (aId, perm) => {
           return engine.grantRuntimePermission(aId, perm);
         },
+        onClipboardReadText: async () => {
+          const result = await platform.clipboard.readText();
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          return result.value;
+        },
+        onClipboardWriteText: async (text) => {
+          const result = await platform.clipboard.writeText(text);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onSaveTextFile: async (suggestedName, content, mimeType) => {
+          const result = await platform.files.save({ suggestedName, contents: content, mimeType });
+          if (result.status === 'cancelled') return { saved: false };
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          return { saved: true, fileName: result.value.fileName };
+        },
+        onLegacyStorageRead: async (key) => localStorage.getItem(key),
+        onLegacyStorageComplete: async (key) => localStorage.removeItem(key),
       });
 
       const context: SandboxContext = {
@@ -162,6 +185,7 @@ export function AppSandboxHost({
         instanceNonce,
         grantedPermissions: permissions,
         requestedPermissions,
+        legacyStorageKeys: new Set(appRecord.legacyStorageKeys ?? []),
         scopedVfs,
         postMessage: (msg) => {
           messageChannelRef.current?.port1.postMessage(msg);

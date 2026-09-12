@@ -53,6 +53,7 @@ export interface FixtureOptions {
   customFiles?: Record<string, string>;
   publisher?: string;
   publisherKeyId?: string;
+  legacyStorageKeys?: string[];
 }
 
 export function createHelloNammuManifest(options: FixtureOptions = {}): NammuAppManifest {
@@ -72,6 +73,7 @@ export function createHelloNammuManifest(options: FixtureOptions = {}): NammuApp
     ],
     publisher: options.publisher || 'dev.nammu',
     publisherKeyId: options.publisherKeyId || 'dev-key-1',
+    legacyStorageKeys: options.legacyStorageKeys,
   };
 }
 

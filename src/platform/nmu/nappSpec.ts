@@ -30,6 +30,7 @@ export type PermissionIdentifier =
   | 'filesystem.appdata.write'
   | 'filesystem.user-selected.read'
   | 'filesystem.user-selected.write'
+  | 'migration.legacy-storage'
   | 'network.internet'
   | 'window.manage'
   | 'events.system.subscribe'
@@ -45,6 +46,7 @@ export const KNOWN_PERMISSIONS: Set<PermissionIdentifier> = new Set([
   'filesystem.appdata.write',
   'filesystem.user-selected.read',
   'filesystem.user-selected.write',
+  'migration.legacy-storage',
   'network.internet',
   'window.manage',
   'events.system.subscribe',
@@ -71,6 +73,7 @@ export const SENSITIVE_PERMISSIONS: Set<PermissionIdentifier> = new Set([
   'notifications.send',
   'filesystem.user-selected.read',
   'filesystem.user-selected.write',
+  'migration.legacy-storage',
   'network.internet',
   'events.system.subscribe',
   'events.cross-app.subscribe',
@@ -121,6 +124,8 @@ export interface NammuAppManifest {
   providesCapabilities?: string[];
   /** Optional external capability interfaces the app can consume if present */
   optionalCapabilities?: string[];
+  /** Exact legacy Core localStorage keys eligible for a one-time official-app migration. */
+  legacyStorageKeys?: string[];
   /** Declared publisher identifier */
   publisher?: string;
   /** Cryptographic public key ID authorized for this package */
@@ -163,6 +168,7 @@ export interface InstalledAppRecord {
   installedSize?: number;
   signatureVerified?: boolean;
   isOfficial?: boolean;
+  legacyStorageKeys?: string[];
 }
 
 export interface InstalledVersionRecord {
@@ -181,4 +187,5 @@ export interface InstalledVersionRecord {
   installedAt: number;
   signatureVerified?: boolean;
   isOfficial?: boolean;
+  legacyStorageKeys?: string[];
 }
