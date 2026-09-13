@@ -47,6 +47,7 @@
     "notes:package:accept": "bun scripts/accept-nammu-notes-package.ts",
     "notes:artifact:validate": "bun scripts/validate-nammu-notes-artifact.ts",
     "notes:sandbox:accept": "node scripts/accept-nammu-notes-sandbox.mjs",
+    "store:remote:accept": "node scripts/accept-nammu-store-remote.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests src/server/services/cloudProviderContracts.test.ts src/server/services/uploadTicketService.test.ts",
     "db:generate": "drizzle-kit generate",

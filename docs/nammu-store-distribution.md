@@ -27,9 +27,15 @@ contains public product metadata. Notes source and package bytes are not bundled
 Its Store screenshot is generated from the real signed package running inside `AppSandboxHost`, not
 from a mock application surface.
 
-The release asset must be published at the URL in `storeRegistry.ts` before the production Install
-button can download it. A missing upstream release fails visibly and does not fall back to an
-untrusted mirror or a package embedded in Core.
+The release asset is published at the immutable URL in `storeRegistry.ts`:
+
+```text
+https://github.com/NammuOS/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp
+```
+
+An independent public download and the same download through Nammu's allowlisted Store delivery
+route both produce 21,214 bytes and the pinned digest below. A missing or changed upstream release
+fails visibly and does not fall back to an untrusted mirror or a package embedded in Core.
 
 The immutable `v1.0.0` release is pinned to SHA-256
 `e535510bbde478a0d76d6656c2d0f48d7f743fc8bc513e51870d8e3043674927`. The artifact validator
@@ -57,9 +63,19 @@ The provisional Store code copied during earlier UI exploration is not a package
 Store surfaces no longer contact the Umbrel registry. The licensed `umbrel/` and
 `AppStore Reference/` folders were used only for interaction and visual reference.
 
-## Distribution operation still required
+## Remote-distribution acceptance
 
-Publishing the independent `nammu-notes` repository and attaching the signed package to its
-`v1.0.0` release is an external release operation. It is deliberately not performed implicitly by
-the application build or by tests. The official signing private key must remain outside both
-repositories.
+The focused acceptance command is:
+
+```text
+bun run store:remote:accept
+```
+
+It starts with an isolated browser profile and no installed Notes record, uses the real Store UI
+and package delivery route, checks that permission review came from the downloaded manifest, and
+proves install, sandbox launch, edit/persistence, close/reopen, repair, data-retaining uninstall,
+remote reinstall, and data recovery. It never reads a local `.napp` and does not modify a user's
+normal NammuOS profile.
+
+The official signing private key remains outside both repositories. Publishing and remote
+acceptance never require it because they consume the already signed immutable release artifact.
