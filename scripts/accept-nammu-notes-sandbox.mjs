@@ -8,25 +8,28 @@ import react from '@vitejs/plugin-react';
 
 const workspace = process.cwd();
 const notesRepository = resolve(workspace, '..', 'nammu-notes');
+const packageOverride = process.env.NAMMU_NOTES_PACKAGE_PATH?.trim();
 const privateKeyPath = process.env.NAMMU_RELEASE_PRIVATE_KEY_PATH;
-if (!privateKeyPath) throw new Error('NAMMU_RELEASE_PRIVATE_KEY_PATH is required.');
 
 const unsignedPath = join(notesRepository, 'dist', 'os.nammu.notes-1.0.0-unsigned.napp');
 const signedPath = join(notesRepository, 'dist', 'os.nammu.notes-1.0.0-signed.napp');
-const build = spawnSync('bun', ['run', 'build'], {
-  cwd: notesRepository,
-  env: { ...process.env, NAMMU_NOTES_VERSION: '1.0.0' },
-  encoding: 'utf8',
-});
-if (build.status !== 0) throw new Error(`Notes build failed: ${build.stderr || build.stdout}`);
-await rm(signedPath, { force: true });
-const sign = spawnSync('bun', ['run', 'nmu:release:sign', '--', unsignedPath, signedPath], {
-  cwd: workspace,
-  env: process.env,
-  encoding: 'utf8',
-});
-if (sign.status !== 0) throw new Error(`Notes signing failed: ${sign.stderr || sign.stdout}`);
-const signedArchive = await readFile(signedPath);
+if (!packageOverride) {
+  if (!privateKeyPath) throw new Error('NAMMU_RELEASE_PRIVATE_KEY_PATH is required.');
+  const build = spawnSync('bun', ['run', 'build'], {
+    cwd: notesRepository,
+    env: { ...process.env, NAMMU_NOTES_VERSION: '1.0.0' },
+    encoding: 'utf8',
+  });
+  if (build.status !== 0) throw new Error(`Notes build failed: ${build.stderr || build.stdout}`);
+  await rm(signedPath, { force: true });
+  const sign = spawnSync('bun', ['run', 'nmu:release:sign', '--', unsignedPath, signedPath], {
+    cwd: workspace,
+    env: process.env,
+    encoding: 'utf8',
+  });
+  if (sign.status !== 0) throw new Error(`Notes signing failed: ${sign.stderr || sign.stdout}`);
+}
+const signedArchive = await readFile(packageOverride ? resolve(packageOverride) : signedPath);
 
 let server;
 let browser;

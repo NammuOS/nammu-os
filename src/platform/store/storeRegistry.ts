@@ -32,7 +32,7 @@ export interface NammuStoreRegistry {
 }
 
 const NOTES_RELEASE_URL =
-  'https://github.com/xnammu/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp';
+  'https://github.com/NammuOS/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp';
 
 /**
  * The bootstrap catalog contains public discovery metadata only. Package bytes remain in the
@@ -51,7 +51,7 @@ export const OFFICIAL_NAMMU_REGISTRY: NammuStoreRegistry = {
         'Capture ideas, organize writing into folders and tags, pin important notes, preview Markdown, and export clean documents. Notes stores its data in isolated Nammu app storage and keeps it across ordinary uninstall and reinstall.',
       developer: 'Nammu',
       category: 'Productivity',
-      repository: 'https://github.com/xnammu/nammu-notes',
+      repository: 'https://github.com/NammuOS/nammu-notes',
       license: 'Proprietary — Nammu official application',
       icon: 'notes',
       screenshots: ['/store/os.nammu.notes/notes-workspace.png'],
@@ -66,7 +66,7 @@ export const OFFICIAL_NAMMU_REGISTRY: NammuStoreRegistry = {
       release: {
         version: '1.0.0',
         packageUrl: NOTES_RELEASE_URL,
-        sha256: '56e8d5ecb9386f8c5c6a0a1b5813a9564312c059d9967a59228e7c7c96b870a3',
+        sha256: 'e535510bbde478a0d76d6656c2d0f48d7f743fc8bc513e51870d8e3043674927',
         size: 21_214,
         publishedAt: '2026-09-12',
         releaseNotes:

@@ -89,7 +89,11 @@ test('desktop local server binds an ephemeral loopback port and exits through it
     });
     child.once('exit', (code) => {
       clearTimeout(timer);
-      reject(new Error(`Local server exited before readiness with code ${code}.`));
+      reject(
+        new Error(
+          `Local server exited before readiness with code ${code}.\n${output.join('').trim()}`,
+        ),
+      );
     });
   });
 

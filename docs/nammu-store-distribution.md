@@ -31,6 +31,11 @@ The release asset must be published at the URL in `storeRegistry.ts` before the 
 button can download it. A missing upstream release fails visibly and does not fall back to an
 untrusted mirror or a package embedded in Core.
 
+The immutable `v1.0.0` release is pinned to SHA-256
+`e535510bbde478a0d76d6656c2d0f48d7f743fc8bc513e51870d8e3043674927`. The artifact validator
+proves that exact archive against the production publisher trust path and the tagged Notes source
+before publication.
+
 ## Install review
 
 The permission dialog is populated from the manifest inside the downloaded `.napp`, after its

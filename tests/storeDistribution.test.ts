@@ -26,7 +26,7 @@ async function appFor(bytes: Uint8Array, version = '1.0.0'): Promise<NammuStoreA
     description: 'Test release',
     developer: 'Nammu',
     category: 'Productivity',
-    repository: 'https://github.com/xnammu/nammu-notes',
+    repository: 'https://github.com/NammuOS/nammu-notes',
     license: 'Test',
     icon: 'notes',
     screenshots: [],
@@ -54,12 +54,19 @@ describe('Nammu Store distribution boundary', () => {
   test('publishes only Nammu registry metadata and a pinned Notes release', () => {
     expect(OFFICIAL_NAMMU_REGISTRY.id).toBe('nammu-official');
     expect(OFFICIAL_NAMMU_REGISTRY.apps.map((app) => app.id)).toEqual(['os.nammu.notes']);
-    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].release.packageUrl).not.toContain('umbrel');
+    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].repository).toBe(
+      'https://github.com/NammuOS/nammu-notes',
+    );
+    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].release.packageUrl).toBe(
+      'https://github.com/NammuOS/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp',
+    );
     expect(OFFICIAL_NAMMU_REGISTRY.apps[0].screenshots).toEqual([
       '/store/os.nammu.notes/notes-workspace.png',
     ]);
     expect(existsSync('public/store/os.nammu.notes/notes-workspace.png')).toBe(true);
-    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].release.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].release.sha256).toBe(
+      'e535510bbde478a0d76d6656c2d0f48d7f743fc8bc513e51870d8e3043674927',
+    );
   });
 
   test('downloads, hashes, and inspects the real package manifest before permission review', async () => {
