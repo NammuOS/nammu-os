@@ -326,9 +326,17 @@ export function validateNammuAppManifest(
           }
           if (
             c.maxSurfaces !== undefined &&
-            (!Number.isInteger(c.maxSurfaces) || c.maxSurfaces < 1 || c.maxSurfaces > 8)
+            (!Number.isInteger(c.maxSurfaces) || c.maxSurfaces < 1 || c.maxSurfaces > 16)
           ) {
-            errors.push(`Web-surface capability "${c.name}" maxSurfaces must be between 1 and 8`);
+            errors.push(`Web-surface capability "${c.name}" maxSurfaces must be between 1 and 16`);
+          }
+          if (
+            c.untrustedProxyRouting !== undefined &&
+            typeof c.untrustedProxyRouting !== 'boolean'
+          ) {
+            errors.push(
+              `Web-surface capability "${c.name}" untrustedProxyRouting must be boolean`,
+            );
           }
           if (c.persistentProfile !== undefined && typeof c.persistentProfile !== 'boolean') {
             errors.push(`Web-surface capability "${c.name}" persistentProfile must be boolean`);

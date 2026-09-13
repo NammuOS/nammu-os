@@ -28,6 +28,7 @@ import {
   type PackageSurfaceBounds,
   type PackageSurfaceControl,
   type PackageSurfaceCreateRequest,
+  type PackageSurfaceProxyEndpoint,
   type PackageSurfaceSnapshot,
   isSafePackagePath,
   isSafeSurfaceBounds,
@@ -73,6 +74,27 @@ export interface NotificationPayload {
   title: string;
   body: string;
   icon?: string;
+}
+
+function isPublicIpv4(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const octets = value.split('.').map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return false;
+  }
+  const [a, b, c] = octets;
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 192 && b === 0 && (c === 0 || c === 2)) return false;
+  if (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
+  return true;
 }
 
 export interface HostServices {
@@ -130,6 +152,13 @@ export interface HostServices {
     surfaceId: string,
     visible: boolean,
   ) => Promise<void>;
+  onWebSurfaceSetZoom?: (instanceId: string, surfaceId: string, zoom: number) => Promise<void>;
+  onWebSurfaceSetProxyRoute?: (
+    instanceId: string,
+    surfaceId: string,
+    scope: 'profile' | 'surface',
+    endpoints: readonly PackageSurfaceProxyEndpoint[],
+  ) => Promise<void>;
   onWebSurfaceFocus?: (instanceId: string, surfaceId: string) => Promise<void>;
   onWebSurfaceGetState?: (instanceId: string, surfaceId: string) => Promise<PackageSurfaceSnapshot>;
 }
@@ -177,6 +206,15 @@ export class CapabilityBroker {
       type: 'event',
       eventName: `system.web-surface.${snapshot.id}`,
       payload: snapshot,
+    });
+  }
+
+  publishSurfaceOpenRequest(instanceId: string, id: string, url: string): void {
+    if (this.surfaceOwners.get(id)?.instanceId !== instanceId) return;
+    this.contexts.get(instanceId)?.postMessage?.({
+      type: 'event',
+      eventName: `system.web-surface-open.${id}`,
+      payload: { id, url },
     });
   }
 
@@ -456,6 +494,48 @@ export class CapabilityBroker {
           params.visible === true,
         );
         return { updated: true };
+      case 'setZoom': {
+        const zoom = Number(params.zoom);
+        if (!Number.isFinite(zoom) || zoom < 0.5 || zoom > 2) {
+          throw { code: 'INVALID_INPUT', message: 'The web-surface zoom is invalid.' };
+        }
+        if (!this.hostServices.onWebSurfaceSetZoom) {
+          throw { code: 'UNAVAILABLE', message: 'Web-surface zoom is unavailable.' };
+        }
+        await this.hostServices.onWebSurfaceSetZoom(context.instanceId, id, zoom);
+        return { updated: true };
+      }
+      case 'setProxyRoute': {
+        const owner = this.surfaceOwners.get(id);
+        const declaration = this.capability(context, 'web-surface', owner?.capability ?? '');
+        if (declaration.untrustedProxyRouting !== true) {
+          throw { code: 'PERMISSION_DENIED', message: 'Proxy routing is not declared.' };
+        }
+        const scope = String(params.scope ?? '') as 'profile' | 'surface';
+        const endpoints = params.endpoints as unknown;
+        if (
+          !['profile', 'surface'].includes(scope) ||
+          !Array.isArray(endpoints) ||
+          endpoints.length > 4 ||
+          !endpoints.every(
+            (endpoint) =>
+              endpoint &&
+              typeof endpoint === 'object' &&
+              ['http', 'https', 'socks4', 'socks5'].includes(String(endpoint.protocol)) &&
+              isPublicIpv4(endpoint.host) &&
+              Number.isInteger(endpoint.port) &&
+              endpoint.port >= 1 &&
+              endpoint.port <= 65_535,
+          )
+        ) {
+          throw { code: 'INVALID_INPUT', message: 'The proxy route is invalid.' };
+        }
+        if (!this.hostServices.onWebSurfaceSetProxyRoute) {
+          throw { code: 'UNAVAILABLE', message: 'Web-surface proxy routing is unavailable.' };
+        }
+        await this.hostServices.onWebSurfaceSetProxyRoute(context.instanceId, id, scope, endpoints);
+        return { updated: true };
+      }
       case 'detach':
         if (!this.hostServices.onWebSurfaceSetVisible)
           throw { code: 'UNAVAILABLE', message: 'Web-surface detachment is unavailable.' };

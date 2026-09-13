@@ -51,21 +51,35 @@ const responseFor =
     });
 
 describe('Nammu Store distribution boundary', () => {
-  test('publishes only Nammu registry metadata and a pinned Notes release', () => {
+  test('publishes only pinned immutable releases for extracted official applications', () => {
     expect(OFFICIAL_NAMMU_REGISTRY.id).toBe('nammu-official');
-    expect(OFFICIAL_NAMMU_REGISTRY.apps.map((app) => app.id)).toEqual(['os.nammu.notes']);
-    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].repository).toBe(
+    expect(OFFICIAL_NAMMU_REGISTRY.apps.map((app) => app.id).sort()).toEqual([
+      'os.nammu.browser',
+      'os.nammu.notes',
+    ]);
+    const notes = OFFICIAL_NAMMU_REGISTRY.apps.find((app) => app.id === 'os.nammu.notes')!;
+    const browser = OFFICIAL_NAMMU_REGISTRY.apps.find((app) => app.id === 'os.nammu.browser')!;
+    expect(notes.repository).toBe(
       'https://github.com/NammuOS/nammu-notes',
     );
-    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].release.packageUrl).toBe(
+    expect(notes.release.packageUrl).toBe(
       'https://github.com/NammuOS/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp',
     );
-    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].screenshots).toEqual([
+    expect(notes.screenshots).toEqual([
       '/store/os.nammu.notes/notes-workspace.png',
     ]);
     expect(existsSync('public/store/os.nammu.notes/notes-workspace.png')).toBe(true);
-    expect(OFFICIAL_NAMMU_REGISTRY.apps[0].release.sha256).toBe(
+    expect(notes.release.sha256).toBe(
       'e535510bbde478a0d76d6656c2d0f48d7f743fc8bc513e51870d8e3043674927',
+    );
+    expect(browser.repository).toBe('https://github.com/NammuOS/nammu-browser');
+    expect(browser.release.packageUrl).toBe(
+      'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp',
+    );
+    expect(browser.screenshots).toEqual(['/store/os.nammu.browser/browser-workspace.png']);
+    expect(existsSync('public/store/os.nammu.browser/browser-workspace.png')).toBe(true);
+    expect(browser.release.sha256).toBe(
+      '541af4d497a43e7c2576ff3bd061565dc6fed07a84cd34019ba267a39d364ea6',
     );
   });
 

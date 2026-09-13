@@ -317,6 +317,22 @@ export function AppSandboxHost({
           );
           if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
         },
+        onWebSurfaceSetZoom: async (_, handle, zoom) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          const result = await platform.webSurfaces.setZoom(surface.nativeId, zoom);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceSetProxyRoute: async (_, handle, scope, endpoints) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          const result = await platform.webSurfaces.setProxyRoute(
+            surface.nativeId,
+            scope,
+            endpoints,
+          );
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
         onWebSurfaceFocus: async (_, handle) => {
           const surface = surfaceMapRef.current.get(handle);
           if (!surface) throw new Error('The host web surface no longer exists.');
@@ -369,6 +385,19 @@ export function AppSandboxHost({
           if (match)
             broker.publishSurfaceState(instanceId, packageSurfaceSnapshot(match[0], snapshot));
         });
+        const unsubscribeOpenRequests = await platform.webSurfaces.subscribeOpenRequests(
+          (request) => {
+            const match = [...surfaceMapRef.current.entries()].find(
+              ([, surface]) => surface.nativeId === request.sourceId,
+            );
+            if (match) broker.publishSurfaceOpenRequest(instanceId, match[0], request.url);
+          },
+        );
+        const previousUnsubscribe = unsubscribeSurfaceState;
+        unsubscribeSurfaceState = () => {
+          previousUnsubscribe?.();
+          unsubscribeOpenRequests();
+        };
       }
 
       const pending = pendingPortRequestsRef.current.splice(0);

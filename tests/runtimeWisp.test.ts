@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getBrowserRuntimeUrl } from '../src/components/browser/services/geckoRuntimeUrl';
+import { getBrowserRuntimeUrl } from '../src/web-surfaces/geckoRuntimeUrl';
 
 describe('Gecko runtime Wisp bootstrap', () => {
   test('places the endpoint only in the non-network fragment', () => {

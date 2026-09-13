@@ -163,15 +163,15 @@ describe('native web-surface boundary', () => {
     expect(source).toContain('WebSurfaceOwner');
   });
 
-  test('selects the native renderer directly on Tauri without an automatic Gecko fallback', () => {
+  test('launches Browser through the generic package sandbox without a built-in renderer fallback', () => {
     const source = readFileSync(
-      join(repositoryRoot, 'src/components/browser/BrowserApp.tsx'),
+      join(repositoryRoot, 'src/components/os/SystemApps.tsx'),
       'utf8',
     );
-    expect(source).toContain("const nativeSurfaceEnabled = platform.runtime === 'tauri'");
-    expect(source).not.toContain("getItem('nammu-browser-renderer')");
-    expect(source).not.toContain('Falling back to Gecko');
-    expect(source).not.toContain('setNativeSurfaceFailed');
+    expect(source).toContain(
+      '<AppSandboxHost appId="os.nammu.browser" windowId="system:browser" title="Browser" />',
+    );
+    expect(source).not.toContain("import('../browser/BrowserApp')");
   });
 
   test('loads standalone windows from the local entry with a Rust-owned typed route', () => {

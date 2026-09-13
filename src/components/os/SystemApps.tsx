@@ -4,7 +4,6 @@ import { AppSandboxHost } from './sandbox/AppSandboxHost';
 
 const AIApp = lazy(() => import('./RailApps').then((module) => ({ default: module.AIApp })));
 const AppStoreApp = lazy(() => import('../app-store/AppStoreApp'));
-const BrowserApp = lazy(() => import('../browser/BrowserApp'));
 const CalculatorTool = lazy(() =>
   import('../../tools/CalculatorSuite').then((module) => ({ default: module.CalculatorTool })),
 );
@@ -190,7 +189,9 @@ export function SystemAppContent({
       content = <TelegramApp />;
       break;
     case 'browser':
-      content = <BrowserApp />;
+      content = (
+        <AppSandboxHost appId="os.nammu.browser" windowId="system:browser" title="Browser" />
+      );
       break;
     case 'youtube-music':
       content = <YouTubeMusicApp />;

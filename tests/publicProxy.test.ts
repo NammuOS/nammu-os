@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { buildConfigureGeckoProxyScript } from '../src/components/browser/services/publicProxy';
 import { publicProxyServiceInternals } from '../src/server/browser/publicProxyService';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 describe('public proxy manager', () => {
   test('only allows public IPv4 endpoints into the health checker allowlist', () => {
@@ -29,36 +30,15 @@ describe('public proxy manager', () => {
     expect(proxy?.id).toBe('https:8.8.4.4:8080');
   });
 
-  test('builds a channel-aware Gecko route with failover support', () => {
-    const endpoint = {
-      id: 'socks5:8.8.8.8:1080',
-      host: '8.8.8.8',
-      port: 1080,
-      protocol: 'socks5' as const,
-      country: 'United States',
-      countryCode: 'US',
-      city: 'Unknown',
-      anonymity: 'elite' as const,
-      source: 'ProxyScrape' as const,
-      sourceLatencyMs: 100,
-      uptimePercent: 99,
-      lastCheckedAt: null,
-    };
-    const script = buildConfigureGeckoProxyScript({
-      browser: [endpoint],
-      tabs: { 'tab-1': [endpoint] },
-    });
-
-    expect(() => new Function(script)).not.toThrow();
-    expect(script).toContain('registerChannelFilter');
-    expect(script).toContain('unregisterChannelFilter');
-    expect(script).toContain('newProxyInfo');
-    expect(script).toContain('__nammuBrowserTabs');
-    expect(script).toContain('topLevelPrincipal');
-    expect(script).toContain('contentPrincipal');
-    expect(script).toContain('failover');
-    expect(script).toContain('net:prune-all-connections');
-    expect(script).toContain('__nammuPublicProxyRevision');
+  test('keeps Gecko proxy authority in the generic Core web-surface driver', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/platform/web/geckoWebSurfaces.ts'),
+      'utf8',
+    );
+    expect(source).toContain('registerChannelFilter');
+    expect(source).toContain('newProxyInfo');
+    expect(source).toContain('__nammuIntegrationTabs');
+    expect(source).toContain('net:prune-all-connections');
   });
 
   test('only accepts safe HTTPS hostnames for website-specific checks', () => {

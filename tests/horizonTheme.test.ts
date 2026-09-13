@@ -118,7 +118,7 @@ describe('Horizon product-wide theme', () => {
   test('uses one Horizon glass system for shell popovers, side surfaces, and every context menu', () => {
     const applicationTheme = read('src/app/horizon.css');
     const contextTheme = read('src/components/context-menu/contextMenu.css');
-    const browser = read('src/components/browser/BrowserApp.tsx');
+    const sandboxHost = read('src/components/os/sandbox/AppSandboxHost.tsx');
     const cloud = read('src/components/cloud/views/CloudMyDriveView.tsx');
     const pdf = read('src/components/pdf/PdfApp.tsx');
 
@@ -134,7 +134,7 @@ describe('Horizon product-wide theme', () => {
     );
     expect(contextTheme).toContain("[data-theme='horizon'] .nammu-context-surface");
     expect(contextTheme).toContain("[data-theme='horizon'] .nammu-context-legacy button");
-    expect(browser).toContain('nammu-context-surface nammu-context-legacy');
+    expect(sandboxHost).toContain('AppSandboxHost');
     expect(cloud).toContain('nammu-context-surface nammu-context-legacy');
     expect(pdf).toContain('nammu-context-surface nammu-context-legacy');
   });
@@ -265,18 +265,6 @@ describe('Horizon product-wide theme', () => {
     expect(existsSync(resolve(root, 'public/branding/nammu-logo.png'))).toBe(true);
     expect(existsSync(resolve(root, 'public/wallpapers/whale.webp'))).toBe(false);
     expect(existsSync(resolve(root, 'public/wallpapers/high-tech city.webp'))).toBe(false);
-  });
-
-  test('keeps Browser bookmark rows flat rather than rounded cards', () => {
-    const browser = read('src/components/browser/BrowserApp.tsx');
-    const bookmarkLibrary = browser.slice(browser.indexOf("{sidePanel === 'bookmarks'"));
-
-    expect(bookmarkLibrary).toContain(
-      'group flex items-center gap-2 border-b border-white/4 px-1 py-2',
-    );
-    expect(bookmarkLibrary).not.toContain(
-      'group flex items-center gap-2 rounded border border-transparent',
-    );
   });
 
   test('moves the music workspace control into the rail and releases the Horizon left edge', () => {

@@ -4,6 +4,7 @@ import type {
   WebSurfaceBounds,
   WebSurfaceControl,
   WebSurfaceNavigationPolicy,
+  WebSurfaceProxyEndpoint,
   WebSurfaceSnapshot,
 } from '../contracts';
 
@@ -18,6 +19,8 @@ interface Session {
   ready: boolean;
   surfaceIds: Set<string>;
   poll?: number;
+  profileProxy: readonly WebSurfaceProxyEndpoint[];
+  surfaceProxies: Map<string, readonly WebSurfaceProxyEndpoint[]>;
 }
 
 interface Entry {
@@ -72,6 +75,60 @@ function styleSession(session: Session, bounds: WebSurfaceBounds, visible: boole
     height: `${bounds.height}px`,
     display: visible ? 'block' : 'none',
   });
+}
+
+function proxyRoutingScript(session: Session) {
+  const routing = {
+    profile: session.profileProxy,
+    surfaces: Object.fromEntries(session.surfaceProxies),
+  };
+  return `(()=>{
+    const routing = ${JSON.stringify(routing)};
+    const proxyService = Cc['@mozilla.org/network/protocol-proxy-service;1']
+      .getService(Ci.nsIProtocolProxyService);
+    globalThis.__nammuIntegrationProxyRouting = routing;
+    if (!globalThis.__nammuIntegrationProxyFilter) {
+      const toChain = (route, isolationKey) => {
+        if (!Array.isArray(route) || route.length === 0) return null;
+        return route.reduceRight((failover, endpoint) => {
+          const type = endpoint.protocol === 'socks5'
+            ? 'socks'
+            : endpoint.protocol === 'socks4' ? 'socks4' : 'http';
+          const resolvesHost = type.startsWith('socks')
+            ? Ci.nsIProxyInfo.TRANSPARENT_PROXY_RESOLVES_HOST : 0;
+          const tunnel = endpoint.protocol === 'https' ? Ci.nsIProxyInfo.ALWAYS_TUNNEL_VIA_PROXY : 0;
+          return proxyService.newProxyInfo(
+            type, endpoint.host, endpoint.port, '', isolationKey,
+            resolvesHost | tunnel, 4, failover
+          );
+        }, null);
+      };
+      globalThis.__nammuIntegrationProxyFilter = {
+        QueryInterface: ChromeUtils.generateQI(['nsIProtocolProxyChannelFilter']),
+        applyFilter(channel, defaultProxyInfo, result) {
+          try {
+            const scheme = channel.URI?.scheme;
+            if (scheme !== 'http' && scheme !== 'https') {
+              result.onProxyFilterResult(defaultProxyInfo); return;
+            }
+            const top = channel.loadInfo?.browsingContext?.top;
+            const tabs = globalThis.__nammuIntegrationTabs || Object.create(null);
+            let surfaceId = null;
+            for (const [id, tab] of Object.entries(tabs)) {
+              if (tab?.linkedBrowser?.browsingContext === top) { surfaceId = id; break; }
+            }
+            const current = globalThis.__nammuIntegrationProxyRouting || { profile: [], surfaces: {} };
+            const route = (surfaceId && current.surfaces?.[surfaceId]) || current.profile;
+            result.onProxyFilterResult(toChain(route, 'nammu-integration-' + (surfaceId || 'profile')) || defaultProxyInfo);
+          } catch (_) { result.onProxyFilterResult(defaultProxyInfo); }
+        }
+      };
+      proxyService.registerChannelFilter(globalThis.__nammuIntegrationProxyFilter, 0);
+    }
+    try { Services.obs.notifyObservers(null, 'net:prune-all-connections'); } catch (_) {}
+    try { Services.dns.clearCache(true); } catch (_) {}
+    return 'proxy-updated';
+  })()`;
 }
 
 /**
@@ -167,7 +224,20 @@ export function createGeckoWebSurfaces(environment: {
             canGoBack: Boolean(tab.linkedBrowser?.webNavigation?.canGoBack),
             canGoForward: Boolean(tab.linkedBrowser?.webNavigation?.canGoForward),
             isAudioPlaying: Boolean(tab.soundPlaying),
-            isMuted: Boolean(tab.muted)
+            isMuted: Boolean(tab.muted),
+            openRequests: (() => {
+              const registry = globalThis.__nammuIntegrationTabs || Object.create(null);
+              const known = new Set(Object.values(registry));
+              const requests = [];
+              for (const candidate of Array.from(gBrowser.tabs)) {
+                if (known.has(candidate) || candidate.closing) continue;
+                const target = candidate.linkedBrowser?.currentURI?.spec || '';
+                if (target === 'about:blank') continue;
+                requests.push(target);
+                gBrowser.removeTab(candidate, { animate: false });
+              }
+              return requests;
+            })()
           };`,
         ),
       )
@@ -187,6 +257,18 @@ export function createGeckoWebSurfaces(environment: {
           if (typeof state.isAudioPlaying === 'boolean')
             entry.snapshot.isAudioPlaying = state.isAudioPlaying;
           if (typeof state.isMuted === 'boolean') entry.snapshot.isMuted = state.isMuted;
+          if (Array.isArray((state as { openRequests?: unknown }).openRequests)) {
+            for (const requestedUrl of (state as { openRequests: unknown[] }).openRequests) {
+              if (
+                typeof requestedUrl === 'string' &&
+                allowed(entry.policy, requestedUrl, environment.getOrigin() ?? '')
+              ) {
+                openListeners.forEach((listener) =>
+                  listener({ sourceId: entry.id, url: requestedUrl }),
+                );
+              }
+            }
+          }
           emit(entry);
         })
         .catch(() => undefined);
@@ -271,7 +353,14 @@ export function createGeckoWebSurfaces(environment: {
           );
           iframe.allow =
             'cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; fullscreen';
-          session = { key: options.profileKey, iframe, ready: false, surfaceIds: new Set() };
+          session = {
+            key: options.profileKey,
+            iframe,
+            ready: false,
+            surfaceIds: new Set(),
+            profileProxy: [],
+            surfaceProxies: new Map(),
+          };
           sessions.set(options.profileKey, session);
           documentObject.body.append(iframe);
         }
@@ -327,6 +416,7 @@ export function createGeckoWebSurfaces(environment: {
         }
         entries.delete(id);
         session.surfaceIds.delete(id);
+        session.surfaceProxies.delete(id);
         if (session.surfaceIds.size === 0) {
           if (session.poll) window.clearInterval(session.poll);
           runtimeFor(session)?.geckoDispose?.();
@@ -437,6 +527,18 @@ export function createGeckoWebSurfaces(environment: {
             `gBrowser.selectedTab = tab; FullZoom.setZoom(${JSON.stringify(zoom)}); return 'zoomed';`,
           ),
         );
+        return ok(undefined);
+      } catch (error) {
+        return failure(error);
+      }
+    },
+    async setProxyRoute(id, scope, endpoints) {
+      try {
+        const entry = entryFor(id);
+        if (scope === 'profile') entry.session.profileProxy = [...endpoints];
+        else if (scope === 'surface') entry.session.surfaceProxies.set(id, [...endpoints]);
+        else throw new Error('The proxy route scope is invalid.');
+        if (entry.session.ready) await chrome(entry.session, proxyRoutingScript(entry.session));
         return ok(undefined);
       } catch (error) {
         return failure(error);

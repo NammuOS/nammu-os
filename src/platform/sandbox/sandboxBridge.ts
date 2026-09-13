@@ -48,12 +48,44 @@ export async function materializeSandboxDocument(
 ): Promise<string> {
   const slash = entryPath.lastIndexOf('/');
   const entryDirectory = slash >= 0 ? entryPath.slice(0, slash + 1) : '';
-  const scriptPattern = /<script\b([^>]*?)\bsrc=(['"])([^'"]+)\2([^>]*)><\/script>/gi;
+  // Styles must be materialized before scripts. Once a JavaScript bundle has
+  // been inlined it is opaque text and may legitimately contain HTML-looking
+  // diagnostics such as React's `<link rel="stylesheet">` examples.
+  const stylePattern = /<link\b([^>]*)>/gi;
   let output = '';
   let cursor = 0;
-  for (const match of html.matchAll(scriptPattern)) {
+  for (const match of html.matchAll(stylePattern)) {
     const index = match.index ?? 0;
     output += html.slice(cursor, index);
+    const attributes = match[1];
+    const rel = attributes.match(/\brel\s*=\s*(['"])([^'"]+)\1/i)?.[2] ?? '';
+    if (!rel.toLowerCase().split(/\s+/).includes('stylesheet')) {
+      output += match[0];
+      cursor = index + match[0].length;
+      continue;
+    }
+    const source = attributes.match(/\bhref\s*=\s*(['"])([^'"]+)\1/i)?.[2];
+    if (!source) throw new Error('Packaged sandbox stylesheet is missing a valid href.');
+    if (/^(?:https?:|data:|blob:|\/\/|\/)/i.test(source)) {
+      throw new Error(`External or absolute sandbox stylesheet source is not allowed: ${source}`);
+    }
+    const normalized = `${entryDirectory}${source}`.replace(/^\.\//, '');
+    if (normalized.split('/').includes('..')) {
+      throw new Error(`Sandbox stylesheet traversal is not allowed: ${source}`);
+    }
+    const stylesheet = await readPackageText(normalized);
+    output += `<style>${stylesheet.replaceAll('</style', '<\\/style')}</style>`;
+    cursor = index + match[0].length;
+  }
+  output += html.slice(cursor);
+
+  const scriptPattern = /<script\b([^>]*?)\bsrc=(['"])([^'"]+)\2([^>]*)><\/script>/gi;
+  const styledHtml = output;
+  cursor = 0;
+  output = '';
+  for (const match of styledHtml.matchAll(scriptPattern)) {
+    const index = match.index ?? 0;
+    output += styledHtml.slice(cursor, index);
     const source = match[3];
     if (/^(?:https?:|data:|blob:|\/\/|\/)/i.test(source)) {
       throw new Error(`External or absolute sandbox script source is not allowed: ${source}`);
@@ -66,29 +98,5 @@ export async function materializeSandboxDocument(
     output += `<script${attributes ? ` ${attributes}` : ''}>${escapeInlineScript(script)}</script>`;
     cursor = index + match[0].length;
   }
-  output += html.slice(cursor);
-
-  const stylePattern = /<link\b([^>]*)>/gi;
-  cursor = 0;
-  let styledOutput = '';
-  for (const match of output.matchAll(stylePattern)) {
-    const index = match.index ?? 0;
-    const attributes = match[1];
-    const rel = attributes.match(/\brel\s*=\s*(['"])([^'"]+)\1/i)?.[2] ?? '';
-    if (!rel.toLowerCase().split(/\s+/).includes('stylesheet')) continue;
-    styledOutput += output.slice(cursor, index);
-    const source = attributes.match(/\bhref\s*=\s*(['"])([^'"]+)\1/i)?.[2];
-    if (!source) throw new Error('Packaged sandbox stylesheet is missing a valid href.');
-    if (/^(?:https?:|data:|blob:|\/\/|\/)/i.test(source)) {
-      throw new Error(`External or absolute sandbox stylesheet source is not allowed: ${source}`);
-    }
-    const normalized = `${entryDirectory}${source}`.replace(/^\.\//, '');
-    if (normalized.split('/').includes('..')) {
-      throw new Error(`Sandbox stylesheet traversal is not allowed: ${source}`);
-    }
-    const stylesheet = await readPackageText(normalized);
-    styledOutput += `<style>${stylesheet.replaceAll('</style', '<\\/style')}</style>`;
-    cursor = index + match[0].length;
-  }
-  return styledOutput + output.slice(cursor);
+  return output + styledHtml.slice(cursor);
 }

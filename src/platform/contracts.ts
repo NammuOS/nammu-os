@@ -707,6 +707,12 @@ export interface WebSurfaceOpenRequest {
 
 export type WebSurfaceControl = 'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
 
+export interface WebSurfaceProxyEndpoint {
+  protocol: 'http' | 'https' | 'socks4' | 'socks5';
+  host: string;
+  port: number;
+}
+
 export interface PlatformWebSurfaces {
   readonly supported: boolean;
   create(options: {
@@ -726,6 +732,11 @@ export interface PlatformWebSurfaces {
   setVisible(id: string, visible: boolean): Promise<CapabilityResult<void>>;
   focus(id: string): Promise<CapabilityResult<void>>;
   setZoom(id: string, zoom: number): Promise<CapabilityResult<void>>;
+  setProxyRoute(
+    id: string,
+    scope: 'profile' | 'surface',
+    endpoints: readonly WebSurfaceProxyEndpoint[],
+  ): Promise<CapabilityResult<void>>;
   getState(id: string): Promise<CapabilityResult<WebSurfaceSnapshot>>;
   subscribe(listener: (snapshot: WebSurfaceSnapshot) => void): Promise<() => void>;
   subscribeOpenRequests(listener: (request: WebSurfaceOpenRequest) => void): Promise<() => void>;

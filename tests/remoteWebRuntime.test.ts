@@ -8,20 +8,23 @@ const source = (path: string) => readFileSync(join(root, path), 'utf8');
 
 describe('desktop remote application runtime split', () => {
   test('selects NativeWebSurface before any Gecko runtime is rendered on Desktop', () => {
-    const browser = source('src/components/browser/BrowserApp.tsx');
+    const browserHost = source('src/components/os/SystemApps.tsx');
     const whatsapp = source('src/components/whatsapp/WhatsAppApp.tsx');
     const telegram = source('src/components/telegram/TelegramApp.tsx');
     const music = source('src/components/youtube-music/YouTubeMusicApp.tsx');
 
-    for (const app of [browser, whatsapp, telegram, music]) {
+    for (const app of [whatsapp, telegram, music]) {
       expect(app).toContain("platform.runtime === 'tauri'");
       expect(app).toContain('<NativeWebSurface');
     }
+    expect(browserHost).toContain('appId="os.nammu.browser"');
     expect(whatsapp).toContain('!nativeSurfaceEnabled && engineReadyRef.current');
     expect(telegram).toContain('owner="telegram"');
     expect(telegram).toContain('getGeckoRuntimeUrl');
     expect(music).toContain("if (nativeSurfaceEnabled) {\n      setRuntimeWispUrl('');");
-    expect(browser).toContain('privateSession={tab.isPrivate === true}');
+    expect(source('src/platform/sandbox/capabilityBroker.ts')).toContain(
+      'privateSession: params.privateSession === true',
+    );
   });
 
   test('keeps owner-isolated profiles and a deny-by-default navigation policy', () => {
@@ -43,16 +46,14 @@ describe('desktop remote application runtime split', () => {
   });
 
   test('shows the real remote surface immediately without branded startup interstitials', () => {
-    const browser = source('src/components/browser/BrowserApp.tsx');
     const whatsapp = source('src/components/whatsapp/WhatsAppApp.tsx');
     const telegram = source('src/components/telegram/TelegramApp.tsx');
     const music = source('src/components/youtube-music/YouTubeMusicApp.tsx');
 
-    expect(browser).not.toContain('Starting Nammu Browser');
     expect(whatsapp).not.toContain('Starting WhatsApp inside Nammu OS');
     expect(telegram).not.toContain('Starting Nammu Telegram');
     expect(music).not.toContain('Starting Nammu Music');
-    expect(browser).toContain("engineState === 'error'");
+    expect(source('src/components/os/SystemApps.tsx')).not.toContain('Starting Nammu Browser');
     expect(whatsapp).toContain("engineState === 'error'");
     expect(telegram).toContain("engineState === 'error'");
     expect(music).toContain("engineState === 'error'");

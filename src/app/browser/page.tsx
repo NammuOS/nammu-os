@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import StandaloneBrowser from '@/components/browser/StandaloneBrowser';
+import { AppSandboxHost } from '@/components/os/sandbox/AppSandboxHost';
 
 export const metadata: Metadata = {
   title: 'Browser — Nammu OS',
@@ -7,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function BrowserPage() {
-  return <StandaloneBrowser />;
+  return (
+    <main className="h-dvh w-screen overflow-hidden bg-[#05070b]">
+      <AppSandboxHost appId="os.nammu.browser" windowId="standalone:browser" title="Browser" />
+    </main>
+  );
 }

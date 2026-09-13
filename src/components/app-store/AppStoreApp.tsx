@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Globe2,
   History,
   RefreshCw,
   Search,
@@ -229,7 +230,7 @@ export function AppStoreApp({ initialAppId }: { initialAppId?: string } = {}) {
                   className="nammu-store-card"
                   onClick={() => setSelectedId(app.id)}
                 >
-                  <StoreIcon />
+                  <StoreIcon icon={app.icon} />
                   <span className="nammu-store-card__copy">
                     <strong>{app.name}</strong>
                     <small>{app.tagline}</small>
@@ -288,7 +289,7 @@ function StoreDetails({
         <ArrowLeft size={16} /> All applications
       </button>
       <section className="nammu-store-details__hero">
-        <StoreIcon large />
+        <StoreIcon icon={app.icon} large />
         <div>
           <span className="nammu-store__eyebrow">{app.category}</span>
           <h2>{app.name}</h2>
@@ -398,7 +399,7 @@ function StoreDetails({
                 <Trash2 size={14} /> Uninstall
               </button>
               <small className="nammu-store__retention">
-                Notes data is retained unless you explicitly erase it.
+                {app.name} data is retained unless you explicitly erase it.
               </small>
             </section>
           )}
@@ -408,10 +409,14 @@ function StoreDetails({
   );
 }
 
-function StoreIcon({ large = false }: { large?: boolean }) {
+function StoreIcon({ icon, large = false }: { icon: string; large?: boolean }) {
   return (
     <span className={`nammu-store-icon${large ? ' nammu-store-icon--large' : ''}`}>
-      <StickyNote size={large ? 42 : 28} strokeWidth={1.7} />
+      {icon === 'browser' ? (
+        <Globe2 size={large ? 42 : 28} strokeWidth={1.7} />
+      ) : (
+        <StickyNote size={large ? 42 : 28} strokeWidth={1.7} />
+      )}
     </span>
   );
 }

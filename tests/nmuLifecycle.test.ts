@@ -222,6 +222,14 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
       expect(materialized).toContain('.reference-app { color: orange; }');
       expect(materialized).not.toContain('src="main.js"');
       expect(materialized).not.toContain('href="styles.css"');
+      const reactDiagnostic =
+        'console.warn(\'Expected <link rel="stylesheet"> to include an href\');';
+      const opaqueScript = await materializeSandboxDocument(
+        '<html><head><link rel="stylesheet" href="styles.css"></head><body><script src="main.js"></script></body></html>',
+        'app/index.html',
+        async (path) => (path === 'app/main.js' ? reactDiagnostic : 'body { color: white; }'),
+      );
+      expect(opaqueScript).toContain(reactDiagnostic);
       await expect(
         materializeSandboxDocument(
           '<script src="https://attacker.example/payload.js"></script>',

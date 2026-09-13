@@ -78,9 +78,8 @@ test('Firefox release exposes an explicit worker teardown hook for closed app ru
   expect(source).toContain('window.geckoDispose=()=>{try{PThread.terminateRuntime()}catch{}}');
 });
 
-test('Gecko application wrappers retain the runtime handle until unmount cleanup', () => {
+test('remaining built-in Gecko application wrappers retain the runtime handle until cleanup', () => {
   for (const sourcePath of [
-    ['src', 'components', 'browser', 'BrowserApp.tsx'],
     ['src', 'components', 'whatsapp', 'WhatsAppApp.tsx'],
     ['src', 'components', 'youtube-music', 'YouTubeMusicApp.tsx'],
   ]) {

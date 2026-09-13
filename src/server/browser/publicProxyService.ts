@@ -6,7 +6,7 @@ import type {
   PublicProxyEndpoint,
   PublicProxyHealth,
   PublicProxyProtocol,
-} from '@/components/browser/services/publicProxy';
+} from './publicProxyTypes';
 
 const SOURCE_CACHE_MS = 5 * 60 * 1000;
 const SOURCE_TIMEOUT_MS = 10_000;

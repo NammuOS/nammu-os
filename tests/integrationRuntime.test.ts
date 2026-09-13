@@ -16,6 +16,8 @@ import {
   TEST_NAMMU_PUBLIC_KEY_HEX,
 } from './fixtures/helloNammuFixture';
 import { NammuSDKClient, type IPCTransport } from '@/sdk';
+import { createPackageServiceRegistry } from '@/platform/sandbox/packageServiceRegistry';
+import type { PlatformCapabilities } from '@/platform/contracts';
 
 const capabilities: CapabilityDeclaration[] = [
   { type: 'service', name: 'core.runtime' },
@@ -172,6 +174,9 @@ describe('B0 generic packaged integration runtime', () => {
       onWebSurfaceSetVisible: async (_, id, visible) => {
         hostOperations.push(`${id}:visible:${visible}`);
       },
+      onWebSurfaceSetZoom: async (_, id, zoom) => {
+        hostOperations.push(`${id}:zoom:${zoom}`);
+      },
       onWebSurfaceFocus: async (_, id) => {
         hostOperations.push(`${id}:focus`);
       },
@@ -187,7 +192,12 @@ describe('B0 generic packaged integration runtime', () => {
     broker.registerContext(attacker);
     owner.capabilities = [
       ...capabilities,
-      { type: 'web-surface', name: 'secondary', navigation: { mode: 'public-web' } },
+      {
+        type: 'web-surface',
+        name: 'secondary',
+        navigation: { mode: 'public-web' },
+        untrustedProxyRouting: true,
+      },
     ];
     const surface = await call(broker, owner, 'webSurfaces.create', {
       capability: 'primary',
@@ -226,16 +236,66 @@ describe('B0 generic packaged integration runtime', () => {
       bounds: { x: 4, y: 8, width: 640, height: 360 },
     });
     await call(broker, owner, 'webSurfaces.focus', { id: surface.id });
+    await call(broker, owner, 'webSurfaces.setZoom', { id: surface.id, zoom: 1.25 });
     await call(broker, owner, 'webSurfaces.control', { id: surface.id, control: 'reload' });
     expect(hostOperations).toEqual([
       `${surface.id}:visible:false`,
       `${surface.id}:bounds`,
       `${surface.id}:visible:true`,
       `${surface.id}:focus`,
+      `${surface.id}:zoom:1.25`,
       `${surface.id}:reload`,
     ]);
     await broker.unregisterContext('instance-owner');
     expect(destroyed).toEqual([surface.id]);
+  });
+
+  it('keeps optional public-proxy routing capability-bound and rejects private endpoints', async () => {
+    const applied: unknown[] = [];
+    const ctx = await context('proxy-owner');
+    ctx.capabilities = [
+      {
+        type: 'web-surface',
+        name: 'proxy-surface',
+        navigation: { mode: 'public-web' },
+        untrustedProxyRouting: true,
+      },
+    ];
+    const broker = new CapabilityBroker({
+      onWebSurfaceCreate: async () => ({
+        id: 'proxy-handle',
+        url: 'https://example.com/',
+        title: '',
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        isAudioPlaying: false,
+        isMuted: false,
+        visible: true,
+      }),
+      onWebSurfaceSetProxyRoute: async (_, id, scope, endpoints) => {
+        applied.push({ id, scope, endpoints });
+      },
+    });
+    broker.registerContext(ctx);
+    const surface = await call(broker, ctx, 'webSurfaces.create', {
+      capability: 'proxy-surface',
+      url: 'https://example.com/',
+      bounds: { x: 0, y: 0, width: 800, height: 600 },
+    });
+    await call(broker, ctx, 'webSurfaces.setProxyRoute', {
+      id: surface.id,
+      scope: 'surface',
+      endpoints: [{ protocol: 'https', host: '1.1.1.1', port: 443 }],
+    });
+    expect(applied).toHaveLength(1);
+    await expect(
+      call(broker, ctx, 'webSurfaces.setProxyRoute', {
+        id: surface.id,
+        scope: 'surface',
+        endpoints: [{ protocol: 'http', host: '127.0.0.1', port: 3000 }],
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
 
   it('denies undeclared permissions and service identities', async () => {
@@ -251,6 +311,58 @@ describe('B0 generic packaged integration runtime', () => {
     await expect(
       call(broker, ctx, 'services.request', { service: 'secret.internal', operation: 'read' }),
     ).rejects.toMatchObject({ code: 'UNDECLARED_CAPABILITY' });
+  });
+
+  it('exposes Browser services as validated named operations rather than raw URLs', async () => {
+    const requests: Array<{ path: string; init?: RequestInit }> = [];
+    const platform = {
+      runtime: 'web',
+      webSurfaces: { supported: true },
+      services: {
+        async ready() {
+          return { runtime: 'web', origin: 'https://nammu.invalid', instanceId: null } as const;
+        },
+        async request(path: string, init?: RequestInit) {
+          requests.push({ path, init });
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+        async wispUrl() {
+          throw new Error('Packages do not receive Wisp authority.');
+        },
+      },
+    } as unknown as PlatformCapabilities;
+    const registry = createPackageServiceRegistry(platform);
+
+    await registry.request('browser.search', 'suggest', { query: 'nammu browser' });
+    await registry.request('browser.public-proxies', 'discover', {
+      protocol: 'https',
+      country: 'in',
+      limit: 20,
+      refresh: true,
+    });
+    await registry.request('browser.public-proxies', 'check', {
+      ids: ['proxy-one'],
+      targetUrl: 'https://example.com',
+    });
+
+    expect(requests.map(({ path }) => path)).toEqual([
+      '/api/browser/search?q=nammu%20browser',
+      '/api/browser/public-proxies?protocol=https&country=IN&limit=20&refresh=1',
+      '/api/browser/public-proxies/check',
+    ]);
+    expect(requests[2].init?.method).toBe('POST');
+    await expect(
+      registry.request('browser.public-proxies', 'check', {
+        ids: ['proxy-one'],
+        targetUrl: 'http://127.0.0.1:3000',
+      }),
+    ).rejects.toThrow('invalid');
+    await expect(registry.request('browser.search', 'raw-fetch', {})).rejects.toThrow(
+      'unavailable',
+    );
   });
 
   it('enforces service request and response limits at the broker boundary', async () => {
@@ -416,12 +528,22 @@ describe('B0 generic packaged integration runtime', () => {
       url: 'https://example.com/',
       bounds: { x: 0, y: 0, width: 10, height: 10 },
     });
+    const popupUrls: string[] = [];
+    surface.onOpenRequest((url) => popupUrls.push(url));
     await surface.navigate('https://example.com/next');
+    await surface.setZoom(1.2);
+    listener?.({
+      type: 'event',
+      eventName: 'system.web-surface-open.opaque',
+      payload: { id: 'opaque', url: 'https://example.com/popup' },
+    });
+    expect(popupUrls).toEqual(['https://example.com/popup']);
     expect(calls.map((call) => call.method)).toEqual([
       'assets.read',
       'services.request',
       'webSurfaces.create',
       'webSurfaces.navigate',
+      'webSurfaces.setZoom',
     ]);
     expect(JSON.stringify(calls)).not.toContain('TAURI');
     sdk.dispose();

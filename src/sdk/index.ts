@@ -91,18 +91,30 @@ export interface WebSurfaceSnapshot {
 
 export type WebSurfaceControl = 'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
 
+export interface WebSurfaceProxyEndpoint {
+  protocol: 'http' | 'https' | 'socks4' | 'socks5';
+  host: string;
+  port: number;
+}
+
 export interface WebSurfaceHandle {
   readonly id: string;
   navigate(url: string): Promise<void>;
   control(control: WebSurfaceControl): Promise<void>;
   setBounds(bounds: WebSurfaceBounds): Promise<void>;
   setVisible(visible: boolean): Promise<void>;
+  setZoom(zoom: number): Promise<void>;
+  setProxyRoute(
+    scope: 'profile' | 'surface',
+    endpoints: readonly WebSurfaceProxyEndpoint[],
+  ): Promise<void>;
   attach(bounds: WebSurfaceBounds): Promise<void>;
   detach(): Promise<void>;
   focus(): Promise<void>;
   getState(): Promise<WebSurfaceSnapshot>;
   destroy(): Promise<void>;
   onState(listener: (state: WebSurfaceSnapshot) => void): () => void;
+  onOpenRequest(listener: (url: string) => void): () => void;
 }
 
 export interface WebSurfacesApi {
@@ -349,6 +361,14 @@ export class NammuSDKClient implements NammuApp {
             ensureOpen();
             await this.call('webSurfaces.setVisible', { id, visible });
           },
+          setZoom: async (zoom) => {
+            ensureOpen();
+            await this.call('webSurfaces.setZoom', { id, zoom });
+          },
+          setProxyRoute: async (scope, endpoints) => {
+            ensureOpen();
+            await this.call('webSurfaces.setProxyRoute', { id, scope, endpoints });
+          },
           attach: async (bounds) => {
             ensureOpen();
             await this.call('webSurfaces.attach', { id, bounds });
@@ -371,6 +391,10 @@ export class NammuSDKClient implements NammuApp {
             destroyed = true;
           },
           onState: (listener) => this.subscribeHostEvent(`system.web-surface.${id}`, listener),
+          onOpenRequest: (listener) =>
+            this.subscribeHostEvent(`system.web-surface-open.${id}`, (payload) => {
+              if (typeof payload?.url === 'string') listener(payload.url);
+            }),
         };
       },
     };

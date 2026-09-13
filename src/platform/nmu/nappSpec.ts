@@ -113,6 +113,8 @@ export interface WebSurfaceCapability {
   maxSurfaces?: number;
   /** Whether a stable, app-isolated WebView profile may be used. */
   persistentProfile?: boolean;
+  /** Allow the app to request host-validated untrusted public proxy routing. */
+  untrustedProxyRouting?: boolean;
 }
 
 export type CapabilityDeclaration =

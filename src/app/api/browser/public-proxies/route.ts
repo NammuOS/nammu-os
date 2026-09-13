@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDiscoveredPublicProxies } from '@/server/browser/publicProxyService';
-import type { PublicProxyProtocol } from '@/components/browser/services/publicProxy';
+import type { PublicProxyProtocol } from '@/server/browser/publicProxyTypes';
 
 const PROTOCOLS = new Set<PublicProxyProtocol>(['http', 'https', 'socks4', 'socks5']);
 

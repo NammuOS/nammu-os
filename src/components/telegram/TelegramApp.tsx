@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Edit2, Plus, RotateCw, Send, Volume2, VolumeX, X } from 'lucide-react';
 import { getPlatformCapabilities, type WebSurfaceSnapshot } from '../../platform';
 import NativeWebSurface, { type NativeWebSurfaceHandle } from '../web-surfaces/NativeWebSurface';
-import { getGeckoRuntimeUrl } from '../browser/services/geckoRuntimeUrl';
+import { getGeckoRuntimeUrl } from '../../web-surfaces/geckoRuntimeUrl';
 import {
   MAX_TELEGRAM_ACCOUNTS,
   getStoredTelegramTabs,

@@ -709,6 +709,12 @@ export function createTauriWebSurfaces(
         { id, zoom },
         'The native web surface zoom could not be changed.',
       ),
+    async setProxyRoute() {
+      return {
+        status: 'unsupported',
+        reason: 'Dynamic proxy routing is unavailable for the Windows WebView2 surface.',
+      };
+    },
     async getState(id) {
       const result = await command<WebSurfaceSnapshot>(
         'get_web_surface_state',

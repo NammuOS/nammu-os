@@ -13,6 +13,12 @@ export interface PackageSurfaceBounds {
 export type PackageSurfaceControl =
   'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
 
+export interface PackageSurfaceProxyEndpoint {
+  protocol: 'http' | 'https' | 'socks4' | 'socks5';
+  host: string;
+  port: number;
+}
+
 export interface PackageSurfaceSnapshot {
   /** Opaque, broker-local handle. Native surface identities never cross IPC. */
   id: string;

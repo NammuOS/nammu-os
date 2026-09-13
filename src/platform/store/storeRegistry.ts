@@ -33,6 +33,8 @@ export interface NammuStoreRegistry {
 
 const NOTES_RELEASE_URL =
   'https://github.com/NammuOS/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp';
+const BROWSER_RELEASE_URL =
+  'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp';
 
 /**
  * The bootstrap catalog contains public discovery metadata only. Package bytes remain in the
@@ -43,6 +45,38 @@ export const OFFICIAL_NAMMU_REGISTRY: NammuStoreRegistry = {
   id: 'nammu-official',
   name: 'Nammu Store',
   apps: [
+    {
+      id: 'os.nammu.browser',
+      name: 'Browser',
+      tagline: 'Private, capable browsing across Web and Desktop NammuOS.',
+      description:
+        'Browse with tabs, private sessions, bookmarks, history, productive new-tab workspaces, and optional public-proxy routing. NammuOS keeps the engine outside the app package: pooled Gecko/WASM on the Web and isolated WebView2 surfaces on Desktop.',
+      developer: 'Nammu',
+      category: 'Internet',
+      repository: 'https://github.com/NammuOS/nammu-browser',
+      license: 'Proprietary — Nammu official application',
+      icon: 'browser',
+      screenshots: ['/store/os.nammu.browser/browser-workspace.png'],
+      permissions: [
+        'filesystem.user-selected.read',
+        'filesystem.user-selected.write',
+        'clipboard.read',
+        'clipboard.write',
+        'migration.legacy-storage',
+        'integration.web-surfaces',
+        'integration.services',
+        'window.manage',
+      ],
+      release: {
+        version: '1.0.0',
+        packageUrl: BROWSER_RELEASE_URL,
+        sha256: '541af4d497a43e7c2576ff3bd061565dc6fed07a84cd34019ba267a39d364ea6',
+        size: 626_055,
+        publishedAt: '2026-09-13',
+        releaseNotes:
+          'First independent release. Preserves Browser tabs, private sessions, bookmarks, history, settings, new-tab workspaces, and the Core-owned Gecko/WebView2 runtime split.',
+      },
+    },
     {
       id: 'os.nammu.notes',
       name: 'Notes',

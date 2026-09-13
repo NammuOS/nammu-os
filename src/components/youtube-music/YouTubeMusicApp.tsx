@@ -14,7 +14,7 @@ import {
 } from './services/musicStore';
 import { useMasterVolume } from '../../hooks/useMasterVolume';
 import { getPlatformCapabilities } from '../../platform';
-import { getGeckoRuntimeUrl } from '../browser/services/geckoRuntimeUrl';
+import { getGeckoRuntimeUrl } from '../../web-surfaces/geckoRuntimeUrl';
 import { useWindowRuntime } from '../os/WindowRuntimeContext';
 import NativeWebSurface, {
   type NativeWebSurfaceHandle,

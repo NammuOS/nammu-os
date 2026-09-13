@@ -4,7 +4,7 @@ const RUNTIME_HOME_URL = 'about:blank';
 function validateWispEndpoint(value: string): string {
   const url = new URL(value);
   if (
-    (url.protocol !== 'ws:' && url.protocol !== 'wss:') ||
+    !['ws:', 'wss:'].includes(url.protocol) ||
     url.username ||
     url.password ||
     url.search ||
@@ -26,8 +26,6 @@ export function getGeckoRuntimeUrl(session: string, wispEndpoint: string): strin
     url: RUNTIME_HOME_URL,
     session,
   });
-  const fragment = new URLSearchParams({
-    'nammu-wisp': validateWispEndpoint(wispEndpoint),
-  });
-  return `${FIREFOX_RUNTIME_URL}?${params.toString()}#${fragment.toString()}`;
+  const fragment = new URLSearchParams({ 'nammu-wisp': validateWispEndpoint(wispEndpoint) });
+  return `${FIREFOX_RUNTIME_URL}?${params}#${fragment}`;
 }
