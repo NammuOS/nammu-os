@@ -15,6 +15,13 @@ import {
   materializeSandboxDocument,
 } from '@/platform/sandbox/sandboxBridge';
 import { getPlatformCapabilities } from '@/platform';
+import { useWindowRuntime } from '../WindowRuntimeContext';
+import { createPackageServiceRegistry } from '@/platform/sandbox/packageServiceRegistry';
+import type {
+  PackageSurfaceBounds,
+  PackageSurfaceSnapshot,
+} from '@/platform/sandbox/integrationContracts';
+import type { WebSurfaceSnapshot } from '@/platform';
 
 export interface AppSandboxHostProps {
   appId: string;
@@ -28,6 +35,14 @@ export interface AppSandboxHostProps {
 
 function capabilityFailureMessage(result: { status: string; message?: string; reason?: string }) {
   return result.message || result.reason || 'The requested platform capability is unavailable.';
+}
+
+async function isolatedProfileKey(appId: string, profileKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(appId));
+  const namespace = Array.from(new Uint8Array(digest).slice(0, 12), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  return `pkg-${namespace}-${profileKey}`.slice(0, 80);
 }
 
 export function AppSandboxHost({
@@ -51,6 +66,24 @@ export function AppSandboxHost({
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const windowRuntime = useWindowRuntime();
+  const hostSurfaceVisibleRef = useRef(true);
+  hostSurfaceVisibleRef.current =
+    windowRuntime.isActive &&
+    !windowRuntime.shellOverlayActive &&
+    !windowRuntime.isMinimized &&
+    (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+  const surfaceMapRef = useRef(
+    new Map<
+      string,
+      {
+        nativeId: string;
+        relativeBounds: PackageSurfaceBounds;
+        capability: string;
+        desiredVisible: boolean;
+      }
+    >(),
+  );
 
   // Generate unique instance ID and cryptographically random nonce for channel binding
   const instanceIdRef = useRef<string>(
@@ -66,6 +99,32 @@ export function AppSandboxHost({
 
   const instanceId = instanceIdRef.current;
   const instanceNonce = instanceNonceRef.current;
+
+  const packageSurfaceSnapshot = useCallback(
+    (handle: string, snapshot: WebSurfaceSnapshot): PackageSurfaceSnapshot => ({
+      id: handle,
+      url: snapshot.url,
+      title: snapshot.title,
+      isLoading: snapshot.isLoading,
+      canGoBack: snapshot.canGoBack,
+      canGoForward: snapshot.canGoForward,
+      isAudioPlaying: snapshot.isAudioPlaying,
+      isMuted: snapshot.isMuted,
+      visible: snapshot.visible,
+    }),
+    [],
+  );
+
+  const hostBounds = useCallback((bounds: PackageSurfaceBounds): PackageSurfaceBounds => {
+    const rect = iframeRef.current?.getBoundingClientRect();
+    if (!rect) throw new Error('The application viewport is unavailable.');
+    return {
+      x: rect.left + bounds.x,
+      y: rect.top + bounds.y,
+      width: Math.min(bounds.width, Math.max(1, rect.width - bounds.x)),
+      height: Math.min(bounds.height, Math.max(1, rect.height - bounds.y)),
+    };
+  }, []);
 
   // Load and prepare application package
   useEffect(() => {
@@ -139,6 +198,8 @@ export function AppSandboxHost({
     const db = getNMUDatabase();
     const engine = getNMUEngine();
     const platform = getPlatformCapabilities();
+    const serviceRegistry = createPackageServiceRegistry(platform);
+    let unsubscribeSurfaceState: (() => void) | undefined;
 
     async function initBroker() {
       const appRecord = await db.getApp(appId);
@@ -174,6 +235,101 @@ export function AppSandboxHost({
           if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
           return { saved: true, fileName: result.value.fileName };
         },
+        onPickBinaryFiles: async (options) => {
+          const result = await platform.files.pick(options);
+          if (result.status === 'cancelled') return { cancelled: true, files: [] };
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          return { cancelled: false, files: result.value.files.map((file) => ({ ...file })) };
+        },
+        onSaveBinaryFile: async ({ suggestedName, bytes, mimeType }) => {
+          const result = await platform.files.save({ suggestedName, contents: bytes, mimeType });
+          if (result.status === 'cancelled') return { saved: false };
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          return { saved: true, fileName: result.value.fileName };
+        },
+        onServiceRequest: async (_, __, request) =>
+          serviceRegistry.request(request.service, request.operation, request.payload),
+        onWebSurfaceCreate: async (_, aId, declaration, request) => {
+          if (!platform.webSurfaces.supported) {
+            throw new Error(
+              'This host does not yet provide a packaged web-surface driver for the current runtime.',
+            );
+          }
+          const profileNamespace = await isolatedProfileKey(aId, request.profileKey);
+          const result = await platform.webSurfaces.create({
+            owner: 'integration',
+            profileKey: profileNamespace,
+            privateSession: request.privateSession || declaration.persistentProfile !== true,
+            url: request.url,
+            bounds: hostBounds(request.bounds),
+            visible: request.visible && hostSurfaceVisibleRef.current,
+            navigationPolicy: {
+              allowPublicWeb: declaration.navigation.mode === 'public-web',
+              allowedOrigins:
+                declaration.navigation.mode === 'approved-origins'
+                  ? declaration.navigation.origins
+                  : [],
+            },
+          });
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          const handle = `surface_${crypto.randomUUID().replaceAll('-', '')}`;
+          surfaceMapRef.current.set(handle, {
+            nativeId: result.value.id,
+            relativeBounds: request.bounds,
+            capability: declaration.name,
+            desiredVisible: request.visible,
+          });
+          return packageSurfaceSnapshot(handle, result.value);
+        },
+        onWebSurfaceDestroy: async (_, handle) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) return;
+          surfaceMapRef.current.delete(handle);
+          const result = await platform.webSurfaces.destroy(surface.nativeId);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceNavigate: async (_, handle, url) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          const result = await platform.webSurfaces.navigate(surface.nativeId, url);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceControl: async (_, handle, control) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          const result = await platform.webSurfaces.control(surface.nativeId, control);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceSetBounds: async (_, handle, bounds) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          surface.relativeBounds = bounds;
+          const result = await platform.webSurfaces.setBounds(surface.nativeId, hostBounds(bounds));
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceSetVisible: async (_, handle, visible) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          surface.desiredVisible = visible;
+          const result = await platform.webSurfaces.setVisible(
+            surface.nativeId,
+            visible && hostSurfaceVisibleRef.current,
+          );
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceFocus: async (_, handle) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          const result = await platform.webSurfaces.focus(surface.nativeId);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+        },
+        onWebSurfaceGetState: async (_, handle) => {
+          const surface = surfaceMapRef.current.get(handle);
+          if (!surface) throw new Error('The host web surface no longer exists.');
+          const result = await platform.webSurfaces.getState(surface.nativeId);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          return packageSurfaceSnapshot(handle, result.value);
+        },
         onLegacyStorageRead: async (key) => localStorage.getItem(key),
         onLegacyStorageComplete: async (key) => localStorage.removeItem(key),
       });
@@ -186,6 +342,14 @@ export function AppSandboxHost({
         grantedPermissions: permissions,
         requestedPermissions,
         legacyStorageKeys: new Set(appRecord.legacyStorageKeys ?? []),
+        capabilities: appRecord.capabilities ?? [],
+        lifecycleState: {
+          phase: 'active',
+          visible: true,
+          focused: true,
+          active: true,
+          suspended: false,
+        },
         scopedVfs,
         postMessage: (msg) => {
           messageChannelRef.current?.port1.postMessage(msg);
@@ -197,6 +361,15 @@ export function AppSandboxHost({
       broker.registerContext(context);
       brokerRef.current = broker;
       contextRef.current = context;
+      if (platform.webSurfaces.supported) {
+        unsubscribeSurfaceState = await platform.webSurfaces.subscribe((snapshot) => {
+          const match = [...surfaceMapRef.current.entries()].find(
+            ([, surface]) => surface.nativeId === snapshot.id,
+          );
+          if (match)
+            broker.publishSurfaceState(instanceId, packageSurfaceSnapshot(match[0], snapshot));
+        });
+      }
 
       const pending = pendingPortRequestsRef.current.splice(0);
       for (const request of pending) {
@@ -215,8 +388,9 @@ export function AppSandboxHost({
     return () => {
       cancelled = true;
       if (brokerRef.current) {
-        brokerRef.current.unregisterContext(instanceId);
+        void brokerRef.current.unregisterContext(instanceId);
       }
+      unsubscribeSurfaceState?.();
       if (messageChannelRef.current) {
         messageChannelRef.current.port1.close();
         messageChannelRef.current = null;
@@ -224,7 +398,73 @@ export function AppSandboxHost({
       channelBoundRef.current = false;
       pendingPortRequestsRef.current = [];
     };
-  }, [appId, instanceId, instanceNonce, windowId]);
+  }, [appId, hostBounds, instanceId, instanceNonce, packageSurfaceSnapshot, windowId]);
+
+  useEffect(() => {
+    const publish = () => {
+      const suspended = document.visibilityState === 'hidden';
+      brokerRef.current?.updateLifecycle(instanceId, {
+        phase: suspended ? 'suspended' : windowRuntime.phase,
+        visible: !windowRuntime.isMinimized && !suspended,
+        focused: windowRuntime.isActive && !windowRuntime.shellOverlayActive && !suspended,
+        active: windowRuntime.isActive && !suspended,
+        suspended,
+      });
+      const platform = getPlatformCapabilities();
+      if (platform.webSurfaces.supported) {
+        for (const surface of surfaceMapRef.current.values()) {
+          void platform.webSurfaces.setVisible(
+            surface.nativeId,
+            surface.desiredVisible &&
+              windowRuntime.isActive &&
+              !windowRuntime.shellOverlayActive &&
+              !windowRuntime.isMinimized &&
+              !suspended,
+          );
+        }
+      }
+    };
+    publish();
+    document.addEventListener('visibilitychange', publish);
+    return () => document.removeEventListener('visibilitychange', publish);
+  }, [
+    instanceId,
+    windowRuntime.isActive,
+    windowRuntime.isMinimized,
+    windowRuntime.phase,
+    windowRuntime.shellOverlayActive,
+  ]);
+
+  useEffect(() => {
+    const platform = getPlatformCapabilities();
+    if (!platform.webSurfaces.supported) return;
+    let frame = 0;
+    const reflow = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        for (const surface of surfaceMapRef.current.values()) {
+          try {
+            void platform.webSurfaces.setBounds(
+              surface.nativeId,
+              hostBounds(surface.relativeBounds),
+            );
+          } catch {
+            // The sandbox host may have detached between scheduling and layout.
+          }
+        }
+      });
+    };
+    const observer = new ResizeObserver(reflow);
+    if (iframeRef.current) observer.observe(iframeRef.current);
+    const events: Array<keyof WindowEventMap> = ['mousemove', 'mouseup', 'resize', 'scroll'];
+    events.forEach((name) => window.addEventListener(name, reflow, true));
+    return () => {
+      observer.disconnect();
+      events.forEach((name) => window.removeEventListener(name, reflow, true));
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [hostBounds, srcDoc]);
 
   // Establish MessageChannel binding when iframe loads
   const handleIframeLoad = useCallback(() => {

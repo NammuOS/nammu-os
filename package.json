@@ -42,6 +42,7 @@
     "pdf:p4:smoke": "bun scripts/smoke-pdf-p4.mjs",
     "pdf:p8:smoke": "bun scripts/smoke-pdf-ocr.mjs",
     "nmu:sandbox:accept": "node scripts/accept-nmu-sandbox.mjs",
+    "nmu:integration:accept": "node scripts/accept-integration-runtime.mjs",
     "nmu:release:accept": "bun scripts/accept-nmu-release-signing.ts",
     "nmu:release:sign": "bun scripts/sign-nammu-release.ts",
     "notes:package:accept": "bun scripts/accept-nammu-notes-package.ts",

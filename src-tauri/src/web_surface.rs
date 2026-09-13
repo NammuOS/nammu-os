@@ -78,6 +78,7 @@ pub enum WebSurfaceOwner {
     Whatsapp,
     Telegram,
     YoutubeMusic,
+    Integration,
 }
 
 impl WebSurfaceOwner {
@@ -87,6 +88,7 @@ impl WebSurfaceOwner {
             Self::Whatsapp => "whatsapp",
             Self::Telegram => "telegram",
             Self::YoutubeMusic => "youtube-music",
+            Self::Integration => "integration",
         }
     }
 
@@ -113,7 +115,60 @@ impl WebSurfaceOwner {
                     || host == "googleusercontent.com"
                     || host.ends_with(".googleusercontent.com")
             }
+            Self::Integration => false,
         }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSurfaceNavigationPolicy {
+    allow_public_web: bool,
+    #[serde(default)]
+    allowed_origins: Vec<String>,
+}
+
+impl WebSurfaceNavigationPolicy {
+    fn validate(&self) -> Result<Self, String> {
+        if self.allowed_origins.len() > 32 {
+            return Err("Too many native web-surface origins were declared.".to_string());
+        }
+        let mut normalized = Vec::with_capacity(self.allowed_origins.len());
+        for raw in &self.allowed_origins {
+            let url = Url::parse(raw)
+                .map_err(|_| "A native web-surface origin is invalid.".to_string())?;
+            if !matches!(url.scheme(), "http" | "https")
+                || url.host_str().is_none()
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.path() != "/"
+                || url.query().is_some()
+                || url.fragment().is_some()
+                || url.origin().ascii_serialization() != *raw
+                || normalized.contains(raw)
+            {
+                return Err("A native web-surface origin is invalid or duplicated.".to_string());
+            }
+            let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+            if host == "localhost"
+                || host.ends_with(".localhost")
+                || host == "127.0.0.1"
+                || host == "0.0.0.0"
+                || host == "::1"
+            {
+                return Err(
+                    "Local origins cannot be granted to a packaged web surface.".to_string()
+                );
+            }
+            normalized.push(raw.clone());
+        }
+        if !self.allow_public_web && normalized.is_empty() {
+            return Err("A restricted native web surface requires an approved origin.".to_string());
+        }
+        Ok(Self {
+            allow_public_web: self.allow_public_web,
+            allowed_origins: normalized,
+        })
     }
 }
 
@@ -186,7 +241,12 @@ struct SurfacePolicy {
 }
 
 impl SurfacePolicy {
-    fn validate_url(&self, owner: WebSurfaceOwner, raw: &str) -> Result<Url, String> {
+    fn validate_url(
+        &self,
+        owner: WebSurfaceOwner,
+        integration_policy: Option<&WebSurfaceNavigationPolicy>,
+        raw: &str,
+    ) -> Result<Url, String> {
         if raw.is_empty()
             || raw.len() > MAX_URL_LENGTH
             || raw.chars().any(|character| character.is_control())
@@ -216,7 +276,25 @@ impl SurfacePolicy {
             );
         }
 
-        if !owner.allows_host(&host) {
+        if owner == WebSurfaceOwner::Integration
+            && (host == "localhost"
+                || host.ends_with(".localhost")
+                || host == "127.0.0.1"
+                || host == "0.0.0.0"
+                || host == "::1")
+        {
+            return Err("Packaged web surfaces cannot navigate to local origins.".to_string());
+        }
+
+        let allowed = if owner == WebSurfaceOwner::Integration {
+            let policy = integration_policy.ok_or_else(|| {
+                "A packaged web surface requires an explicit navigation policy.".to_string()
+            })?;
+            policy.allow_public_web || policy.allowed_origins.iter().any(|item| item == &origin)
+        } else {
+            owner.allows_host(&host)
+        };
+        if !allowed {
             return Err(
                 "This remote application cannot navigate outside its approved sites.".to_string(),
             );
@@ -243,6 +321,7 @@ struct SurfaceEntry {
     label: String,
     host_label: String,
     snapshot: WebSurfaceSnapshot,
+    navigation_policy: Option<WebSurfaceNavigationPolicy>,
 }
 
 pub struct WebSurfaceState {
@@ -449,6 +528,7 @@ pub async fn create_web_surface(
     url: String,
     bounds: WebSurfaceBounds,
     visible: bool,
+    navigation_policy: Option<WebSurfaceNavigationPolicy>,
     app: AppHandle,
     caller: Webview,
     state: State<'_, WebSurfaceState>,
@@ -457,7 +537,25 @@ pub async fn create_web_surface(
     let host_label = caller.label().to_string();
     let host_window = caller.window().clone();
     let bounds = bounds.validate()?;
-    let initial_url = state.policy.validate_url(owner, &url)?;
+    let navigation_policy = if owner == WebSurfaceOwner::Integration {
+        Some(
+            navigation_policy
+                .ok_or_else(|| {
+                    "A packaged web surface requires an explicit navigation policy.".to_string()
+                })?
+                .validate()?,
+        )
+    } else {
+        if navigation_policy.is_some() {
+            return Err(
+                "Legacy native web surfaces cannot override their navigation policy.".to_string(),
+            );
+        }
+        None
+    };
+    let initial_url = state
+        .policy
+        .validate_url(owner, navigation_policy.as_ref(), &url)?;
     let profile_key = validate_profile_key(&profile_key)?;
 
     if state.lock()?.len() >= MAX_WEB_SURFACES {
@@ -467,6 +565,7 @@ pub async fn create_web_surface(
     let id = random_id(16)?;
     let label = format!("native-{}-{}", owner.profile_directory(), random_id(8)?);
     let policy = state.policy.clone();
+    let navigation_policy_for_navigation = navigation_policy.clone();
     let navigation_owner = owner;
     let app_for_load = app.clone();
     let id_for_load = id.clone();
@@ -477,6 +576,7 @@ pub async fn create_web_surface(
     let label_for_popup = label.clone();
     let host_label_for_popup = host_label.clone();
     let popup_policy = state.policy.clone();
+    let navigation_policy_for_popup = navigation_policy.clone();
     let popup_owner = owner;
     let owner_profile_root = state.profile_root.join(owner.profile_directory());
     let profile_directory = if profile_key == "default" {
@@ -498,12 +598,20 @@ pub async fn create_web_surface(
         .devtools(cfg!(debug_assertions))
         .on_navigation(move |candidate| {
             policy
-                .validate_url(navigation_owner, candidate.as_str())
+                .validate_url(
+                    navigation_owner,
+                    navigation_policy_for_navigation.as_ref(),
+                    candidate.as_str(),
+                )
                 .is_ok()
         })
         .on_new_window(move |candidate, _| {
             if popup_policy
-                .validate_url(popup_owner, candidate.as_str())
+                .validate_url(
+                    popup_owner,
+                    navigation_policy_for_popup.as_ref(),
+                    candidate.as_str(),
+                )
                 .is_err()
             {
                 return NewWindowResponse::Deny;
@@ -578,6 +686,7 @@ pub async fn create_web_surface(
             label: label.clone(),
             host_label,
             snapshot: snapshot.clone(),
+            navigation_policy,
         },
     );
 
@@ -643,7 +752,9 @@ pub fn navigate_web_surface(
 ) -> Result<(), String> {
     let entry = require_surface_owner(&caller, &state, &id)?;
     let owner = entry.snapshot.owner;
-    let target = state.policy.validate_url(owner, &url)?;
+    let target = state
+        .policy
+        .validate_url(owner, entry.navigation_policy.as_ref(), &url)?;
     get_surface(&app, &state, &id)?
         .navigate(target)
         .map_err(|error| error.to_string())?;
@@ -802,10 +913,14 @@ mod tests {
     #[test]
     fn browser_policy_allows_public_http_and_https() {
         assert!(policy()
-            .validate_url(WebSurfaceOwner::Browser, "https://example.com/path?q=1")
+            .validate_url(
+                WebSurfaceOwner::Browser,
+                None,
+                "https://example.com/path?q=1"
+            )
             .is_ok());
         assert!(policy()
-            .validate_url(WebSurfaceOwner::Browser, "http://example.com/")
+            .validate_url(WebSurfaceOwner::Browser, None, "http://example.com/")
             .is_ok());
     }
 
@@ -824,7 +939,7 @@ mod tests {
         ] {
             assert!(
                 policy()
-                    .validate_url(WebSurfaceOwner::Browser, candidate)
+                    .validate_url(WebSurfaceOwner::Browser, None, candidate)
                     .is_err(),
                 "allowed {candidate}"
             );
@@ -834,25 +949,30 @@ mod tests {
     #[test]
     fn application_owners_are_restricted_to_approved_navigation() {
         assert!(policy()
-            .validate_url(WebSurfaceOwner::Whatsapp, "https://web.whatsapp.com/")
+            .validate_url(WebSurfaceOwner::Whatsapp, None, "https://web.whatsapp.com/")
             .is_ok());
         assert!(policy()
-            .validate_url(WebSurfaceOwner::Whatsapp, "https://example.com/")
+            .validate_url(WebSurfaceOwner::Whatsapp, None, "https://example.com/")
             .is_err());
         assert!(policy()
-            .validate_url(WebSurfaceOwner::Telegram, "https://web.telegram.org/a/")
+            .validate_url(
+                WebSurfaceOwner::Telegram,
+                None,
+                "https://web.telegram.org/a/"
+            )
             .is_ok());
         assert!(policy()
-            .validate_url(WebSurfaceOwner::Telegram, "https://example.com/")
+            .validate_url(WebSurfaceOwner::Telegram, None, "https://example.com/")
             .is_err());
         assert!(policy()
             .validate_url(
                 WebSurfaceOwner::YoutubeMusic,
+                None,
                 "https://accounts.google.com/"
             )
             .is_ok());
         assert!(policy()
-            .validate_url(WebSurfaceOwner::YoutubeMusic, "https://example.com/")
+            .validate_url(WebSurfaceOwner::YoutubeMusic, None, "https://example.com/")
             .is_err());
     }
 
@@ -868,6 +988,37 @@ mod tests {
                 "allowed {candidate}"
             );
         }
+    }
+
+    #[test]
+    fn integration_policy_is_explicit_and_rejects_local_origins() {
+        let restricted = WebSurfaceNavigationPolicy {
+            allow_public_web: false,
+            allowed_origins: vec!["https://example.com".to_string()],
+        }
+        .validate()
+        .unwrap();
+        assert!(policy()
+            .validate_url(
+                WebSurfaceOwner::Integration,
+                Some(&restricted),
+                "https://example.com/path"
+            )
+            .is_ok());
+        assert!(policy()
+            .validate_url(
+                WebSurfaceOwner::Integration,
+                Some(&restricted),
+                "https://other.example/"
+            )
+            .is_err());
+        assert!(policy()
+            .validate_url(
+                WebSurfaceOwner::Integration,
+                Some(&restricted),
+                "http://127.0.0.1:60123/api/health"
+            )
+            .is_err());
     }
 
     #[test]

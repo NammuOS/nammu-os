@@ -32,7 +32,6 @@ import type {
   PlatformNotification,
   PlatformNotificationPermission,
   PlatformServices,
-  PlatformWebSurfaces,
   SaveFileOptions,
   SavedFile,
 } from './contracts';
@@ -48,6 +47,7 @@ import {
   success,
   unsupported,
 } from './shared';
+import { createGeckoWebSurfaces } from './web/geckoWebSurfaces';
 
 export interface WebPlatformEnvironment {
   getWindow(): Window | undefined;
@@ -121,8 +121,6 @@ function webFailure<T>(error: unknown, fallback: string): CapabilityResult<T> {
     : operationError(errorMessage(error, fallback));
 }
 
-const webSurfacesUnsupportedReason =
-  'Native child web surfaces are unavailable in the web runtime.';
 const nativeFilesystemUnsupportedReason =
   'This PC is available only in the Nammu desktop application.';
 
@@ -130,51 +128,17 @@ function unsupportedFilesystem<T>(): FilesystemResult<T> {
   return { status: 'unsupported', reason: nativeFilesystemUnsupportedReason };
 }
 
-const webPlatformWebSurfaceImplementation: PlatformWebSurfaces = {
-  supported: false,
-  async create() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async destroy() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async navigate() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async control() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async setBounds() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async setVisible() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async focus() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async setZoom() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async getState() {
-    return unsupported(webSurfacesUnsupportedReason);
-  },
-  async subscribe() {
-    return () => {};
-  },
-  async subscribeOpenRequests() {
-    return () => {};
-  },
-};
-const webPlatformWebSurfaces = Object.freeze(webPlatformWebSurfaceImplementation);
-
 export function createWebPlatformCapabilities(
   environment: WebPlatformEnvironment = browserEnvironment,
 ): PlatformCapabilities {
   return Object.freeze({
     runtime: 'web' as const,
     services: createWebPlatformServices(environment),
-    webSurfaces: webPlatformWebSurfaces,
+    webSurfaces: createGeckoWebSurfaces({
+      getDocument: environment.getDocument,
+      getWindow: environment.getWindow,
+      getOrigin: () => environment.getLocationOrigin?.(),
+    }),
     fileClipboard: Object.freeze({
       supported: false,
       async read(): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {

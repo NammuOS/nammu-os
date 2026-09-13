@@ -26,6 +26,36 @@ const APP_ID_REGEX = /^[a-z0-9_-]+(\.[a-z0-9_-]+)+$/;
 const SEMVER_REGEX =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
+const CAPABILITY_NAME_REGEX = /^[a-z][a-z0-9.-]{0,79}$/;
+
+function isCapabilityName(value: unknown): value is string {
+  return typeof value === 'string' && CAPABILITY_NAME_REGEX.test(value);
+}
+
+function isSafeRemoteOrigin(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 512) return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      Boolean(url.hostname) &&
+      url.hostname !== 'localhost' &&
+      !url.hostname.endsWith('.localhost') &&
+      url.hostname !== '127.0.0.1' &&
+      url.hostname !== '0.0.0.0' &&
+      url.hostname !== '[::1]' &&
+      !url.username &&
+      !url.password &&
+      url.pathname === '/' &&
+      !url.search &&
+      !url.hash &&
+      url.origin === value
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface ParsedSemver {
   major: number;
   minor: number;
@@ -229,6 +259,7 @@ export function validateNammuAppManifest(
     } else {
       const seenProtocols = new Set<string>();
       const seenServices = new Set<string>();
+      const seenWebSurfaces = new Set<string>();
 
       for (const cap of obj.capabilities) {
         if (!cap || typeof cap !== 'object') {
@@ -257,12 +288,51 @@ export function validateNammuAppManifest(
             }
           }
         } else if (c.type === 'service') {
-          if (!c.name || typeof c.name !== 'string' || c.name.trim().length === 0) {
+          if (!isCapabilityName(c.name)) {
             errors.push('Service capability must have a non-empty name');
           } else if (seenServices.has(c.name)) {
             errors.push(`Duplicate service capability declared: "${c.name}"`);
           }
           seenServices.add(c.name);
+        } else if (c.type === 'web-surface') {
+          if (!isCapabilityName(c.name)) {
+            errors.push('Web-surface capability must have a safe name');
+          } else if (seenWebSurfaces.has(c.name)) {
+            errors.push(`Duplicate web-surface capability declared: "${c.name}"`);
+          }
+          seenWebSurfaces.add(c.name);
+          if (!c.navigation || !['public-web', 'approved-origins'].includes(c.navigation.mode)) {
+            errors.push(`Web-surface capability "${c.name}" has an invalid navigation policy`);
+          } else if (c.navigation.mode === 'approved-origins') {
+            if (
+              !Array.isArray(c.navigation.origins) ||
+              c.navigation.origins.length === 0 ||
+              c.navigation.origins.length > 32
+            ) {
+              errors.push(
+                `Web-surface capability "${c.name}" must declare between 1 and 32 origins`,
+              );
+            } else {
+              const normalizedOrigins = new Set<string>();
+              for (const origin of c.navigation.origins) {
+                if (!isSafeRemoteOrigin(origin) || normalizedOrigins.has(origin)) {
+                  errors.push(
+                    `Web-surface capability "${c.name}" contains an invalid or duplicate origin`,
+                  );
+                }
+                normalizedOrigins.add(String(origin));
+              }
+            }
+          }
+          if (
+            c.maxSurfaces !== undefined &&
+            (!Number.isInteger(c.maxSurfaces) || c.maxSurfaces < 1 || c.maxSurfaces > 8)
+          ) {
+            errors.push(`Web-surface capability "${c.name}" maxSurfaces must be between 1 and 8`);
+          }
+          if (c.persistentProfile !== undefined && typeof c.persistentProfile !== 'boolean') {
+            errors.push(`Web-surface capability "${c.name}" persistentProfile must be boolean`);
+          }
         } else {
           errors.push(`Unknown capability type: "${(c as any).type}"`);
         }

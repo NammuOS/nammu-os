@@ -29,7 +29,8 @@ describe('desktop remote application runtime split', () => {
     expect(native).toContain('Self::Whatsapp => "whatsapp"');
     expect(native).toContain('Self::Telegram => "telegram"');
     expect(native).toContain('Self::YoutubeMusic => "youtube-music"');
-    expect(native).toContain('if !owner.allows_host(&host)');
+    expect(native).toContain('owner == WebSurfaceOwner::Integration');
+    expect(native).toContain('policy.allowed_origins.iter().any');
     expect(native).toContain('require_trusted_caller(&caller)?');
     expect(native).toContain('.incognito(private_session)');
     expect(native).toContain('YOUTUBE_MUSIC_INITIALIZATION_SCRIPT');

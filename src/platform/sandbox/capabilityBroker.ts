@@ -9,8 +9,29 @@
  * windows/processes of the same application).
  */
 
-import { KNOWN_PERMISSIONS, type PermissionIdentifier } from '../nmu/nappSpec';
+import {
+  KNOWN_PERMISSIONS,
+  type CapabilityDeclaration,
+  type PermissionIdentifier,
+  type WebSurfaceCapability,
+} from '../nmu/nappSpec';
 import type { ScopedVFS } from '../vfs/vfsContracts';
+import {
+  PACKAGE_ASSET_LIMIT_BYTES,
+  PACKAGE_BINARY_LIMIT_BYTES,
+  PACKAGE_SERVICE_REQUEST_LIMIT_BYTES,
+  PACKAGE_SERVICE_RESPONSE_LIMIT_BYTES,
+  type PackageBinaryFile,
+  type PackageLifecycleState,
+  type PackageServiceRequest,
+  type PackageServiceResponse,
+  type PackageSurfaceBounds,
+  type PackageSurfaceControl,
+  type PackageSurfaceCreateRequest,
+  type PackageSurfaceSnapshot,
+  isSafePackagePath,
+  isSafeSurfaceBounds,
+} from './integrationContracts';
 
 export interface IPCRequest {
   id: string;
@@ -42,6 +63,8 @@ export interface SandboxContext {
   grantedPermissions: Set<PermissionIdentifier>;
   requestedPermissions: Set<PermissionIdentifier>;
   legacyStorageKeys?: Set<string>;
+  capabilities?: readonly CapabilityDeclaration[];
+  lifecycleState?: PackageLifecycleState;
   scopedVfs: ScopedVFS;
   postMessage?: (msg: IPCResponse | IPCEventNotification) => void;
 }
@@ -70,12 +93,52 @@ export interface HostServices {
   ) => Promise<{ saved: boolean; fileName?: string }>;
   onLegacyStorageRead?: (key: string) => Promise<string | null>;
   onLegacyStorageComplete?: (key: string) => Promise<void>;
+  onPickBinaryFiles?: (options: {
+    multiple: boolean;
+    filters: Array<{ name: string; extensions?: string[]; mimeTypes?: string[] }>;
+  }) => Promise<{ cancelled: boolean; files: PackageBinaryFile[] }>;
+  onSaveBinaryFile?: (options: {
+    suggestedName: string;
+    mimeType?: string;
+    bytes: Uint8Array;
+  }) => Promise<{ saved: boolean; fileName?: string }>;
+  onServiceRequest?: (
+    instanceId: string,
+    appId: string,
+    request: PackageServiceRequest,
+  ) => Promise<PackageServiceResponse>;
+  onWebSurfaceCreate?: (
+    instanceId: string,
+    appId: string,
+    declaration: WebSurfaceCapability,
+    request: PackageSurfaceCreateRequest,
+  ) => Promise<PackageSurfaceSnapshot>;
+  onWebSurfaceDestroy?: (instanceId: string, surfaceId: string) => Promise<void>;
+  onWebSurfaceNavigate?: (instanceId: string, surfaceId: string, url: string) => Promise<void>;
+  onWebSurfaceControl?: (
+    instanceId: string,
+    surfaceId: string,
+    control: PackageSurfaceControl,
+  ) => Promise<void>;
+  onWebSurfaceSetBounds?: (
+    instanceId: string,
+    surfaceId: string,
+    bounds: PackageSurfaceBounds,
+  ) => Promise<void>;
+  onWebSurfaceSetVisible?: (
+    instanceId: string,
+    surfaceId: string,
+    visible: boolean,
+  ) => Promise<void>;
+  onWebSurfaceFocus?: (instanceId: string, surfaceId: string) => Promise<void>;
+  onWebSurfaceGetState?: (instanceId: string, surfaceId: string) => Promise<PackageSurfaceSnapshot>;
 }
 
 export class CapabilityBroker {
   private contexts = new Map<string, SandboxContext>(); // instanceId -> SandboxContext
   private eventSubscriptions = new Map<string, Set<string>>(); // eventName -> Set<instanceId>
   private hostServices: HostServices;
+  private surfaceOwners = new Map<string, { instanceId: string; capability: string }>();
 
   constructor(hostServices: HostServices = {}) {
     this.hostServices = hostServices;
@@ -85,11 +148,36 @@ export class CapabilityBroker {
     this.contexts.set(context.instanceId, context);
   }
 
-  unregisterContext(instanceId: string): void {
+  async unregisterContext(instanceId: string): Promise<void> {
     this.contexts.delete(instanceId);
     for (const [_, subscribers] of this.eventSubscriptions.entries()) {
       subscribers.delete(instanceId);
     }
+    const owned = [...this.surfaceOwners.entries()]
+      .filter(([, owner]) => owner.instanceId === instanceId)
+      .map(([id]) => id);
+    await Promise.allSettled(
+      owned.map(async (id) => {
+        this.surfaceOwners.delete(id);
+        await this.hostServices.onWebSurfaceDestroy?.(instanceId, id);
+      }),
+    );
+  }
+
+  updateLifecycle(instanceId: string, state: PackageLifecycleState): void {
+    const context = this.contexts.get(instanceId);
+    if (!context) return;
+    context.lifecycleState = { ...state };
+    context.postMessage?.({ type: 'event', eventName: 'system.lifecycle', payload: state });
+  }
+
+  publishSurfaceState(instanceId: string, snapshot: PackageSurfaceSnapshot): void {
+    if (this.surfaceOwners.get(snapshot.id)?.instanceId !== instanceId) return;
+    this.contexts.get(instanceId)?.postMessage?.({
+      type: 'event',
+      eventName: `system.web-surface.${snapshot.id}`,
+      payload: snapshot,
+    });
   }
 
   getContext(instanceId: string): SandboxContext | undefined {
@@ -161,11 +249,265 @@ export class CapabilityBroker {
         return this.handleClipboard(context, action, params);
       case 'migration':
         return this.handleMigration(context, action, params);
+      case 'assets':
+        return this.handleAssets(context, action, params);
+      case 'services':
+        return this.handleServices(context, action, params);
+      case 'webSurfaces':
+        return this.handleWebSurfaces(context, action, params);
+      case 'lifecycle':
+        return this.handleLifecycle(context, action);
       default:
         throw {
           code: 'INVALID_METHOD',
           message: `Unknown subsystem or method: ${method}`,
         };
+    }
+  }
+
+  private capability<T extends CapabilityDeclaration['type']>(
+    context: SandboxContext,
+    type: T,
+    name: string,
+  ): Extract<CapabilityDeclaration, { type: T }> {
+    const declaration = context.capabilities?.find(
+      (candidate) => candidate.type === type && 'name' in candidate && candidate.name === name,
+    );
+    if (!declaration) {
+      throw {
+        code: 'UNDECLARED_CAPABILITY',
+        message: `Application '${context.appId}' did not declare ${type} capability '${name}'.`,
+      };
+    }
+    return declaration as Extract<CapabilityDeclaration, { type: T }>;
+  }
+
+  private async handleAssets(context: SandboxContext, action: string, params: any) {
+    if (action !== 'read') {
+      throw { code: 'INVALID_METHOD', message: `Unknown assets action: ${action}` };
+    }
+    const path = String(params.path ?? '');
+    if (!isSafePackagePath(path)) {
+      throw { code: 'INVALID_INPUT', message: 'A safe package-relative asset path is required.' };
+    }
+    const bytes = await context.scopedVfs.readAppFile(path);
+    if (bytes.byteLength > PACKAGE_ASSET_LIMIT_BYTES) {
+      throw { code: 'PAYLOAD_TOO_LARGE', message: 'Package asset exceeds the 64 MiB limit.' };
+    }
+    return { bytes, size: bytes.byteLength };
+  }
+
+  private async handleLifecycle(context: SandboxContext, action: string) {
+    if (action !== 'getState') {
+      throw { code: 'INVALID_METHOD', message: `Unknown lifecycle action: ${action}` };
+    }
+    return (
+      context.lifecycleState ?? {
+        phase: 'active',
+        visible: true,
+        focused: true,
+        active: true,
+        suspended: false,
+      }
+    );
+  }
+
+  private async handleServices(context: SandboxContext, action: string, params: any) {
+    if (action !== 'request') {
+      throw { code: 'INVALID_METHOD', message: `Unknown services action: ${action}` };
+    }
+    this.assertPermission(context, 'integration.services');
+    const service = String(params.service ?? '');
+    this.capability(context, 'service', service);
+    const operation = String(params.operation ?? '');
+    if (!/^[a-z][a-z0-9.-]{0,79}$/.test(operation)) {
+      throw { code: 'INVALID_INPUT', message: 'A safe service operation is required.' };
+    }
+    this.assertStructuredPayloadSize(
+      params.payload,
+      PACKAGE_SERVICE_REQUEST_LIMIT_BYTES,
+      'Service request',
+    );
+    if (!this.hostServices.onServiceRequest) {
+      throw { code: 'UNAVAILABLE', message: 'Packaged application services are unavailable.' };
+    }
+    const response = await this.hostServices.onServiceRequest(context.instanceId, context.appId, {
+      service,
+      operation,
+      payload: params.payload,
+    });
+    this.assertStructuredPayloadSize(
+      response,
+      PACKAGE_SERVICE_RESPONSE_LIMIT_BYTES,
+      'Service response',
+    );
+    return response;
+  }
+
+  private assertStructuredPayloadSize(value: unknown, maximum: number, label: string): void {
+    let encoded: Uint8Array;
+    try {
+      encoded = new TextEncoder().encode(JSON.stringify(value ?? null));
+    } catch {
+      throw { code: 'INVALID_INPUT', message: `${label} must be serializable.` };
+    }
+    if (encoded.byteLength > maximum) {
+      throw { code: 'LIMIT_REACHED', message: `${label} exceeds the supported size.` };
+    }
+  }
+
+  private requireOwnedSurface(context: SandboxContext, rawId: unknown): string {
+    const id = String(rawId ?? '');
+    if (!id || this.surfaceOwners.get(id)?.instanceId !== context.instanceId) {
+      throw {
+        code: 'SURFACE_NOT_OWNED',
+        message: 'The web surface does not belong to this application instance.',
+      };
+    }
+    return id;
+  }
+
+  private async handleWebSurfaces(context: SandboxContext, action: string, params: any) {
+    this.assertPermission(context, 'integration.web-surfaces');
+    if (action === 'create') {
+      const capabilityName = String(params.capability ?? '');
+      const declaration = this.capability(context, 'web-surface', capabilityName);
+      const count = [...this.surfaceOwners.values()].filter(
+        (owner) => owner.instanceId === context.instanceId && owner.capability === capabilityName,
+      ).length;
+      if (count >= (declaration.maxSurfaces ?? 1)) {
+        throw { code: 'LIMIT_REACHED', message: 'The declared web-surface limit was reached.' };
+      }
+      const request: PackageSurfaceCreateRequest = {
+        capability: capabilityName,
+        profileKey: String(params.profileKey ?? 'default'),
+        privateSession: params.privateSession === true,
+        url: String(params.url ?? ''),
+        bounds: params.bounds as PackageSurfaceBounds,
+        visible: params.visible !== false,
+      };
+      if (!/^[a-z0-9-]{1,80}$/.test(request.profileKey) || !isSafeSurfaceBounds(request.bounds)) {
+        throw { code: 'INVALID_INPUT', message: 'The web-surface request is invalid.' };
+      }
+      this.assertSurfaceUrl(declaration, request.url);
+      if (!this.hostServices.onWebSurfaceCreate) {
+        throw { code: 'UNAVAILABLE', message: 'Host-managed web surfaces are unavailable.' };
+      }
+      const snapshot = await this.hostServices.onWebSurfaceCreate(
+        context.instanceId,
+        context.appId,
+        declaration,
+        request,
+      );
+      if (!snapshot?.id || this.surfaceOwners.has(snapshot.id)) {
+        throw { code: 'INVALID_HOST_RESPONSE', message: 'The host returned an invalid surface.' };
+      }
+      this.surfaceOwners.set(snapshot.id, {
+        instanceId: context.instanceId,
+        capability: capabilityName,
+      });
+      return snapshot;
+    }
+
+    const id = this.requireOwnedSurface(context, params.id);
+    switch (action) {
+      case 'destroy':
+        await this.hostServices.onWebSurfaceDestroy?.(context.instanceId, id);
+        this.surfaceOwners.delete(id);
+        return { destroyed: true };
+      case 'navigate': {
+        const url = String(params.url ?? '');
+        const capabilityName = String(params.capability ?? '');
+        if (this.surfaceOwners.get(id)?.capability !== capabilityName) {
+          throw {
+            code: 'CAPABILITY_MISMATCH',
+            message: 'The surface capability cannot be changed.',
+          };
+        }
+        this.assertSurfaceUrl(this.capability(context, 'web-surface', capabilityName), url);
+        if (!this.hostServices.onWebSurfaceNavigate)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface navigation is unavailable.' };
+        await this.hostServices.onWebSurfaceNavigate(context.instanceId, id, url);
+        return { navigated: true };
+      }
+      case 'control': {
+        const control = String(params.control ?? '') as PackageSurfaceControl;
+        if (!['reload', 'stop', 'go-back', 'go-forward', 'mute', 'unmute'].includes(control)) {
+          throw { code: 'INVALID_INPUT', message: 'Unknown web-surface control.' };
+        }
+        if (!this.hostServices.onWebSurfaceControl)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface controls are unavailable.' };
+        await this.hostServices.onWebSurfaceControl(context.instanceId, id, control);
+        return { controlled: true };
+      }
+      case 'setBounds':
+        if (!isSafeSurfaceBounds(params.bounds))
+          throw { code: 'INVALID_INPUT', message: 'The web-surface bounds are invalid.' };
+        if (!this.hostServices.onWebSurfaceSetBounds)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface layout is unavailable.' };
+        await this.hostServices.onWebSurfaceSetBounds(context.instanceId, id, params.bounds);
+        return { updated: true };
+      case 'setVisible':
+        if (!this.hostServices.onWebSurfaceSetVisible)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface visibility is unavailable.' };
+        await this.hostServices.onWebSurfaceSetVisible(
+          context.instanceId,
+          id,
+          params.visible === true,
+        );
+        return { updated: true };
+      case 'detach':
+        if (!this.hostServices.onWebSurfaceSetVisible)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface detachment is unavailable.' };
+        await this.hostServices.onWebSurfaceSetVisible(context.instanceId, id, false);
+        return { detached: true };
+      case 'attach':
+        if (!isSafeSurfaceBounds(params.bounds))
+          throw { code: 'INVALID_INPUT', message: 'The web-surface bounds are invalid.' };
+        if (!this.hostServices.onWebSurfaceSetBounds || !this.hostServices.onWebSurfaceSetVisible) {
+          throw { code: 'UNAVAILABLE', message: 'Web-surface attachment is unavailable.' };
+        }
+        await this.hostServices.onWebSurfaceSetBounds(context.instanceId, id, params.bounds);
+        await this.hostServices.onWebSurfaceSetVisible(context.instanceId, id, true);
+        return { attached: true };
+      case 'focus':
+        if (!this.hostServices.onWebSurfaceFocus)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface focus is unavailable.' };
+        await this.hostServices.onWebSurfaceFocus(context.instanceId, id);
+        return { focused: true };
+      case 'getState':
+        if (!this.hostServices.onWebSurfaceGetState)
+          throw { code: 'UNAVAILABLE', message: 'Web-surface state is unavailable.' };
+        return this.hostServices.onWebSurfaceGetState(context.instanceId, id);
+      default:
+        throw { code: 'INVALID_METHOD', message: `Unknown webSurfaces action: ${action}` };
+    }
+  }
+
+  private assertSurfaceUrl(declaration: WebSurfaceCapability, raw: string): void {
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      throw { code: 'INVALID_INPUT', message: 'A valid HTTP or HTTPS URL is required.' };
+    }
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      raw.length > 8_192
+    ) {
+      throw {
+        code: 'INVALID_INPUT',
+        message: 'Only credential-free HTTP and HTTPS URLs are allowed.',
+      };
+    }
+    if (
+      declaration.navigation.mode === 'approved-origins' &&
+      !declaration.navigation.origins.includes(url.origin)
+    ) {
+      throw { code: 'NAVIGATION_DENIED', message: 'The URL is outside the declared origins.' };
     }
   }
 
@@ -384,6 +726,80 @@ export class CapabilityBroker {
           throw { code: 'UNAVAILABLE', message: 'Saving a user-selected file is unavailable.' };
         }
         return this.hostServices.onSaveTextFile(suggestedName, content, mimeType);
+      }
+      case 'pickBinary': {
+        this.assertPermission(context, 'filesystem.user-selected.read');
+        if (!this.hostServices.onPickBinaryFiles) {
+          throw { code: 'UNAVAILABLE', message: 'Selecting binary files is unavailable.' };
+        }
+        const multiple = params.multiple === true;
+        const filters = Array.isArray(params.filters)
+          ? params.filters.slice(0, 16).map((raw: any) => {
+              const name = String(raw?.name ?? 'Files').slice(0, 80);
+              const extensions = Array.isArray(raw?.extensions)
+                ? raw.extensions
+                    .map(String)
+                    .filter((value: string) => /^[a-z0-9]{1,16}$/i.test(value))
+                    .slice(0, 32)
+                : undefined;
+              const mimeTypes = Array.isArray(raw?.mimeTypes)
+                ? raw.mimeTypes
+                    .map(String)
+                    .filter((value: string) => /^[a-z0-9.+-]+\/[a-z0-9.+*-]+$/i.test(value))
+                    .slice(0, 32)
+                : undefined;
+              return { name, extensions, mimeTypes };
+            })
+          : [];
+        const result = await this.hostServices.onPickBinaryFiles({ multiple, filters });
+        if (result.files.length > (multiple ? 32 : 1)) {
+          throw { code: 'PAYLOAD_TOO_LARGE', message: 'Too many files were selected.' };
+        }
+        let total = 0;
+        for (const file of result.files) {
+          if (!(file.bytes instanceof Uint8Array) || file.size !== file.bytes.byteLength) {
+            throw {
+              code: 'INVALID_HOST_RESPONSE',
+              message: 'The selected file payload is invalid.',
+            };
+          }
+          total += file.size;
+        }
+        if (total > PACKAGE_BINARY_LIMIT_BYTES) {
+          throw {
+            code: 'PAYLOAD_TOO_LARGE',
+            message: 'Selected files exceed the 32 MiB transfer limit.',
+          };
+        }
+        return result;
+      }
+      case 'saveBinary': {
+        this.assertPermission(context, 'filesystem.user-selected.write');
+        const suggestedName = String(params.suggestedName ?? 'download.bin');
+        const bytes = params.bytes;
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength > PACKAGE_BINARY_LIMIT_BYTES) {
+          throw {
+            code: 'INVALID_INPUT',
+            message: 'Binary export exceeds the 32 MiB transfer limit.',
+          };
+        }
+        if (
+          !suggestedName ||
+          suggestedName.length > 160 ||
+          [...suggestedName].some(
+            (character) => character.charCodeAt(0) < 32 || '\\/:*?"<>|'.includes(character),
+          )
+        ) {
+          throw { code: 'INVALID_INPUT', message: 'A safe suggested file name is required.' };
+        }
+        if (!this.hostServices.onSaveBinaryFile) {
+          throw { code: 'UNAVAILABLE', message: 'Saving binary files is unavailable.' };
+        }
+        return this.hostServices.onSaveBinaryFile({
+          suggestedName,
+          mimeType: typeof params.mimeType === 'string' ? params.mimeType : undefined,
+          bytes,
+        });
       }
       default:
         throw { code: 'INVALID_METHOD', message: `Unknown files action: ${action}` };

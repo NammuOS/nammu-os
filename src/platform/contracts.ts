@@ -672,7 +672,12 @@ export interface PlatformServices {
   wispUrl(): Promise<string>;
 }
 
-export type WebSurfaceOwner = 'browser' | 'whatsapp' | 'telegram' | 'youtube-music';
+export type WebSurfaceOwner = 'browser' | 'whatsapp' | 'telegram' | 'youtube-music' | 'integration';
+
+export interface WebSurfaceNavigationPolicy {
+  allowPublicWeb: boolean;
+  allowedOrigins: readonly string[];
+}
 
 export interface WebSurfaceBounds {
   x: number;
@@ -711,6 +716,8 @@ export interface PlatformWebSurfaces {
     url: string;
     bounds: WebSurfaceBounds;
     visible: boolean;
+    /** Required for generic packaged integrations; omitted by legacy built-ins. */
+    navigationPolicy?: WebSurfaceNavigationPolicy;
   }): Promise<CapabilityResult<WebSurfaceSnapshot>>;
   destroy(id: string): Promise<CapabilityResult<void>>;
   navigate(id: string, url: string): Promise<CapabilityResult<void>>;

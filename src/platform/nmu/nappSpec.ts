@@ -32,6 +32,8 @@ export type PermissionIdentifier =
   | 'filesystem.user-selected.write'
   | 'migration.legacy-storage'
   | 'network.internet'
+  | 'integration.web-surfaces'
+  | 'integration.services'
   | 'window.manage'
   | 'events.system.subscribe'
   | 'events.cross-app.subscribe'
@@ -48,6 +50,8 @@ export const KNOWN_PERMISSIONS: Set<PermissionIdentifier> = new Set([
   'filesystem.user-selected.write',
   'migration.legacy-storage',
   'network.internet',
+  'integration.web-surfaces',
+  'integration.services',
   'window.manage',
   'events.system.subscribe',
   'events.cross-app.subscribe',
@@ -75,6 +79,8 @@ export const SENSITIVE_PERMISSIONS: Set<PermissionIdentifier> = new Set([
   'filesystem.user-selected.write',
   'migration.legacy-storage',
   'network.internet',
+  'integration.web-surfaces',
+  'integration.services',
   'events.system.subscribe',
   'events.cross-app.subscribe',
   'camera.capture',
@@ -97,7 +103,20 @@ export interface ServiceCapability {
   name: string;
 }
 
-export type CapabilityDeclaration = ProtocolCapability | FileHandlerCapability | ServiceCapability;
+export interface WebSurfaceCapability {
+  type: 'web-surface';
+  /** App-local name used by the SDK. It is not a native surface identity. */
+  name: string;
+  /** Public browser navigation or an exact set of approved remote origins. */
+  navigation: { mode: 'public-web' } | { mode: 'approved-origins'; origins: string[] };
+  /** Per-instance ceiling. Core additionally applies its global ceiling. */
+  maxSurfaces?: number;
+  /** Whether a stable, app-isolated WebView profile may be used. */
+  persistentProfile?: boolean;
+}
+
+export type CapabilityDeclaration =
+  ProtocolCapability | FileHandlerCapability | ServiceCapability | WebSurfaceCapability;
 
 export interface NammuAppManifest {
   /** Specification version of nammu.app.json (always 1 for current spec) */
@@ -160,6 +179,7 @@ export interface InstalledAppRecord {
   dataSchemaVersion: number;
   requestedPermissions: PermissionIdentifier[];
   grantedPermissions: PermissionIdentifier[];
+  capabilities?: CapabilityDeclaration[];
   state: AppState;
   activeVersion: string;
   activeVersionDir: string;
@@ -183,6 +203,7 @@ export interface InstalledVersionRecord {
   dataSchemaVersion: number;
   requestedPermissions: PermissionIdentifier[];
   grantedPermissions: PermissionIdentifier[];
+  capabilities?: CapabilityDeclaration[];
   activeVersionDir: string;
   installedAt: number;
   signatureVerified?: boolean;

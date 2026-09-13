@@ -11,6 +11,7 @@ import type {
   NammuAppManifest,
   NappSignatureEnvelope,
   PermissionIdentifier,
+  CapabilityDeclaration,
 } from '@/platform/nmu/nappSpec';
 import { computeCanonicalPayloadDigest } from '@/platform/nmu/packageSecurity';
 
@@ -54,6 +55,7 @@ export interface FixtureOptions {
   publisher?: string;
   publisherKeyId?: string;
   legacyStorageKeys?: string[];
+  capabilities?: CapabilityDeclaration[];
 }
 
 export function createHelloNammuManifest(options: FixtureOptions = {}): NammuAppManifest {
@@ -74,6 +76,7 @@ export function createHelloNammuManifest(options: FixtureOptions = {}): NammuApp
     publisher: options.publisher || 'dev.nammu',
     publisherKeyId: options.publisherKeyId || 'dev-key-1',
     legacyStorageKeys: options.legacyStorageKeys,
+    capabilities: options.capabilities,
   };
 }
 

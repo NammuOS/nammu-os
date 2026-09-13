@@ -608,7 +608,9 @@ function validWebSurfaceSnapshot(value: unknown): value is WebSurfaceSnapshot {
   return (
     typeof snapshot.id === 'string' &&
     /^[a-f0-9]{32}$/.test(snapshot.id) &&
-    ['browser', 'whatsapp', 'telegram', 'youtube-music'].includes(String(snapshot.owner)) &&
+    ['browser', 'whatsapp', 'telegram', 'youtube-music', 'integration'].includes(
+      String(snapshot.owner),
+    ) &&
     typeof snapshot.url === 'string' &&
     typeof snapshot.title === 'string' &&
     typeof snapshot.isLoading === 'boolean' &&
@@ -626,7 +628,9 @@ function validWebSurfaceOpenRequest(value: unknown): value is WebSurfaceOpenRequ
   if (
     typeof request.sourceId !== 'string' ||
     !/^[a-f0-9]{32}$/.test(request.sourceId) ||
-    !['browser', 'whatsapp', 'telegram', 'youtube-music'].includes(String(request.owner)) ||
+    !['browser', 'whatsapp', 'telegram', 'youtube-music', 'integration'].includes(
+      String(request.owner),
+    ) ||
     typeof request.url !== 'string'
   )
     return false;

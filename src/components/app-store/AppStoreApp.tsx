@@ -56,6 +56,14 @@ const PERMISSION_LABELS: Record<PermissionIdentifier, { label: string; detail: s
     detail: 'Import the exact previous built-in app storage key once.',
   },
   'network.internet': { label: 'Internet access', detail: 'Connect to public network services.' },
+  'integration.web-surfaces': {
+    label: 'Embedded web content',
+    detail: 'Create isolated browser surfaces within the app window.',
+  },
+  'integration.services': {
+    label: 'Nammu services',
+    detail: 'Use only the named Nammu services declared by this package.',
+  },
   'window.manage': {
     label: 'Manage its window',
     detail: 'Update the app title and request window actions.',

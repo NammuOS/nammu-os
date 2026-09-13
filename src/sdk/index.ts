@@ -44,6 +44,89 @@ export interface FilesApi {
     content: string,
     mimeType?: string,
   ): Promise<{ saved: boolean; fileName?: string }>;
+  pickBinary(options?: {
+    multiple?: boolean;
+    filters?: Array<{ name: string; extensions?: string[]; mimeTypes?: string[] }>;
+  }): Promise<{ cancelled: boolean; files: Array<BinaryFile> }>;
+  saveBinary(
+    suggestedName: string,
+    bytes: Uint8Array,
+    mimeType?: string,
+  ): Promise<{ saved: boolean; fileName?: string }>;
+}
+
+export interface BinaryFile {
+  name: string;
+  mimeType: string | null;
+  size: number;
+  bytes: Uint8Array;
+}
+
+export interface PackageAssetApi {
+  read(path: string): Promise<Uint8Array>;
+}
+
+export interface ServiceApi {
+  request<T = unknown>(service: string, operation: string, payload?: unknown): Promise<T>;
+}
+
+export interface WebSurfaceBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface WebSurfaceSnapshot {
+  id: string;
+  url: string;
+  title: string;
+  isLoading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  isAudioPlaying: boolean;
+  isMuted: boolean;
+  visible: boolean;
+}
+
+export type WebSurfaceControl = 'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
+
+export interface WebSurfaceHandle {
+  readonly id: string;
+  navigate(url: string): Promise<void>;
+  control(control: WebSurfaceControl): Promise<void>;
+  setBounds(bounds: WebSurfaceBounds): Promise<void>;
+  setVisible(visible: boolean): Promise<void>;
+  attach(bounds: WebSurfaceBounds): Promise<void>;
+  detach(): Promise<void>;
+  focus(): Promise<void>;
+  getState(): Promise<WebSurfaceSnapshot>;
+  destroy(): Promise<void>;
+  onState(listener: (state: WebSurfaceSnapshot) => void): () => void;
+}
+
+export interface WebSurfacesApi {
+  create(options: {
+    capability: string;
+    profileKey?: string;
+    privateSession?: boolean;
+    url: string;
+    bounds: WebSurfaceBounds;
+    visible?: boolean;
+  }): Promise<WebSurfaceHandle>;
+}
+
+export interface LifecycleState {
+  phase: 'active' | 'background' | 'minimized' | 'suspended';
+  visible: boolean;
+  focused: boolean;
+  active: boolean;
+  suspended: boolean;
+}
+
+export interface LifecycleApi {
+  getState(): Promise<LifecycleState>;
+  onChange(listener: (state: LifecycleState) => void): () => void;
 }
 
 export interface ClipboardApi {
@@ -72,6 +155,10 @@ export interface NammuApp {
   readonly clipboard: ClipboardApi;
   readonly migration: MigrationApi;
   readonly events: EventsApi;
+  readonly assets: PackageAssetApi;
+  readonly services: ServiceApi;
+  readonly webSurfaces: WebSurfacesApi;
+  readonly lifecycle: LifecycleApi;
   ready(): Promise<{ ready: boolean }>;
 }
 
@@ -111,6 +198,10 @@ export class NammuSDKClient implements NammuApp {
   readonly clipboard: ClipboardApi;
   readonly migration: MigrationApi;
   readonly events: EventsApi;
+  readonly assets: PackageAssetApi;
+  readonly services: ServiceApi;
+  readonly webSurfaces: WebSurfacesApi;
+  readonly lifecycle: LifecycleApi;
 
   constructor(options: SDKInitOptions = {}) {
     this.appId =
@@ -170,6 +261,9 @@ export class NammuSDKClient implements NammuApp {
       },
       saveText: (suggestedName, content, mimeType = 'text/plain') =>
         this.call('files.saveText', { suggestedName, content, mimeType }),
+      pickBinary: (options = {}) => this.call('files.pickBinary', options),
+      saveBinary: (suggestedName, bytes, mimeType) =>
+        this.call('files.saveBinary', { suggestedName, bytes, mimeType }),
     };
 
     this.clipboard = {
@@ -207,6 +301,78 @@ export class NammuSDKClient implements NammuApp {
         };
       },
       emit: (eventName, payload) => this.call('events.emit', { eventName, payload }),
+    };
+
+    this.assets = {
+      read: async (path) => {
+        const result = await this.call('assets.read', { path });
+        return result.bytes as Uint8Array;
+      },
+    };
+
+    this.services = {
+      request: async (service, operation, payload) => {
+        const result = await this.call('services.request', { service, operation, payload });
+        return result.data;
+      },
+    };
+
+    this.lifecycle = {
+      getState: () => this.call('lifecycle.getState', {}),
+      onChange: (listener) => this.subscribeHostEvent('system.lifecycle', listener),
+    };
+
+    this.webSurfaces = {
+      create: async (options) => {
+        const initial = (await this.call('webSurfaces.create', options)) as WebSurfaceSnapshot;
+        const id = initial.id;
+        const capability = options.capability;
+        let destroyed = false;
+        const ensureOpen = () => {
+          if (destroyed) throw new Error('The web surface has already been destroyed.');
+        };
+        return {
+          id,
+          navigate: async (url) => {
+            ensureOpen();
+            await this.call('webSurfaces.navigate', { id, capability, url });
+          },
+          control: async (control) => {
+            ensureOpen();
+            await this.call('webSurfaces.control', { id, control });
+          },
+          setBounds: async (bounds) => {
+            ensureOpen();
+            await this.call('webSurfaces.setBounds', { id, bounds });
+          },
+          setVisible: async (visible) => {
+            ensureOpen();
+            await this.call('webSurfaces.setVisible', { id, visible });
+          },
+          attach: async (bounds) => {
+            ensureOpen();
+            await this.call('webSurfaces.attach', { id, bounds });
+          },
+          detach: async () => {
+            ensureOpen();
+            await this.call('webSurfaces.detach', { id });
+          },
+          focus: async () => {
+            ensureOpen();
+            await this.call('webSurfaces.focus', { id });
+          },
+          getState: async () => {
+            ensureOpen();
+            return this.call('webSurfaces.getState', { id });
+          },
+          destroy: async () => {
+            if (destroyed) return;
+            await this.call('webSurfaces.destroy', { id });
+            destroyed = true;
+          },
+          onState: (listener) => this.subscribeHostEvent(`system.web-surface.${id}`, listener),
+        };
+      },
     };
   }
 
@@ -278,6 +444,19 @@ export class NammuSDKClient implements NammuApp {
         }
       }
     }
+  }
+
+  private subscribeHostEvent(eventName: string, listener: (payload: any) => void): () => void {
+    let listeners = this.eventListeners.get(eventName);
+    if (!listeners) {
+      listeners = new Set();
+      this.eventListeners.set(eventName, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) this.eventListeners.delete(eventName);
+    };
   }
 
   private createDefaultTransport(): IPCTransport {
