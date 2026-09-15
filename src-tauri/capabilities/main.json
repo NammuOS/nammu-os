@@ -72,6 +72,8 @@
     "allow-focus-web-surface",
     "allow-set-web-surface-zoom",
     "allow-get-web-surface-state",
+    "allow-adopt-integration-profile",
+    "allow-purge-integration-profiles",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "dialog:allow-open",

@@ -7,6 +7,7 @@ import type {
   WebSurfaceProxyEndpoint,
   WebSurfaceSnapshot,
 } from '../contracts';
+import type { WebIntegrationProfileController } from './integrationProfiles';
 
 type GeckoWindow = Window & {
   geckoEvalChrome?: (script: string) => Promise<unknown>;
@@ -21,6 +22,9 @@ interface Session {
   poll?: number;
   profileProxy: readonly WebSurfaceProxyEndpoint[];
   surfaceProxies: Map<string, readonly WebSurfaceProxyEndpoint[]>;
+  temporaryCleanup?: boolean;
+  cleanupReady?: () => void;
+  cleanupFailed?: (error: Error) => void;
 }
 
 interface Entry {
@@ -29,6 +33,7 @@ interface Entry {
   policy: WebSurfaceNavigationPolicy;
   bounds: WebSurfaceBounds;
   privateSession: boolean;
+  partitionKey?: string;
   snapshot: WebSurfaceSnapshot;
 }
 
@@ -139,7 +144,7 @@ export function createGeckoWebSurfaces(environment: {
   getDocument(): Document | undefined;
   getWindow(): Window | undefined;
   getOrigin(): string | undefined;
-}): PlatformWebSurfaces {
+}, integrationProfiles?: WebIntegrationProfileController): PlatformWebSurfaces {
   const entries = new Map<string, Entry>();
   const sessions = new Map<string, Session>();
   const stateListeners = new Set<(snapshot: WebSurfaceSnapshot) => void>();
@@ -147,6 +152,54 @@ export function createGeckoWebSurfaces(environment: {
   const supported = Boolean(
     environment.getDocument() && environment.getWindow() && environment.getOrigin(),
   );
+  const createSession = (
+    profileKey: string,
+    sessionId: string,
+    temporaryCleanup = false,
+    appendImmediately = true,
+  ): Session => {
+    const documentObject = environment.getDocument();
+    const origin = environment.getOrigin();
+    if (!documentObject || !origin) throw new Error('The Web runtime is unavailable.');
+    const iframe = documentObject.createElement('iframe');
+    const wisp = new URL('/firefox-wisp/', origin);
+    wisp.protocol = wisp.protocol === 'https:' ? 'wss:' : 'ws:';
+    const query = new URLSearchParams({
+      app: '1',
+      autostart: '1',
+      url: 'about:blank',
+      session: sessionId,
+    });
+    const fragment = new URLSearchParams({ 'nammu-wisp': wisp.toString() });
+    iframe.src = `/firefox-wasm/index.html?${query}#${fragment}`;
+    iframe.title = temporaryCleanup
+      ? 'Nammu integration profile cleanup'
+      : 'Nammu packaged web surface';
+    iframe.sandbox.add(
+      'allow-scripts',
+      'allow-same-origin',
+      'allow-forms',
+      'allow-popups',
+      'allow-modals',
+      'allow-downloads',
+      'allow-pointer-lock',
+    );
+    iframe.allow =
+      'cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; fullscreen';
+    if (temporaryCleanup) iframe.style.display = 'none';
+    const session: Session = {
+      key: profileKey,
+      iframe,
+      ready: false,
+      surfaceIds: new Set(),
+      profileProxy: [],
+      surfaceProxies: new Map(),
+      temporaryCleanup,
+    };
+    sessions.set(profileKey, session);
+    if (appendImmediately) documentObject.body.append(iframe);
+    return session;
+  };
 
   const emit = (entry: Entry) =>
     stateListeners.forEach((listener) => listener({ ...entry.snapshot }));
@@ -162,6 +215,31 @@ export function createGeckoWebSurfaces(environment: {
       throw new Error('The Gecko integration session is not ready.');
     }
     return runtime.geckoEvalChrome(source);
+  };
+  const purgeIdentities = async (
+    session: Session,
+    names: readonly string[],
+    namespaces: readonly string[],
+  ) => {
+    await chrome(
+      session,
+      `(()=>{
+        const names = new Set(${JSON.stringify(names)});
+        const prefixes = ${JSON.stringify(namespaces)}.map(
+          (namespace) => 'Nammu Integration | ' + namespace + '-'
+        );
+        const { ContextualIdentityService } = ChromeUtils.importESModule(
+          'resource://gre/modules/ContextualIdentityService.sys.mjs'
+        );
+        const matching = ContextualIdentityService.getPublicIdentities()
+          .filter((identity) =>
+            names.has(identity.name) || prefixes.some((prefix) => identity.name.startsWith(prefix))
+          );
+        return Promise.all(matching.map((identity) =>
+          ContextualIdentityService.remove(identity.userContextId)
+        )).then(() => matching.length);
+      })()`,
+    );
   };
   const tabScript = (entry: Entry, command: string) => `(()=>{
     const tab = globalThis.__nammuIntegrationTabs?.[${JSON.stringify(entry.id)}];
@@ -185,14 +263,33 @@ export function createGeckoWebSurfaces(environment: {
     }
   };
   const createTab = async (entry: Entry, reuseFirst: boolean) => {
+    const identityName = entry.partitionKey
+      ? integrationProfiles?.identityName(entry.session.key, entry.partitionKey) ??
+        `Nammu Integration | ${entry.session.key} | ${entry.partitionKey}`
+      : null;
     await chrome(
       entry.session,
       `(()=>{
         const registry = globalThis.__nammuIntegrationTabs ||
           (globalThis.__nammuIntegrationTabs = Object.create(null));
         const principal = Services.scriptSecurityManager.getSystemPrincipal();
-        const tab = ${reuseFirst ? 'gBrowser.tabs[0]' : 'gBrowser.addTab("about:blank", { triggeringPrincipal: principal })'};
+        const identityName = ${JSON.stringify(identityName)};
+        let userContextId = 0;
+        if (identityName) {
+          const { ContextualIdentityService } = ChromeUtils.importESModule(
+            'resource://gre/modules/ContextualIdentityService.sys.mjs'
+          );
+          const existing = ContextualIdentityService.getPublicIdentities()
+            .find((identity) => identity.name === identityName);
+          const identity = existing || ContextualIdentityService.create(identityName, 'blue', 'circle');
+          userContextId = identity.userContextId;
+        }
+        const initialTab = gBrowser.tabs[0];
+        const tab = ${reuseFirst && !entry.partitionKey ? 'initialTab' : 'gBrowser.addTab("about:blank", { triggeringPrincipal: principal, userContextId })'};
         registry[${JSON.stringify(entry.id)}] = tab;
+        if (${reuseFirst && Boolean(entry.partitionKey)} && initialTab !== tab && !initialTab.closing) {
+          gBrowser.removeTab(initialTab, { animate: false });
+        }
         if (${entry.privateSession}) tab.linkedBrowser.docShell.usePrivateBrowsing = true;
         if (${entry.snapshot.visible}) gBrowser.selectedTab = tab;
         if (${entry.snapshot.url !== 'about:blank'}) {
@@ -286,13 +383,29 @@ export function createGeckoWebSurfaces(environment: {
         .map((id) => entries.get(id))
         .filter(Boolean) as Entry[];
       void (async () => {
+        const pendingPurges = integrationProfiles?.pendingIdentityPurges() ?? [];
+        const pendingNamespaces = integrationProfiles?.pendingNamespacePurges() ?? [];
+        if (pendingPurges.length || pendingNamespaces.length) {
+          await purgeIdentities(session, pendingPurges, pendingNamespaces);
+          integrationProfiles?.completeIdentityPurges(pendingPurges, pendingNamespaces);
+        }
         for (const [index, entry] of sessionEntries.entries()) {
           if (entries.has(entry.snapshot.id)) await createTab(entry, index === 0);
         }
+        if (session.temporaryCleanup) {
+          runtimeFor(session)?.geckoDispose?.();
+          session.iframe.remove();
+          sessions.delete(session.key);
+          session.cleanupReady?.();
+          return;
+        }
         startPolling(session);
         syncSessionVisibility(session);
-      })();
+      })().catch((error) => session.cleanupFailed?.(error instanceof Error ? error : new Error(String(error))));
     } else if (event.data?.type === 'NAMMU_GECKO_ERROR') {
+      if (session.temporaryCleanup) {
+        session.cleanupFailed?.(new Error('The Gecko profile-cleanup runtime failed to start.'));
+      }
       session.surfaceIds.forEach((id) => {
         const entry = entries.get(id);
         if (entry) {
@@ -303,6 +416,37 @@ export function createGeckoWebSurfaces(environment: {
     }
   };
   environment.getWindow()?.addEventListener('message', onMessage);
+
+  integrationProfiles?.registerPurger(async (names, namespaces) => {
+    const active = [...sessions.values()].find(
+      (session) => session.ready && !session.temporaryCleanup,
+    );
+    if (active) {
+      await purgeIdentities(active, names, namespaces);
+      integrationProfiles.completeIdentityPurges(names, namespaces);
+      return;
+    }
+    const id = crypto.randomUUID().replaceAll('-', '');
+    const cleanup = createSession(`profile-cleanup-${id.slice(0, 24)}`, id, true, false);
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        cleanup.iframe.remove();
+        sessions.delete(cleanup.key);
+        reject(new Error('The Web integration-profile cleanup session timed out.'));
+      }, 30_000);
+      cleanup.cleanupReady = () => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+      cleanup.cleanupFailed = (error) => {
+        window.clearTimeout(timer);
+        cleanup.iframe.remove();
+        sessions.delete(cleanup.key);
+        reject(error);
+      };
+      environment.getDocument()?.body.append(cleanup.iframe);
+    });
+  });
 
   const implementation: PlatformWebSurfaces = {
     supported,
@@ -330,39 +474,7 @@ export function createGeckoWebSurfaces(environment: {
         const id = crypto.randomUUID().replaceAll('-', '');
         let session = sessions.get(options.profileKey);
         if (!session) {
-          const iframe = documentObject.createElement('iframe');
-          const wisp = new URL('/firefox-wisp/', origin);
-          wisp.protocol = wisp.protocol === 'https:' ? 'wss:' : 'ws:';
-          const query = new URLSearchParams({
-            app: '1',
-            autostart: '1',
-            url: 'about:blank',
-            session: id,
-          });
-          const fragment = new URLSearchParams({ 'nammu-wisp': wisp.toString() });
-          iframe.src = `/firefox-wasm/index.html?${query}#${fragment}`;
-          iframe.title = 'Nammu packaged web surface';
-          iframe.sandbox.add(
-            'allow-scripts',
-            'allow-same-origin',
-            'allow-forms',
-            'allow-popups',
-            'allow-modals',
-            'allow-downloads',
-            'allow-pointer-lock',
-          );
-          iframe.allow =
-            'cross-origin-isolated; camera; microphone; clipboard-read; clipboard-write; autoplay; fullscreen';
-          session = {
-            key: options.profileKey,
-            iframe,
-            ready: false,
-            surfaceIds: new Set(),
-            profileProxy: [],
-            surfaceProxies: new Map(),
-          };
-          sessions.set(options.profileKey, session);
-          documentObject.body.append(iframe);
+          session = createSession(options.profileKey, id);
         }
         const snapshot: WebSurfaceSnapshot = {
           id,
@@ -382,6 +494,7 @@ export function createGeckoWebSurfaces(environment: {
           policy: options.navigationPolicy,
           bounds: options.bounds,
           privateSession: options.privateSession,
+          partitionKey: options.partitionKey,
           snapshot,
         };
         entries.set(id, entry);

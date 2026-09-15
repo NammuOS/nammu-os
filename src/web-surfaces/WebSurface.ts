@@ -93,6 +93,7 @@ export async function createWebSurface(
   options: {
     owner: WebSurfaceOwner;
     profileKey: string;
+    partitionKey?: string;
     privateSession?: boolean;
     url: string;
     bounds: WebSurfaceBounds;

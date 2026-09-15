@@ -31,6 +31,7 @@ export type PermissionIdentifier =
   | 'filesystem.user-selected.read'
   | 'filesystem.user-selected.write'
   | 'migration.legacy-storage'
+  | 'migration.integration-profile'
   | 'network.internet'
   | 'integration.web-surfaces'
   | 'integration.services'
@@ -49,6 +50,7 @@ export const KNOWN_PERMISSIONS: Set<PermissionIdentifier> = new Set([
   'filesystem.user-selected.read',
   'filesystem.user-selected.write',
   'migration.legacy-storage',
+  'migration.integration-profile',
   'network.internet',
   'integration.web-surfaces',
   'integration.services',
@@ -78,6 +80,7 @@ export const SENSITIVE_PERMISSIONS: Set<PermissionIdentifier> = new Set([
   'filesystem.user-selected.read',
   'filesystem.user-selected.write',
   'migration.legacy-storage',
+  'migration.integration-profile',
   'network.internet',
   'integration.web-surfaces',
   'integration.services',
@@ -111,10 +114,23 @@ export interface WebSurfaceCapability {
   navigation: { mode: 'public-web' } | { mode: 'approved-origins'; origins: string[] };
   /** Per-instance ceiling. Core additionally applies its global ceiling. */
   maxSurfaces?: number;
+  /** Maximum isolated logical storage partitions within this profile pool. */
+  maxPartitions?: number;
   /** Whether a stable, app-isolated WebView profile may be used. */
   persistentProfile?: boolean;
   /** Allow the app to request host-validated untrusted public proxy routing. */
   untrustedProxyRouting?: boolean;
+}
+
+export interface IntegrationProfileMigrationDeclaration {
+  /** Core-reviewed migration identity. It never represents a filesystem path. */
+  id: string;
+  /** Monotonic migration contract version. */
+  version: number;
+  /** Destination web-surface capability declared by this package. */
+  capability: string;
+  /** Destination pooled profile key. */
+  profileKey: string;
 }
 
 export type CapabilityDeclaration =
@@ -147,6 +163,8 @@ export interface NammuAppManifest {
   optionalCapabilities?: string[];
   /** Exact legacy Core localStorage keys eligible for a one-time official-app migration. */
   legacyStorageKeys?: string[];
+  /** Official-only requests for Core-authorized browser-profile adoption. */
+  integrationProfileMigrations?: IntegrationProfileMigrationDeclaration[];
   /** Declared publisher identifier */
   publisher?: string;
   /** Cryptographic public key ID authorized for this package */
@@ -191,6 +209,7 @@ export interface InstalledAppRecord {
   signatureVerified?: boolean;
   isOfficial?: boolean;
   legacyStorageKeys?: string[];
+  integrationProfileMigrations?: IntegrationProfileMigrationDeclaration[];
 }
 
 export interface InstalledVersionRecord {
@@ -211,4 +230,5 @@ export interface InstalledVersionRecord {
   signatureVerified?: boolean;
   isOfficial?: boolean;
   legacyStorageKeys?: string[];
+  integrationProfileMigrations?: IntegrationProfileMigrationDeclaration[];
 }

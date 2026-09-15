@@ -23,6 +23,8 @@ import type {
   PackageSurfaceSnapshot,
 } from '@/platform/sandbox/integrationContracts';
 import type { WebSurfaceSnapshot } from '@/platform';
+import { isolatedIntegrationProfileKey } from '@/platform/integrationProfiles/profileNamespace';
+import { authorizeIntegrationProfileAdoption } from '@/platform/integrationProfiles/profilePolicy';
 
 export interface AppSandboxHostProps {
   appId: string;
@@ -36,14 +38,6 @@ export interface AppSandboxHostProps {
 
 function capabilityFailureMessage(result: { status: string; message?: string; reason?: string }) {
   return result.message || result.reason || 'The requested platform capability is unavailable.';
-}
-
-async function isolatedProfileKey(appId: string, profileKey: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(appId));
-  const namespace = Array.from(new Uint8Array(digest).slice(0, 12), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
-  return `pkg-${namespace}-${profileKey}`.slice(0, 80);
 }
 
 export function AppSandboxHost({
@@ -276,10 +270,11 @@ export function AppSandboxHost({
               'This host does not yet provide a packaged web-surface driver for the current runtime.',
             );
           }
-          const profileNamespace = await isolatedProfileKey(aId, request.profileKey);
+          const profileNamespace = await isolatedIntegrationProfileKey(aId, request.profileKey);
           const result = await platform.webSurfaces.create({
             owner: 'integration',
             profileKey: profileNamespace,
+            partitionKey: request.partitionKey,
             privateSession: request.privateSession || declaration.persistentProfile !== true,
             url: request.url,
             bounds: hostBounds(request.bounds),
@@ -369,6 +364,15 @@ export function AppSandboxHost({
         },
         onLegacyStorageRead: async (key) => localStorage.getItem(key),
         onLegacyStorageComplete: async (key) => localStorage.removeItem(key),
+        onIntegrationProfileAdopt: async (_, requestedAppId, request) => {
+          if (requestedAppId !== appRecord.appId) {
+            throw new Error('The integration-profile package identity changed.');
+          }
+          const approved = await authorizeIntegrationProfileAdoption(appRecord, request);
+          const result = await platform.integrationProfiles.adopt(approved);
+          if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
+          return result.value;
+        },
       });
 
       const context: SandboxContext = {
@@ -379,6 +383,7 @@ export function AppSandboxHost({
         grantedPermissions: permissions,
         requestedPermissions,
         legacyStorageKeys: new Set(appRecord.legacyStorageKeys ?? []),
+        integrationProfileMigrations: appRecord.integrationProfileMigrations ?? [],
         capabilities: appRecord.capabilities ?? [],
         lifecycleState: {
           phase: 'active',

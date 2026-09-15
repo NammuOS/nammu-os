@@ -48,6 +48,7 @@ import {
   unsupported,
 } from './shared';
 import { createGeckoWebSurfaces } from './web/geckoWebSurfaces';
+import { createWebIntegrationProfiles } from './web/integrationProfiles';
 
 export interface WebPlatformEnvironment {
   getWindow(): Window | undefined;
@@ -131,6 +132,7 @@ function unsupportedFilesystem<T>(): FilesystemResult<T> {
 export function createWebPlatformCapabilities(
   environment: WebPlatformEnvironment = browserEnvironment,
 ): PlatformCapabilities {
+  const integrationProfiles = createWebIntegrationProfiles(environment.getWindow);
   return Object.freeze({
     runtime: 'web' as const,
     services: createWebPlatformServices(environment),
@@ -138,7 +140,8 @@ export function createWebPlatformCapabilities(
       getDocument: environment.getDocument,
       getWindow: environment.getWindow,
       getOrigin: () => environment.getLocationOrigin?.(),
-    }),
+    }, integrationProfiles),
+    integrationProfiles,
     fileClipboard: Object.freeze({
       supported: false,
       async read(): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {

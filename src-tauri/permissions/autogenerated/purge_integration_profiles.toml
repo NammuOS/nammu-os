@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-purge-integration-profiles"
+description = "Enables the purge_integration_profiles command without any pre-configured scope."
+commands.allow = ["purge_integration_profiles"]
+
+[[permission]]
+identifier = "deny-purge-integration-profiles"
+description = "Denies the purge_integration_profiles command without any pre-configured scope."
+commands.deny = ["purge_integration_profiles"]

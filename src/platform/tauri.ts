@@ -63,6 +63,8 @@ import type {
   NativeFilesystemEventKind,
   NativeFilesystemWatchEvent,
   NativeVolumeProperties,
+  IntegrationProfileAdoptionRequest,
+  IntegrationProfileAdoptionResult,
   PickFilesOptions,
   PickedFiles,
   PickedPlatformFile,
@@ -108,6 +110,8 @@ export interface TauriWebSurfaceEnvironment {
 }
 
 export interface TauriCapabilityEnvironment {
+  adoptIntegrationProfile?(request: IntegrationProfileAdoptionRequest): Promise<unknown>;
+  purgeIntegrationProfiles?(appNamespace: string): Promise<unknown>;
   readNativeFileClipboard(): Promise<unknown>;
   writeNativeFileClipboard(
     operation: NativeFileClipboardOperation,
@@ -248,6 +252,12 @@ const tauriWebSurfaceEnvironment: TauriWebSurfaceEnvironment = {
 };
 
 const tauriCapabilityEnvironment: TauriCapabilityEnvironment = {
+  async adoptIntegrationProfile(request) {
+    return tauriServiceEnvironment.invoke('adopt_integration_profile', { request });
+  },
+  async purgeIntegrationProfiles(appNamespace) {
+    return tauriServiceEnvironment.invoke('purge_integration_profiles', { appNamespace });
+  },
   async readNativeFileClipboard() {
     return tauriServiceEnvironment.invoke('read_native_file_clipboard');
   },
@@ -1668,6 +1678,59 @@ export function createTauriPlatformCapabilities(
     runtime: 'tauri' as const,
     services,
     webSurfaces: createTauriWebSurfaces(),
+    integrationProfiles: Object.freeze({
+      supported: true,
+      async adopt(
+        request: IntegrationProfileAdoptionRequest,
+      ): Promise<CapabilityResult<IntegrationProfileAdoptionResult>> {
+        try {
+          if (!environment.adoptIntegrationProfile) {
+            return operationError<IntegrationProfileAdoptionResult>(
+              'Native profile adoption is unavailable.',
+            );
+          }
+          const value = await environment.adoptIntegrationProfile(request);
+          if (
+            !value ||
+            typeof value !== 'object' ||
+            !['adopted', 'already-adopted', 'source-not-found'].includes(
+              String((value as { status?: unknown }).status),
+            )
+          ) {
+            return operationError<IntegrationProfileAdoptionResult>(
+              'The native profile adoption result is invalid.',
+            );
+          }
+          return success<IntegrationProfileAdoptionResult>(
+            value as IntegrationProfileAdoptionResult,
+          );
+        } catch (error) {
+          return tauriFailure(error, 'The integration profile could not be adopted.');
+        }
+      },
+      async purge(appNamespace: string): Promise<CapabilityResult<{ removed: number }>> {
+        if (!/^pkg-[a-f0-9]{24}$/.test(appNamespace)) {
+          return invalidInput('The integration-profile package namespace is invalid.');
+        }
+        try {
+          if (!environment.purgeIntegrationProfiles) {
+            return operationError('Native profile purge is unavailable.');
+          }
+          const value = await environment.purgeIntegrationProfiles(appNamespace);
+          if (
+            !value ||
+            typeof value !== 'object' ||
+            !Number.isSafeInteger((value as { removed?: unknown }).removed) ||
+            Number((value as { removed: number }).removed) < 0
+          ) {
+            return operationError('The native profile purge result is invalid.');
+          }
+          return success<{ removed: number }>(value as { removed: number });
+        } catch (error) {
+          return tauriFailure(error, 'The integration profiles could not be purged.');
+        }
+      },
+    }),
     fileClipboard: Object.freeze({
       supported: true,
       async read(): Promise<FilesystemResult<NativeFileClipboardSnapshot>> {

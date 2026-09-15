@@ -68,6 +68,8 @@ fn main() {
             "focus_web_surface",
             "set_web_surface_zoom",
             "get_web_surface_state",
+            "adopt_integration_profile",
+            "purge_integration_profiles",
         ]),
     ))
     .expect("failed to generate the Nammu OS Tauri application manifest")

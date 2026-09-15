@@ -50,6 +50,7 @@ export interface PackageSurfaceSnapshot {
 export interface PackageSurfaceCreateRequest {
   capability: string;
   profileKey: string;
+  partitionKey?: string;
   privateSession: boolean;
   url: string;
   bounds: PackageSurfaceBounds;

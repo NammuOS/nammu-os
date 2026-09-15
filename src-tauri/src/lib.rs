@@ -1,3 +1,4 @@
+mod integration_profiles;
 mod local_server;
 mod native_archive;
 mod native_directory_watcher;
@@ -158,7 +159,9 @@ pub fn run() {
             web_surface::set_web_surface_visibility,
             web_surface::focus_web_surface,
             web_surface::set_web_surface_zoom,
-            web_surface::get_web_surface_state
+            web_surface::get_web_surface_state,
+            integration_profiles::adopt_integration_profile,
+            integration_profiles::purge_integration_profiles
         ])
         .setup(|app| {
             let frontend_origin = configured_frontend_origin(app)?;

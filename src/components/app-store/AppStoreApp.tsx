@@ -56,6 +56,10 @@ const PERMISSION_LABELS: Record<PermissionIdentifier, { label: string; detail: s
     label: 'Migrate legacy data',
     detail: 'Import the exact previous built-in app storage key once.',
   },
+  'migration.integration-profile': {
+    label: 'Adopt authenticated app sessions',
+    detail: 'Move only a Core-approved legacy integration profile into this official app.',
+  },
   'network.internet': { label: 'Internet access', detail: 'Connect to public network services.' },
   'integration.web-surfaces': {
     label: 'Embedded web content',

@@ -327,10 +327,26 @@ fn validate_profile_key(profile_key: &str) -> Result<&str, String> {
     Ok(profile_key)
 }
 
+fn persistent_profile_directory(
+    root: &std::path::Path,
+    owner: WebSurfaceOwner,
+    profile_key: &str,
+    partition_key: Option<&str>,
+) -> PathBuf {
+    let owner_root = root.join(owner.profile_directory());
+    let profile = if profile_key == "default" {
+        owner_root
+    } else {
+        owner_root.join(profile_key)
+    };
+    partition_key.map_or(profile.clone(), |partition| profile.join(partition))
+}
+
 #[derive(Debug, Clone)]
 struct SurfaceEntry {
     label: String,
     host_label: String,
+    profile_directory: PathBuf,
     snapshot: WebSurfaceSnapshot,
     navigation_policy: Option<WebSurfaceNavigationPolicy>,
 }
@@ -371,6 +387,39 @@ impl WebSurfaceState {
             .get(id)
             .cloned()
             .ok_or_else(|| "The native web surface does not exist.".to_string())
+    }
+
+    pub(crate) fn profile_root(&self) -> &std::path::Path {
+        &self.profile_root
+    }
+
+    pub(crate) fn profile_is_active(&self, profile: &std::path::Path) -> Result<bool, String> {
+        Ok(self.lock()?.values().any(|entry| {
+            entry.profile_directory == profile
+                || entry.profile_directory.starts_with(profile)
+                || profile.starts_with(&entry.profile_directory)
+        }))
+    }
+
+    pub(crate) fn integration_namespace_is_active(
+        &self,
+        app_namespace: &str,
+    ) -> Result<bool, String> {
+        let integration_root = self.profile_root.join("integration");
+        Ok(self.lock()?.values().any(|entry| {
+            entry
+                .profile_directory
+                .strip_prefix(&integration_root)
+                .ok()
+                .and_then(|relative| relative.components().next())
+                .map(|component| {
+                    component
+                        .as_os_str()
+                        .to_string_lossy()
+                        .starts_with(&format!("{app_namespace}-"))
+                })
+                .unwrap_or(false)
+        }))
     }
 
     fn update<F>(&self, id: &str, update: F) -> Result<WebSurfaceSnapshot, String>
@@ -535,6 +584,7 @@ fn get_surface(app: &AppHandle, state: &WebSurfaceState, id: &str) -> Result<Web
 pub async fn create_web_surface(
     owner: WebSurfaceOwner,
     profile_key: String,
+    partition_key: Option<String>,
     private_session: bool,
     url: String,
     bounds: WebSurfaceBounds,
@@ -568,6 +618,13 @@ pub async fn create_web_surface(
         .policy
         .validate_url(owner, navigation_policy.as_ref(), &url)?;
     let profile_key = validate_profile_key(&profile_key)?;
+    let partition_key = partition_key
+        .as_deref()
+        .map(validate_profile_key)
+        .transpose()?;
+    if owner != WebSurfaceOwner::Integration && partition_key.is_some() {
+        return Err("Only packaged integration surfaces may declare a partition.".to_string());
+    }
 
     if state.lock()?.len() >= MAX_WEB_SURFACES {
         return Err("The native web surface limit has been reached.".to_string());
@@ -589,19 +646,14 @@ pub async fn create_web_surface(
     let popup_policy = state.policy.clone();
     let navigation_policy_for_popup = navigation_policy.clone();
     let popup_owner = owner;
-    let owner_profile_root = state.profile_root.join(owner.profile_directory());
-    let profile_directory = if profile_key == "default" {
-        // Preserve the original Browser profile location and keep the common
-        // one-profile application case shallow and stable across upgrades.
-        owner_profile_root
-    } else {
-        owner_profile_root.join(profile_key)
-    };
+    // Omitted partitions preserve every pre-T0 profile path byte-for-byte.
+    let profile_directory =
+        persistent_profile_directory(&state.profile_root, owner, profile_key, partition_key);
     std::fs::create_dir_all(&profile_directory)
         .map_err(|error| format!("The native browser profile could not be opened: {error}"))?;
 
     let mut builder = WebviewBuilder::new(label.clone(), WebviewUrl::External(initial_url.clone()))
-        .data_directory(profile_directory)
+        .data_directory(profile_directory.clone())
         .incognito(private_session)
         .enable_clipboard_access()
         .disable_drag_drop_handler()
@@ -696,6 +748,7 @@ pub async fn create_web_surface(
         SurfaceEntry {
             label: label.clone(),
             host_label,
+            profile_directory,
             snapshot: snapshot.clone(),
             navigation_policy,
         },
@@ -1061,6 +1114,26 @@ mod tests {
                 "allowed {candidate}"
             );
         }
+    }
+
+    #[test]
+    fn partition_paths_are_isolated_without_moving_existing_browser_profiles() {
+        let root = PathBuf::from("C:/Nammu/web-surfaces");
+        assert_eq!(
+            persistent_profile_directory(&root, WebSurfaceOwner::Browser, "default", None),
+            root.join("browser")
+        );
+        assert_eq!(
+            persistent_profile_directory(
+                &root,
+                WebSurfaceOwner::Integration,
+                "pkg-0123456789abcdef01234567-telegram",
+                Some("account-a")
+            ),
+            root.join("integration")
+                .join("pkg-0123456789abcdef01234567-telegram")
+                .join("account-a")
+        );
     }
 
     #[test]

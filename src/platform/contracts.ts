@@ -739,6 +739,8 @@ export interface PlatformWebSurfaces {
   create(options: {
     owner: WebSurfaceOwner;
     profileKey: string;
+    /** Isolated logical storage partition; omitted for the shared/default profile. */
+    partitionKey?: string;
     privateSession: boolean;
     url: string;
     bounds: WebSurfaceBounds;
@@ -767,10 +769,35 @@ export interface PlatformWebSurfaces {
   subscribeOpenRequests(listener: (request: WebSurfaceOpenRequest) => void): Promise<() => void>;
 }
 
+export interface IntegrationProfileAdoptionRequest {
+  /** Core-derived package namespace. Never supplied by package JavaScript. */
+  appNamespace: string;
+  migrationId: string;
+  migrationVersion: number;
+  legacyNamespace: string;
+  legacyProfileId: string;
+  destinationProfileKey: string;
+  partitionKey: string;
+}
+
+export interface IntegrationProfileAdoptionResult {
+  status: 'adopted' | 'already-adopted' | 'source-not-found';
+}
+
+export interface PlatformIntegrationProfiles {
+  readonly supported: boolean;
+  adopt(
+    request: IntegrationProfileAdoptionRequest,
+  ): Promise<CapabilityResult<IntegrationProfileAdoptionResult>>;
+  purge(appNamespace: string): Promise<CapabilityResult<{ removed: number }>>;
+}
+
 export interface PlatformCapabilities {
   readonly runtime: PlatformRuntime;
   readonly services: PlatformServices;
   readonly webSurfaces: PlatformWebSurfaces;
+  /** Core-only lifecycle for package-owned authenticated integration profiles. */
+  readonly integrationProfiles: PlatformIntegrationProfiles;
   readonly filesystem: PlatformFilesystem;
   readonly fileClipboard: PlatformFileClipboard;
   readonly fileDragDrop: PlatformFileDragDrop;

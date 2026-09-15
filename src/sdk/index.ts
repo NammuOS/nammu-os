@@ -141,6 +141,8 @@ export interface WebSurfacesApi {
   create(options: {
     capability: string;
     profileKey?: string;
+    /** Optional isolated account partition within the pooled profile. */
+    partitionKey?: string;
     privateSession?: boolean;
     url: string;
     bounds: WebSurfaceBounds;
@@ -169,6 +171,11 @@ export interface ClipboardApi {
 export interface MigrationApi {
   readLegacyStorage(key: string): Promise<string | null>;
   completeLegacyStorage(key: string): Promise<{ completed: boolean }>;
+  adoptIntegrationProfile(options: {
+    migrationId: string;
+    legacyProfileId: string;
+    partitionKey: string;
+  }): Promise<{ status: 'adopted' | 'already-adopted' | 'source-not-found' }>;
 }
 
 export interface EventsApi {
@@ -312,6 +319,8 @@ export class NammuSDKClient implements NammuApp {
         return result?.value ?? null;
       },
       completeLegacyStorage: (key) => this.call('migration.completeLegacyStorage', { key }),
+      adoptIntegrationProfile: (options) =>
+        this.call('migration.adoptIntegrationProfile', options),
     };
 
     this.events = {

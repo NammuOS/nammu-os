@@ -16,6 +16,8 @@ import { getNMUDatabase } from './nmuDatabase';
 import type { AppActiveVersionPointer, NammuVFS } from '../vfs/vfsContracts';
 import { getNammuVFS } from '../vfs/nammuVFS';
 import { getPublisherKeyring, PublisherKeyring, type PackageTrustResult } from './packageSecurity';
+import { getPlatformCapabilities } from '../index';
+import { integrationProfilePurgeNamespace } from '../integrationProfiles/profilePolicy';
 
 export interface InstallOptions {
   sourceRegistry?: 'official' | 'community' | 'developer' | 'local';
@@ -32,6 +34,7 @@ export interface UninstallOptions {
 export interface NMUEngineOptions {
   healthCheckTimeoutMs?: number;
   now?: () => number;
+  integrationProfilePurger?: (record: InstalledAppRecord) => Promise<void>;
 }
 
 const versionDirectory = (appId: string, version: string) =>
@@ -56,6 +59,9 @@ function asVersionRecord(record: InstalledAppRecord): InstalledVersionRecord {
     signatureVerified: record.signatureVerified,
     isOfficial: record.isOfficial,
     legacyStorageKeys: record.legacyStorageKeys ? [...record.legacyStorageKeys] : undefined,
+    integrationProfileMigrations: record.integrationProfileMigrations
+      ? structuredClone(record.integrationProfileMigrations)
+      : undefined,
   };
 }
 
@@ -64,6 +70,7 @@ export class NMUEngine {
   private readonly recoveryPromise: Promise<void>;
   private readonly healthCheckTimeoutMs: number;
   private readonly now: () => number;
+  private readonly integrationProfilePurger: (record: InstalledAppRecord) => Promise<void>;
 
   constructor(
     private readonly vfs: NammuVFS = getNammuVFS(),
@@ -73,6 +80,7 @@ export class NMUEngine {
   ) {
     this.healthCheckTimeoutMs = options.healthCheckTimeoutMs ?? 5_000;
     this.now = options.now ?? Date.now;
+    this.integrationProfilePurger = options.integrationProfilePurger ?? (async () => {});
     this.recoveryPromise = this.recoverActivations();
   }
 
@@ -141,7 +149,9 @@ export class NMUEngine {
       (permission) =>
         existingSet.has(permission) ||
         SAFE_PERMISSIONS.has(permission) ||
-        (permission === 'migration.legacy-storage' && isOfficial) ||
+        ((permission === 'migration.legacy-storage' ||
+          permission === 'migration.integration-profile') &&
+          isOfficial) ||
         approvedSet.has(permission),
     );
   }
@@ -193,6 +203,9 @@ export class NMUEngine {
         '[nmu install] Legacy Core storage migration is restricted to official packages.',
       );
     }
+    if (manifest.integrationProfileMigrations?.length && !trust.isOfficial) {
+      throw new Error('[nmu install] Integration-profile adoption requires an official package.');
+    }
     const existing = await this.db.getApp(manifest.id);
     if (existing) {
       if (compareSemver(manifest.version, existing.version) > 0)
@@ -234,6 +247,9 @@ export class NMUEngine {
       signatureVerified: trust.verified,
       isOfficial: trust.isOfficial,
       legacyStorageKeys: manifest.legacyStorageKeys ? [...manifest.legacyStorageKeys] : undefined,
+      integrationProfileMigrations: manifest.integrationProfileMigrations
+        ? structuredClone(manifest.integrationProfileMigrations)
+        : undefined,
     };
     const pointer = this.pointerFor(record);
     await this.db.saveVersion(asVersionRecord(record));
@@ -274,6 +290,9 @@ export class NMUEngine {
       throw new Error(
         '[nmu update] Legacy Core storage migration is restricted to official packages.',
       );
+    }
+    if (manifest.integrationProfileMigrations?.length && !trust.isOfficial) {
+      throw new Error('[nmu update] Integration-profile adoption requires an official package.');
     }
     this.assertSignerContinuity(existing, trust, 'update');
     const retainedVersion = await this.db.getVersion(appId, manifest.version);
@@ -328,6 +347,9 @@ export class NMUEngine {
       isOfficial: trust.isOfficial,
       installedSize: packageBytes.length,
       legacyStorageKeys: manifest.legacyStorageKeys ? [...manifest.legacyStorageKeys] : undefined,
+      integrationProfileMigrations: manifest.integrationProfileMigrations
+        ? structuredClone(manifest.integrationProfileMigrations)
+        : undefined,
     };
     const previousPointer =
       (await this.vfs.getActiveAppVersion(appId)) ?? this.pointerFor(existing);
@@ -504,8 +526,12 @@ export class NMUEngine {
 
   async uninstall(appId: string, options: UninstallOptions = {}): Promise<void> {
     await this.ready();
-    if (!(await this.db.getApp(appId)))
+    const record = await this.db.getApp(appId);
+    if (!record)
       throw new Error(`[nmu uninstall] Application "${appId}" is not installed.`);
+    // Profile purge is intentionally completed before package records/files are
+    // removed. A native failure leaves the app installed and recoverable.
+    if (options.purgeUserData) await this.integrationProfilePurger(record);
     this.clearHealthTimer(appId);
     await this.vfs.deleteDirectory(`/applications/${appId}`);
     if (options.purgeUserData) await this.vfs.deleteDirectory(`/userdata/${appId}`);
@@ -559,6 +585,21 @@ export class NMUEngine {
 
 let defaultEngine: NMUEngine | null = null;
 export function getNMUEngine(): NMUEngine {
-  defaultEngine ??= new NMUEngine();
+  defaultEngine ??= new NMUEngine(undefined, undefined, undefined, {
+    integrationProfilePurger: async (record) => {
+      const result = await getPlatformCapabilities().integrationProfiles.purge(
+        await integrationProfilePurgeNamespace(record),
+      );
+      if (result.status !== 'success') {
+        const detail =
+          'message' in result
+            ? result.message
+            : 'reason' in result
+              ? result.reason
+              : 'Integration-profile purge was cancelled.';
+        throw new Error(detail);
+      }
+    },
+  });
   return defaultEngine;
 }

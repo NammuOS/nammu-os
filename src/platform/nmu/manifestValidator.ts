@@ -331,6 +331,17 @@ export function validateNammuAppManifest(
             errors.push(`Web-surface capability "${c.name}" maxSurfaces must be between 1 and 16`);
           }
           if (
+            c.maxPartitions !== undefined &&
+            (!Number.isInteger(c.maxPartitions) || c.maxPartitions < 1 || c.maxPartitions > 16)
+          ) {
+            errors.push(`Web-surface capability "${c.name}" maxPartitions must be between 1 and 16`);
+          }
+          if (c.maxPartitions !== undefined && c.persistentProfile !== true) {
+            errors.push(
+              `Web-surface capability "${c.name}" partitions require persistentProfile=true`,
+            );
+          }
+          if (
             c.untrustedProxyRouting !== undefined &&
             typeof c.untrustedProxyRouting !== 'boolean'
           ) {
@@ -388,6 +399,56 @@ export function validateNammuAppManifest(
         (!Array.isArray(obj.permissions) || !obj.permissions.includes('migration.legacy-storage'))
       ) {
         errors.push('legacyStorageKeys requires the "migration.legacy-storage" permission');
+      }
+    }
+  }
+
+  if (obj.integrationProfileMigrations !== undefined) {
+    if (
+      !Array.isArray(obj.integrationProfileMigrations) ||
+      obj.integrationProfileMigrations.length > 4
+    ) {
+      errors.push('Field "integrationProfileMigrations" must contain at most 4 declarations');
+    } else {
+      const seenMigrations = new Set<string>();
+      const webSurfaceNames = new Set(
+        Array.isArray(obj.capabilities)
+          ? (obj.capabilities as CapabilityDeclaration[])
+              .filter((capability) => capability?.type === 'web-surface')
+              .map((capability) => capability.name)
+          : [],
+      );
+      for (const raw of obj.integrationProfileMigrations) {
+        if (!raw || typeof raw !== 'object') {
+          errors.push('Integration-profile migration declarations must be objects');
+          continue;
+        }
+        const migration = raw as Record<string, unknown>;
+        if (!isCapabilityName(migration.id) || seenMigrations.has(String(migration.id))) {
+          errors.push('Integration-profile migration IDs must be safe and unique');
+        }
+        seenMigrations.add(String(migration.id));
+        if (!Number.isInteger(migration.version) || Number(migration.version) < 1) {
+          errors.push('Integration-profile migration versions must be positive integers');
+        }
+        if (!isCapabilityName(migration.capability) || !webSurfaceNames.has(migration.capability)) {
+          errors.push('Integration-profile migrations must reference a declared web surface');
+        }
+        if (
+          typeof migration.profileKey !== 'string' ||
+          !/^[a-z0-9][a-z0-9-]{0,39}$/.test(migration.profileKey)
+        ) {
+          errors.push('Integration-profile migration profileKey is invalid');
+        }
+      }
+      if (
+        obj.integrationProfileMigrations.length > 0 &&
+        (!Array.isArray(obj.permissions) ||
+          !obj.permissions.includes('migration.integration-profile'))
+      ) {
+        errors.push(
+          'integrationProfileMigrations requires the "migration.integration-profile" permission',
+        );
       }
     }
   }

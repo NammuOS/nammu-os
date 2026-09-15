@@ -12,6 +12,7 @@
 import {
   KNOWN_PERMISSIONS,
   type CapabilityDeclaration,
+  type IntegrationProfileMigrationDeclaration,
   type PermissionIdentifier,
   type WebSurfaceCapability,
 } from '../nmu/nappSpec';
@@ -64,6 +65,7 @@ export interface SandboxContext {
   grantedPermissions: Set<PermissionIdentifier>;
   requestedPermissions: Set<PermissionIdentifier>;
   legacyStorageKeys?: Set<string>;
+  integrationProfileMigrations?: readonly IntegrationProfileMigrationDeclaration[];
   capabilities?: readonly CapabilityDeclaration[];
   lifecycleState?: PackageLifecycleState;
   scopedVfs: ScopedVFS;
@@ -115,6 +117,11 @@ export interface HostServices {
   ) => Promise<{ saved: boolean; fileName?: string }>;
   onLegacyStorageRead?: (key: string) => Promise<string | null>;
   onLegacyStorageComplete?: (key: string) => Promise<void>;
+  onIntegrationProfileAdopt?: (
+    instanceId: string,
+    appId: string,
+    request: { migrationId: string; legacyProfileId: string; partitionKey: string },
+  ) => Promise<{ status: 'adopted' | 'already-adopted' | 'source-not-found' }>;
   onPickBinaryFiles?: (options: {
     multiple: boolean;
     filters: Array<{ name: string; extensions?: string[]; mimeTypes?: string[] }>;
@@ -168,7 +175,11 @@ export class CapabilityBroker {
   private contexts = new Map<string, SandboxContext>(); // instanceId -> SandboxContext
   private eventSubscriptions = new Map<string, Set<string>>(); // eventName -> Set<instanceId>
   private hostServices: HostServices;
-  private surfaceOwners = new Map<string, { instanceId: string; capability: string }>();
+  private surfaceOwners = new Map<
+    string,
+    { instanceId: string; capability: string; profileKey: string; partitionKey?: string }
+  >();
+  private partitionClaims = new Map<string, Set<string>>();
 
   constructor(hostServices: HostServices = {}) {
     this.hostServices = hostServices;
@@ -192,6 +203,9 @@ export class CapabilityBroker {
         await this.hostServices.onWebSurfaceDestroy?.(instanceId, id);
       }),
     );
+    for (const key of [...this.partitionClaims.keys()]) {
+      if (key.startsWith(`${instanceId}\0`)) this.partitionClaims.delete(key);
+    }
   }
 
   updateLifecycle(instanceId: string, state: PackageLifecycleState): void {
@@ -420,13 +434,36 @@ export class CapabilityBroker {
       const request: PackageSurfaceCreateRequest = {
         capability: capabilityName,
         profileKey: String(params.profileKey ?? 'default'),
+        partitionKey:
+          params.partitionKey === undefined ? undefined : String(params.partitionKey),
         privateSession: params.privateSession === true,
         url: String(params.url ?? ''),
         bounds: params.bounds as PackageSurfaceBounds,
         visible: params.visible !== false,
       };
-      if (!/^[a-z0-9-]{1,80}$/.test(request.profileKey) || !isSafeSurfaceBounds(request.bounds)) {
+      if (
+        !/^[a-z0-9][a-z0-9-]{0,39}$/.test(request.profileKey) ||
+        (request.partitionKey !== undefined &&
+          !/^[a-z0-9][a-z0-9-]{0,79}$/.test(request.partitionKey)) ||
+        !isSafeSurfaceBounds(request.bounds)
+      ) {
         throw { code: 'INVALID_INPUT', message: 'The web-surface request is invalid.' };
+      }
+      if (declaration.maxPartitions === undefined && request.partitionKey !== undefined) {
+        throw { code: 'UNDECLARED_PARTITION', message: 'This surface does not declare partitions.' };
+      }
+      if (declaration.maxPartitions !== undefined && request.partitionKey === undefined) {
+        throw { code: 'PARTITION_REQUIRED', message: 'An isolated partition is required.' };
+      }
+      let partitionClaim: { key: string; partitions: Set<string> } | undefined;
+      if (request.partitionKey !== undefined) {
+        const claimKey = `${context.instanceId}\0${capabilityName}\0${request.profileKey}`;
+        const partitions = new Set(this.partitionClaims.get(claimKey) ?? []);
+        partitions.add(request.partitionKey);
+        if (partitions.size > (declaration.maxPartitions ?? 0)) {
+          throw { code: 'LIMIT_REACHED', message: 'The declared partition limit was reached.' };
+        }
+        partitionClaim = { key: claimKey, partitions };
       }
       this.assertSurfaceUrl(declaration, request.url);
       if (!this.hostServices.onWebSurfaceCreate) {
@@ -441,9 +478,14 @@ export class CapabilityBroker {
       if (!snapshot?.id || this.surfaceOwners.has(snapshot.id)) {
         throw { code: 'INVALID_HOST_RESPONSE', message: 'The host returned an invalid surface.' };
       }
+      if (partitionClaim) {
+        this.partitionClaims.set(partitionClaim.key, partitionClaim.partitions);
+      }
       this.surfaceOwners.set(snapshot.id, {
         instanceId: context.instanceId,
         capability: capabilityName,
+        profileKey: request.profileKey,
+        partitionKey: request.partitionKey,
       });
       return snapshot;
     }
@@ -609,6 +651,35 @@ export class CapabilityBroker {
   }
 
   private async handleMigration(context: SandboxContext, action: string, params: any) {
+    if (action === 'adoptIntegrationProfile') {
+      this.assertPermission(context, 'migration.integration-profile');
+      const request = {
+        migrationId: String(params.migrationId ?? ''),
+        legacyProfileId: String(params.legacyProfileId ?? ''),
+        partitionKey: String(params.partitionKey ?? ''),
+      };
+      if (
+        !/^[a-z0-9][a-z0-9-]{0,79}$/.test(request.migrationId) ||
+        !/^[a-z0-9][a-z0-9-]{0,79}$/.test(request.legacyProfileId) ||
+        !/^[a-z0-9][a-z0-9-]{0,79}$/.test(request.partitionKey) ||
+        !context.integrationProfileMigrations?.some(
+          (migration) => migration.id === request.migrationId,
+        )
+      ) {
+        throw {
+          code: 'INVALID_INPUT',
+          message: 'The integration-profile migration is not declared by this app.',
+        };
+      }
+      if (!this.hostServices.onIntegrationProfileAdopt) {
+        throw { code: 'UNAVAILABLE', message: 'Integration-profile adoption is unavailable.' };
+      }
+      return this.hostServices.onIntegrationProfileAdopt(
+        context.instanceId,
+        context.appId,
+        request,
+      );
+    }
     this.assertPermission(context, 'migration.legacy-storage');
     const key = String(params.key ?? '');
     if (!key || !context.legacyStorageKeys?.has(key)) {
