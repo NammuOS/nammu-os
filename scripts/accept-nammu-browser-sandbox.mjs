@@ -11,12 +11,21 @@ const browserRepository = resolve(workspace, '..', 'nammu-browser');
 const privateKeyPath = process.env.NAMMU_RELEASE_PRIVATE_KEY_PATH;
 if (!privateKeyPath) throw new Error('NAMMU_RELEASE_PRIVATE_KEY_PATH is required.');
 
-const unsignedPath = join(browserRepository, 'dist', 'os.nammu.browser-1.0.0-unsigned.napp');
-const signedPath = join(browserRepository, 'dist', 'os.nammu.browser-1.0.0-signed.napp');
+const browserVersion = '1.0.1';
+const unsignedPath = join(
+  browserRepository,
+  'dist',
+  `os.nammu.browser-${browserVersion}-unsigned.napp`,
+);
+const signedPath = join(
+  browserRepository,
+  'dist',
+  `os.nammu.browser-${browserVersion}-signed.napp`,
+);
 if (process.env.NAMMU_BROWSER_USE_EXISTING_ARTIFACT !== '1') {
   const build = spawnSync('bun', ['run', 'build'], {
     cwd: browserRepository,
-    env: { ...process.env, NAMMU_BROWSER_VERSION: '1.0.0' },
+    env: { ...process.env, NAMMU_BROWSER_VERSION: browserVersion },
     encoding: 'utf8',
   });
   if (build.status !== 0) throw new Error(`Browser build failed: ${build.stderr || build.stdout}`);

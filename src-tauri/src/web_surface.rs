@@ -14,7 +14,8 @@ use crate::trusted_shell::require_trusted_shell;
 #[cfg(windows)]
 use webview2_com::{
     IsDocumentPlayingAudioChangedEventHandler, IsMutedChangedEventHandler,
-    Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_8},
+    Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_25, ICoreWebView2_8},
+    ShowSaveAsUICompletedHandler,
 };
 #[cfg(windows)]
 use windows::core::Interface;
@@ -232,6 +233,16 @@ pub enum WebSurfaceControl {
     GoForward,
     Mute,
     Unmute,
+    Find,
+    FindNext,
+    FindPrevious,
+    ClearFind,
+    Print,
+    SavePage,
+    EnableTrackingProtection,
+    DisableTrackingProtection,
+    BlockAutoplay,
+    AllowAutoplay,
 }
 
 #[derive(Debug, Clone)]
@@ -765,6 +776,7 @@ pub fn navigate_web_surface(
 pub fn control_web_surface(
     id: String,
     control: WebSurfaceControl,
+    query: Option<String>,
     app: AppHandle,
     caller: Webview,
     state: State<'_, WebSurfaceState>,
@@ -773,6 +785,57 @@ pub fn control_web_surface(
     let webview = get_surface(&app, &state, &id)?;
     match control {
         WebSurfaceControl::Reload => webview.reload().map_err(|error| error.to_string())?,
+        WebSurfaceControl::Print => webview.print().map_err(|error| error.to_string())?,
+        WebSurfaceControl::Find | WebSurfaceControl::FindNext | WebSurfaceControl::FindPrevious => {
+            let query = query.ok_or_else(|| "A find query is required.".to_string())?;
+            if query.is_empty()
+                || query.len() > 512
+                || query.chars().any(|character| character.is_control())
+            {
+                return Err("The find query is invalid.".to_string());
+            }
+            let query = serde_json::to_string(&query)
+                .map_err(|_| "The find query could not be encoded.".to_string())?;
+            let backwards = matches!(control, WebSurfaceControl::FindPrevious);
+            webview
+                .eval(format!(
+                    "window.find({query}, false, {backwards}, true, false, false, false);"
+                ))
+                .map_err(|error| error.to_string())?;
+        }
+        WebSurfaceControl::ClearFind => webview
+            .eval("window.getSelection()?.removeAllRanges();")
+            .map_err(|error| error.to_string())?,
+        WebSurfaceControl::SavePage => {
+            #[cfg(windows)]
+            webview
+                .with_webview(|platform| {
+                    let controller = platform.controller();
+                    if let Ok(core) = unsafe { controller.CoreWebView2() } {
+                        if let Ok(save_as) = core.cast::<ICoreWebView2_25>() {
+                            let completed =
+                                ShowSaveAsUICompletedHandler::create(Box::new(|_, _| Ok(())));
+                            let _ = unsafe { save_as.ShowSaveAsUI(&completed) };
+                        }
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+
+            #[cfg(not(windows))]
+            return Err(
+                "Save Page is currently implemented only for the Windows WebView2 surface."
+                    .to_string(),
+            );
+        }
+        WebSurfaceControl::EnableTrackingProtection
+        | WebSurfaceControl::DisableTrackingProtection
+        | WebSurfaceControl::BlockAutoplay
+        | WebSurfaceControl::AllowAutoplay => {
+            return Err(
+                "This Gecko profile preference is unavailable for the Desktop WebView2 surface."
+                    .to_string(),
+            );
+        }
         WebSurfaceControl::GoBack
         | WebSurfaceControl::GoForward
         | WebSurfaceControl::Stop
@@ -793,7 +856,17 @@ pub fn control_web_surface(
                                         audio.SetIsMuted(matches!(control, WebSurfaceControl::Mute))
                                     })
                                 }
-                                WebSurfaceControl::Reload => unreachable!(),
+                                WebSurfaceControl::Reload
+                                | WebSurfaceControl::Find
+                                | WebSurfaceControl::FindNext
+                                | WebSurfaceControl::FindPrevious
+                                | WebSurfaceControl::ClearFind
+                                | WebSurfaceControl::Print
+                                | WebSurfaceControl::SavePage
+                                | WebSurfaceControl::EnableTrackingProtection
+                                | WebSurfaceControl::DisableTrackingProtection
+                                | WebSurfaceControl::BlockAutoplay
+                                | WebSurfaceControl::AllowAutoplay => unreachable!(),
                             }
                         };
                     }

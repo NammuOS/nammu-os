@@ -683,10 +683,10 @@ export function createTauriWebSurfaces(
         { id, url },
         'The native web surface could not navigate.',
       ),
-    control: (id, control) =>
+    control: (id, control, options) =>
       command<void>(
         'control_web_surface',
-        { id, control },
+        { id, control, query: options?.query },
         'The native web surface control failed.',
       ),
     setBounds: (id, bounds) =>

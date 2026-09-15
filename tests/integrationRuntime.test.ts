@@ -209,6 +209,13 @@ describe('B0 generic packaged integration runtime', () => {
       call(broker, attacker, 'webSurfaces.getState', { id: surface.id }),
     ).rejects.toMatchObject({ code: 'SURFACE_NOT_OWNED' });
     await expect(
+      call(broker, attacker, 'webSurfaces.control', {
+        id: surface.id,
+        control: 'find',
+        query: 'private page text',
+      }),
+    ).rejects.toMatchObject({ code: 'SURFACE_NOT_OWNED' });
+    await expect(
       call(broker, owner, 'webSurfaces.navigate', {
         id: surface.id,
         capability: 'primary',
@@ -238,6 +245,18 @@ describe('B0 generic packaged integration runtime', () => {
     await call(broker, owner, 'webSurfaces.focus', { id: surface.id });
     await call(broker, owner, 'webSurfaces.setZoom', { id: surface.id, zoom: 1.25 });
     await call(broker, owner, 'webSurfaces.control', { id: surface.id, control: 'reload' });
+    await call(broker, owner, 'webSurfaces.control', {
+      id: surface.id,
+      control: 'find',
+      query: 'release notes',
+    });
+    await expect(
+      call(broker, owner, 'webSurfaces.control', {
+        id: surface.id,
+        control: 'find',
+        query: '',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     expect(hostOperations).toEqual([
       `${surface.id}:visible:false`,
       `${surface.id}:bounds`,
@@ -245,6 +264,7 @@ describe('B0 generic packaged integration runtime', () => {
       `${surface.id}:focus`,
       `${surface.id}:zoom:1.25`,
       `${surface.id}:reload`,
+      `${surface.id}:find`,
     ]);
     await broker.unregisterContext('instance-owner');
     expect(destroyed).toEqual([surface.id]);

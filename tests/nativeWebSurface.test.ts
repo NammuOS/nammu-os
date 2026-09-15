@@ -62,6 +62,7 @@ describe('native web-surface boundary', () => {
     });
     await surface.navigate('https://www.wikipedia.org/');
     await surface.control('go-back');
+    await surface.control('find', { query: 'Nammu' });
     await surface.control('mute');
     await surface.control('unmute');
     await surface.setBounds({ x: 45, y: 85, width: 860, height: 570 });
@@ -77,6 +78,7 @@ describe('native web-surface boundary', () => {
       'control_web_surface',
       'control_web_surface',
       'control_web_surface',
+      'control_web_surface',
       'set_web_surface_bounds',
       'set_web_surface_visibility',
       'focus_web_surface',
@@ -87,6 +89,11 @@ describe('native web-surface boundary', () => {
     expect(JSON.stringify(calls)).not.toContain('eval');
     expect(JSON.stringify(calls)).not.toContain('shell');
     expect(calls[0]?.args?.privateSession).toBe(false);
+    expect(calls[3]?.args).toEqual({
+      id: snapshot.id,
+      control: 'find',
+      query: 'Nammu',
+    });
   });
 
   test('drops malformed native state events at the platform boundary', async () => {

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { SANDBOX_PACKAGE_LOADER_SOURCE } from '../src/platform/sandbox/sandboxBridge';
 
 const repositoryRoot = resolve(import.meta.dir, '..');
 const tauriConfig = JSON.parse(
@@ -27,6 +29,11 @@ describe('desktop release hardening', () => {
     expect(csp['script-src']).toContain("'wasm-unsafe-eval'");
     expect(csp['script-src']).toContain('blob:');
     expect(csp['script-src']).not.toContain("'unsafe-eval'");
+    expect(csp['script-src']).not.toContain("'unsafe-inline'");
+    const loaderHash = createHash('sha256')
+      .update(SANDBOX_PACKAGE_LOADER_SOURCE)
+      .digest('base64');
+    expect(csp['script-src']).toContain(`'sha256-${loaderHash}'`);
     expect(csp['connect-src']).toContain('data:');
     expect(csp['connect-src']).toContain('http://127.0.0.1:*');
     expect(csp['connect-src']).toContain('ws://127.0.0.1:*');

@@ -2,6 +2,7 @@ import type {
   PlatformWebSurfaces,
   WebSurfaceBounds,
   WebSurfaceControl,
+  WebSurfaceControlOptions,
   WebSurfaceOwner,
   WebSurfaceSnapshot,
 } from '../platform';
@@ -9,7 +10,7 @@ import type {
 export interface WebSurface {
   readonly id: string;
   navigate(url: string): Promise<void>;
-  control(control: WebSurfaceControl): Promise<void>;
+  control(control: WebSurfaceControl, options?: WebSurfaceControlOptions): Promise<void>;
   setBounds(bounds: WebSurfaceBounds): Promise<void>;
   setVisible(visible: boolean): Promise<void>;
   focus(): Promise<void>;
@@ -50,9 +51,9 @@ class ManagedWebSurface implements WebSurface {
     requireSuccess(await this.platform.navigate(this.id, url));
   }
 
-  async control(control: WebSurfaceControl) {
+  async control(control: WebSurfaceControl, options?: WebSurfaceControlOptions) {
     this.ensureOpen();
-    requireSuccess(await this.platform.control(this.id, control));
+    requireSuccess(await this.platform.control(this.id, control, options));
   }
 
   async setBounds(bounds: WebSurfaceBounds) {

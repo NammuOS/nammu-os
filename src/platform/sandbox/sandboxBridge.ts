@@ -1,11 +1,16 @@
 const escapeInlineScript = (source: string) => source.replaceAll('</script', '<\\/script');
 
-export function createSandboxBridgeScript(
+export const SANDBOX_PACKAGE_LOADER_SOURCE = `(function(){const t=Array.from(document.querySelectorAll('template[data-nammu-script]'));const d=e=>{const b=atob(e.trim()),v=new Uint8Array(b.length);for(let i=0;i<b.length;i+=1)v[i]=b.charCodeAt(i);return new TextDecoder().decode(v)};const l=e=>new Promise((r,j)=>{const u=URL.createObjectURL(new Blob([d(e.innerHTML)],{type:'text/javascript'})),s=document.createElement('script');if(e.dataset.module==='true')s.type='module';s.src=u;s.onload=()=>{URL.revokeObjectURL(u);r()};s.onerror=()=>{URL.revokeObjectURL(u);j(new Error('A packaged application script could not be loaded.'))};e.replaceWith(s)});void t.reduce((c,e)=>c.then(()=>l(e)),Promise.resolve())})();`;
+
+export const createSandboxPackageLoaderScript = (): string =>
+  `<script>${SANDBOX_PACKAGE_LOADER_SOURCE}</script>`;
+
+export function createSandboxBridgeSource(
   appId: string,
   instanceId: string,
   nonce: string,
 ): string {
-  return `<script>
+  return `
   (function() {
     window.__NAMMU_APP_ID__ = ${JSON.stringify(appId)};
     window.__NAMMU_INSTANCE_ID__ = ${JSON.stringify(instanceId)};
@@ -37,14 +42,22 @@ export function createSandboxBridgeScript(
         };
       }
     };
-  })();
-</script>`;
+  })();`;
+}
+
+export function createSandboxBridgeScript(
+  appId: string,
+  instanceId: string,
+  nonce: string,
+): string {
+  return `<script>${escapeInlineScript(createSandboxBridgeSource(appId, instanceId, nonce))}</script>`;
 }
 
 export async function materializeSandboxDocument(
   html: string,
   entryPath: string,
   readPackageText: (path: string) => Promise<string>,
+  renderScript?: (source: string, attributes: string) => string,
 ): Promise<string> {
   const slash = entryPath.lastIndexOf('/');
   const entryDirectory = slash >= 0 ? entryPath.slice(0, slash + 1) : '';
@@ -95,7 +108,11 @@ export async function materializeSandboxDocument(
       throw new Error(`Sandbox script traversal is not allowed: ${source}`);
     const script = await readPackageText(normalized);
     const attributes = `${match[1]} ${match[4]}`.replace(/\s+src=(['"])[^'"]+\1/i, '').trim();
-    output += `<script${attributes ? ` ${attributes}` : ''}>${escapeInlineScript(script)}</script>`;
+    if (renderScript) {
+      output += renderScript(script, attributes);
+    } else {
+      output += `<script${attributes ? ` ${attributes}` : ''}>${escapeInlineScript(script)}</script>`;
+    }
     cursor = index + match[0].length;
   }
   return output + styledHtml.slice(cursor);

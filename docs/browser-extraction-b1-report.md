@@ -1,5 +1,9 @@
 # Nammu Browser B1 completion report
 
+> Historical note: this report records the original `v1.0.0` extraction. The
+> final product-parity closeout is `docs/browser-b1-product-parity.md` and the
+> authoritative Browser release is now `v1.0.1`.
+
 Status: complete, based on `v0.8.0-integration-runtime`.
 
 ## Final architecture
@@ -114,3 +118,23 @@ The remaining `.b1-browser-work` directory is disposable test staging. Its only
 remaining native module is currently locked by the active Antigravity IDE and
 can be removed after that IDE process exits; it is not tracked, packaged or part
 of the release.
+
+## v1.0.1 parity closeout
+
+The post-extraction comparison against Core commit `171bb5c` found genuine
+product regressions in Find in Page, Print, Save Page, Fullscreen, richer tab and
+bookmark commands, and application of protection preferences. They were restored
+through generic, finite WebSurface operations without moving Browser authority
+back into Core.
+
+- Browser commit/tag: `37e2482`, `v1.0.1`
+- Package SHA-256:
+  `81f3b2de0648507d6364d68aaa26edb0fad6af284f5746b4a35b898f48f10074`
+- Immutable release:
+  `https://github.com/NammuOS/nammu-browser/releases/download/v1.0.1/os.nammu.browser-1.0.1-signed.napp`
+
+Remote update, rollback, forward update, repair and retained-data reinstall pass.
+The packaged Windows Browser launches from the signed package, navigates with
+WebView2, mediates a website file input, creates no Desktop Gecko instance and
+shuts down cleanly. The complete feature classification and intentional
+differences are in `browser-b1-product-parity.md`.

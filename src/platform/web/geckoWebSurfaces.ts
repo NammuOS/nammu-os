@@ -456,7 +456,7 @@ export function createGeckoWebSurfaces(environment: {
         return failure(error);
       }
     },
-    async control(id, control) {
+    async control(id, control, options) {
       try {
         const entry = entryFor(id);
         const commands: Record<WebSurfaceControl, string> = {
@@ -466,6 +466,18 @@ export function createGeckoWebSurfaces(environment: {
           'go-forward': 'tab.linkedBrowser.goForward();',
           mute: 'tab.muted = true;',
           unmute: 'tab.muted = false;',
+          find: `tab.linkedBrowser.finder.fastFind(${JSON.stringify(options?.query ?? '')}, false, false);`,
+          'find-next': 'tab.linkedBrowser.finder.findAgain(false, false);',
+          'find-previous': 'tab.linkedBrowser.finder.findAgain(true, false);',
+          'clear-find': 'tab.linkedBrowser.finder.removeSelection();',
+          print: 'PrintUtils.startPrintWindow(tab.linkedBrowser.browsingContext);',
+          'save-page': 'saveBrowser(tab.linkedBrowser);',
+          'enable-tracking-protection':
+            "Services.prefs.setBoolPref('privacy.trackingprotection.enabled', true);",
+          'disable-tracking-protection':
+            "Services.prefs.setBoolPref('privacy.trackingprotection.enabled', false);",
+          'block-autoplay': "Services.prefs.setIntPref('media.autoplay.default', 1);",
+          'allow-autoplay': "Services.prefs.setIntPref('media.autoplay.default', 0);",
         };
         await chrome(entry.session, tabScript(entry, `${commands[control]} return 'controlled';`));
         if (control === 'mute' || control === 'unmute') {

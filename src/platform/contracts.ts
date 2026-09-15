@@ -705,7 +705,28 @@ export interface WebSurfaceOpenRequest {
   url: string;
 }
 
-export type WebSurfaceControl = 'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
+export type WebSurfaceControl =
+  | 'reload'
+  | 'stop'
+  | 'go-back'
+  | 'go-forward'
+  | 'mute'
+  | 'unmute'
+  | 'find'
+  | 'find-next'
+  | 'find-previous'
+  | 'clear-find'
+  | 'print'
+  | 'save-page'
+  | 'enable-tracking-protection'
+  | 'disable-tracking-protection'
+  | 'block-autoplay'
+  | 'allow-autoplay';
+
+export interface WebSurfaceControlOptions {
+  /** Used only by the bounded `find` command. */
+  query?: string;
+}
 
 export interface WebSurfaceProxyEndpoint {
   protocol: 'http' | 'https' | 'socks4' | 'socks5';
@@ -727,7 +748,11 @@ export interface PlatformWebSurfaces {
   }): Promise<CapabilityResult<WebSurfaceSnapshot>>;
   destroy(id: string): Promise<CapabilityResult<void>>;
   navigate(id: string, url: string): Promise<CapabilityResult<void>>;
-  control(id: string, control: WebSurfaceControl): Promise<CapabilityResult<void>>;
+  control(
+    id: string,
+    control: WebSurfaceControl,
+    options?: WebSurfaceControlOptions,
+  ): Promise<CapabilityResult<void>>;
   setBounds(id: string, bounds: WebSurfaceBounds): Promise<CapabilityResult<void>>;
   setVisible(id: string, visible: boolean): Promise<CapabilityResult<void>>;
   focus(id: string): Promise<CapabilityResult<void>>;

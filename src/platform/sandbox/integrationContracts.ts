@@ -11,7 +11,22 @@ export interface PackageSurfaceBounds {
 }
 
 export type PackageSurfaceControl =
-  'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
+  | 'reload'
+  | 'stop'
+  | 'go-back'
+  | 'go-forward'
+  | 'mute'
+  | 'unmute'
+  | 'find'
+  | 'find-next'
+  | 'find-previous'
+  | 'clear-find'
+  | 'print'
+  | 'save-page'
+  | 'enable-tracking-protection'
+  | 'disable-tracking-protection'
+  | 'block-autoplay'
+  | 'allow-autoplay';
 
 export interface PackageSurfaceProxyEndpoint {
   protocol: 'http' | 'https' | 'socks4' | 'socks5';

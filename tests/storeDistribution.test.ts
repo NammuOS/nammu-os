@@ -74,12 +74,12 @@ describe('Nammu Store distribution boundary', () => {
     );
     expect(browser.repository).toBe('https://github.com/NammuOS/nammu-browser');
     expect(browser.release.packageUrl).toBe(
-      'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp',
+      'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.1/os.nammu.browser-1.0.1-signed.napp',
     );
     expect(browser.screenshots).toEqual(['/store/os.nammu.browser/browser-workspace.png']);
     expect(existsSync('public/store/os.nammu.browser/browser-workspace.png')).toBe(true);
     expect(browser.release.sha256).toBe(
-      '541af4d497a43e7c2576ff3bd061565dc6fed07a84cd34019ba267a39d364ea6',
+      '81f3b2de0648507d6364d68aaa26edb0fad6af284f5746b4a35b898f48f10074',
     );
   });
 

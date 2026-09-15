@@ -39,7 +39,7 @@
         "manifest-src": "'self'",
         "media-src": "'self' data: blob: https://audio.jukehost.co.uk",
         "object-src": "'self' blob:",
-        "script-src": "'self' blob: 'wasm-unsafe-eval'",
+        "script-src": "'self' blob: 'wasm-unsafe-eval' 'sha256-/f2PB1WfMLxOSnxZvVSAjm3ejr569spnq4MPEnGfNGY='",
         "style-src": "'self' 'unsafe-inline'",
         "worker-src": "'self' blob:"
       },

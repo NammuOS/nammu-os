@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AppStoreApp } from '../../../src/components/app-store/AppStoreApp';
 import { AppSandboxHost } from '../../../src/components/os/sandbox/AppSandboxHost';
 import { getNMUDatabase } from '../../../src/platform/nmu/nmuDatabase';
+import { getNMUEngine } from '../../../src/platform/nmu/nmuEngine';
 import { getNammuVFS } from '../../../src/platform/vfs/nammuVFS';
 
 interface BrowserRemoteAcceptanceState {
@@ -19,7 +20,7 @@ declare global {
   }
 }
 
-const PACKAGE_ROUTE = '/api/app-store/packages/os.nammu.browser/1.0.0';
+const PACKAGE_ROUTE = '/api/app-store/packages/os.nammu.browser/1.0.1';
 const nativeFetch = window.fetch.bind(window);
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -29,6 +30,26 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   }
   return nativeFetch(input, init);
 }) as typeof window.fetch;
+
+if (!(await getNMUDatabase().getApp('os.nammu.browser'))) {
+  const previousResponse = await nativeFetch('/fixture-browser-v100');
+  if (!previousResponse.ok) throw new Error('Unable to seed immutable Browser v1.0.0.');
+  await getNMUEngine().install(new Uint8Array(await previousResponse.arrayBuffer()), {
+    sourceRegistry: 'official',
+    sourceUrl:
+      'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp',
+    approvedPermissions: [
+      'filesystem.user-selected.read',
+      'filesystem.user-selected.write',
+      'clipboard.read',
+      'clipboard.write',
+      'migration.legacy-storage',
+      'integration.web-surfaces',
+      'integration.services',
+      'window.manage',
+    ],
+  });
+}
 
 function Harness() {
   const [browserVisible, setBrowserVisible] = useState(false);

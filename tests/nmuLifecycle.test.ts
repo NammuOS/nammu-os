@@ -222,6 +222,22 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
       expect(materialized).toContain('.reference-app { color: orange; }');
       expect(materialized).not.toContain('src="main.js"');
       expect(materialized).not.toContain('href="styles.css"');
+      const scriptSources: string[] = [];
+      const cspSafe = await materializeSandboxDocument(
+        html,
+        'app/index.html',
+        async (path) =>
+          path === 'app/main.js'
+            ? 'window.referenceAppExecuted = true;'
+            : '.reference-app { color: orange; }',
+        (source) => {
+          scriptSources.push(source);
+          return `<template data-nammu-script="${scriptSources.length}"></template>`;
+        },
+      );
+      expect(cspSafe).toContain('<template data-nammu-script="1"></template>');
+      expect(cspSafe).not.toContain('window.referenceAppExecuted = true;');
+      expect(scriptSources).toEqual(['window.referenceAppExecuted = true;']);
       const reactDiagnostic =
         'console.warn(\'Expected <link rel="stylesheet"> to include an href\');';
       const opaqueScript = await materializeSandboxDocument(
@@ -521,6 +537,40 @@ describe('Nammu Package Manager (nmu) & Runtime Lifecycle', () => {
       // Verify userdata snapshot restored
       const restoredState = await scopedVfs.readUserDataText('state.json');
       expect(JSON.parse(restoredState)).toEqual({ items: [1, 2, 3] });
+    });
+
+    it('reactivates an exactly matching retained update after rollback', async () => {
+      const v1Pkg = createHelloNammuPackage({ version: '1.0.0' });
+      const v2Pkg = createHelloNammuPackage({ version: '2.0.0' });
+      await nmu.install(v1Pkg, {
+        sourceRegistry: 'developer',
+        sourceUrl: 'https://example.test/v1.napp',
+      });
+      await nmu.update('dev.nammu.hello', v2Pkg, {
+        skipHealthCheck: true,
+        sourceRegistry: 'developer',
+        sourceUrl: 'https://example.test/v2.napp',
+      });
+      await nmu.rollback('dev.nammu.hello');
+
+      const forward = await nmu.update('dev.nammu.hello', v2Pkg, {
+        skipHealthCheck: true,
+        sourceRegistry: 'developer',
+        sourceUrl: 'https://example.test/v2.napp',
+      });
+      expect(forward.version).toBe('2.0.0');
+      expect(forward.activeVersionDir).toBe('/applications/dev.nammu.hello/versions/2.0.0');
+      expect(forward.sourceUrl).toBe('https://example.test/v2.napp');
+      expect((await vfs.getActiveAppVersion('dev.nammu.hello'))?.activeVersion).toBe('2.0.0');
+
+      await nmu.rollback('dev.nammu.hello');
+      const mismatchedV2 = createHelloNammuPackage({
+        version: '2.0.0',
+        name: 'Different retained payload',
+      });
+      await expect(
+        nmu.update('dev.nammu.hello', mismatchedV2, { skipHealthCheck: true }),
+      ).rejects.toThrow(/does not match the verified package/);
     });
   });
 

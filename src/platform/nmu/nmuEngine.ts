@@ -276,7 +276,23 @@ export class NMUEngine {
       );
     }
     this.assertSignerContinuity(existing, trust, 'update');
-    const dir = await this.writeImmutableVersion(appId, manifest.version, unpacked.files);
+    const retainedVersion = await this.db.getVersion(appId, manifest.version);
+    let dir: string;
+    if (retainedVersion) {
+      if (
+        retainedVersion.packageHash !== unpacked.packageHash ||
+        retainedVersion.publisher !== (trust.verified ? trust.publisher : undefined) ||
+        retainedVersion.publisherKeyId !== (trust.verified ? trust.keyId : undefined) ||
+        !(await this.vfs.exists(retainedVersion.activeVersionDir))
+      ) {
+        throw new Error(
+          `[nmu update] Retained version ${appId}@${manifest.version} does not match the verified package.`,
+        );
+      }
+      dir = retainedVersion.activeVersionDir;
+    } else {
+      dir = await this.writeImmutableVersion(appId, manifest.version, unpacked.files);
+    }
     const snapshot =
       manifest.dataSchemaVersion > existing.dataSchemaVersion
         ? await this.vfs.createSnapshot(appId, 'userdata', existing.dataSchemaVersion)
@@ -288,6 +304,9 @@ export class NMUEngine {
       version: manifest.version,
       runtime: manifest.runtime,
       entry: manifest.entry,
+      sourceRegistry: options.sourceRegistry ?? existing.sourceRegistry,
+      sourceUrl: options.sourceUrl ?? existing.sourceUrl,
+      channel: options.channel ?? existing.channel,
       lastUpdatedAt: now,
       packageHash: unpacked.packageHash,
       publisher: trust.verified ? trust.publisher : undefined,

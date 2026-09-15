@@ -6,8 +6,10 @@ import { createServer } from 'vite';
 
 const workspace = process.cwd();
 const nextOrigin = process.env.NAMMU_STORE_ACCEPTANCE_ORIGIN || 'http://127.0.0.1:3000';
-const expectedHash = '541af4d497a43e7c2576ff3bd061565dc6fed07a84cd34019ba267a39d364ea6';
+const expectedHash = '81f3b2de0648507d6364d68aaa26edb0fad6af284f5746b4a35b898f48f10074';
 const expectedUrl =
+  'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.1/os.nammu.browser-1.0.1-signed.napp';
+const previousUrl =
   'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp';
 const expectedPermissions = [
   'Copy text',
@@ -29,9 +31,25 @@ assert.ok(
 let server;
 let browser;
 try {
+  const previousResponse = await fetch(previousUrl, { redirect: 'follow' });
+  assert.equal(previousResponse.ok, true, 'Immutable Browser v1.0.0 could not be downloaded.');
+  const previousPackage = Buffer.from(await previousResponse.arrayBuffer());
   server = await createServer({
     root: join(workspace, 'tests/browser/browser-store-remote-runtime'),
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: 'immutable-browser-v100-fixture',
+        configureServer(viteServer) {
+          viteServer.middlewares.use('/fixture-browser-v100', (_request, response) => {
+            response.statusCode = 200;
+            response.setHeader('content-type', 'application/octet-stream');
+            response.setHeader('content-length', String(previousPackage.length));
+            response.end(previousPackage);
+          });
+        },
+      },
+    ],
     resolve: { alias: { '@': join(workspace, 'src') } },
     server: {
       host: '127.0.0.1',
@@ -54,7 +72,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.goto(harnessOrigin, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+  await page.goto(harnessOrigin, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
   const state = () => page.evaluate(() => window.__browserRemoteAcceptance);
   const waitForInstalled = () =>
@@ -77,8 +95,7 @@ try {
     );
     await dialog.getByRole('button', { name: action, exact: true }).click();
   };
-  const openBrowser = async () => {
-    await page.getByRole('button', { name: 'Open', exact: true }).click();
+  const attachedBrowser = async () => {
     try {
       await page.locator('[data-acceptance-browser] iframe[title="Browser"]').waitFor({
         state: 'attached',
@@ -95,6 +112,10 @@ try {
     await packageFrame.locator('.browser-omnibox-input').waitFor({ timeout: 15_000 });
     return packageFrame;
   };
+  const openBrowser = async () => {
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
+    return attachedBrowser();
+  };
   const closeBrowser = async () => {
     await page.evaluate(() => window.__closeAcceptedBrowser?.());
     await page.locator('[data-acceptance-browser]').waitFor({ state: 'detached' });
@@ -103,13 +124,15 @@ try {
   await page.waitForFunction(() =>
     Object.prototype.hasOwnProperty.call(window.__browserRemoteAcceptance ?? {}, 'record'),
   );
-  assert.equal((await state())?.record, null, 'Acceptance must begin with Browser not installed.');
+  assert.equal((await state())?.record?.version, '1.0.0', 'Acceptance must begin on immutable Browser v1.0.0.');
 
-  await page.getByRole('button', { name: 'Install', exact: true }).click();
-  await reviewAndConfirm('Install');
+  await page.getByRole('button', { name: 'Update', exact: true }).click();
+  await reviewAndConfirm('Update');
+  let packageFrame = await attachedBrowser();
   await waitForInstalled();
   let acceptance = await state();
   assert.equal(acceptance?.packageRequests, 1);
+  assert.equal(acceptance?.record?.version, '1.0.1');
   assert.equal(acceptance?.record?.packageHash, expectedHash);
   assert.equal(acceptance?.record?.sourceUrl, expectedUrl);
   assert.equal(acceptance?.record?.sourceRegistry, 'official');
@@ -117,7 +140,6 @@ try {
   assert.equal(acceptance?.record?.publisher, 'nammu-official');
   assert.equal(acceptance?.record?.publisherKeyId, 'nammu-official-2026-09');
 
-  let packageFrame = await openBrowser();
   await packageFrame.locator('.browser-omnibox-input').fill('https://example.com/');
   await packageFrame.locator('.browser-omnibox-input').press('Enter');
   await page.waitForFunction(() => document.querySelectorAll('iframe').length === 2, undefined, {
@@ -133,6 +155,19 @@ try {
     { timeout: 10_000 },
   );
   await closeBrowser();
+
+  await page.getByRole('button', { name: 'Roll back to 1.0.0', exact: true }).click();
+  const rollbackDialog = page.getByRole('alertdialog', { name: 'Roll back Browser?' });
+  await rollbackDialog.waitFor();
+  await rollbackDialog.getByRole('button', { name: 'Roll back', exact: true }).click();
+  await page.waitForFunction(() => window.__browserRemoteAcceptance?.record?.version === '1.0.0');
+
+  await page.getByRole('button', { name: 'Update', exact: true }).click();
+  await reviewAndConfirm('Update');
+  packageFrame = await attachedBrowser();
+  await waitForInstalled();
+  await closeBrowser();
+  await page.waitForFunction(() => window.__browserRemoteAcceptance?.packageRequests === 2);
   packageFrame = await openBrowser();
   assert.equal(await packageFrame.getByText('example.com', { exact: false }).count() > 0, true);
   await closeBrowser();
@@ -140,7 +175,7 @@ try {
   await page.getByRole('button', { name: 'Repair installation', exact: true }).click();
   await reviewAndConfirm('Repair');
   await waitForInstalled();
-  await page.waitForFunction(() => window.__browserRemoteAcceptance?.packageRequests === 2);
+  await page.waitForFunction(() => window.__browserRemoteAcceptance?.packageRequests === 3);
 
   await page.getByRole('button', { name: 'Uninstall', exact: true }).click();
   const uninstallDialog = page.getByRole('alertdialog', { name: 'Uninstall Browser?' });
@@ -156,29 +191,33 @@ try {
   await page.getByRole('button', { name: 'Install', exact: true }).click();
   await reviewAndConfirm('Install');
   await waitForInstalled();
-  await page.waitForFunction(() => window.__browserRemoteAcceptance?.packageRequests === 3);
+  await page.waitForFunction(() => window.__browserRemoteAcceptance?.packageRequests === 4);
   packageFrame = await openBrowser();
   assert.equal(await packageFrame.getByText('example.com', { exact: false }).count() > 0, true);
 
   acceptance = await state();
   assert.equal(acceptance?.record?.packageHash, expectedHash);
   assert.equal(acceptance?.record?.signatureVerified, true);
-  assert.equal(acceptance?.packageRequests, 3);
+  assert.equal(acceptance?.record?.version, '1.0.1');
+  assert.equal(acceptance?.packageRequests, 4);
   assert.deepEqual(pageErrors, []);
 
   process.stdout.write(
     JSON.stringify({
       status: 'ok',
-      route: '/api/app-store/packages/os.nammu.browser/1.0.0',
+      route: '/api/app-store/packages/os.nammu.browser/1.0.1',
       packageUrl: expectedUrl,
       sha256: expectedHash,
       packageRequests: acceptance?.packageRequests,
       signatureVerified: acceptance?.record?.signatureVerified,
       lifecycle: [
-        'remote-install',
+        'immutable-v1.0.0-seed',
+        'remote-update-v1.0.1',
         'sandbox-launch',
         'browse-and-persist-bookmark',
         'close-reopen',
+        'rollback-v1.0.0',
+        'forward-remote-update-v1.0.1',
         'remote-repair',
         'uninstall-retain-data',
         'remote-reinstall-recover-data',

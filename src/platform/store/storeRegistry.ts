@@ -34,7 +34,7 @@ export interface NammuStoreRegistry {
 const NOTES_RELEASE_URL =
   'https://github.com/NammuOS/nammu-notes/releases/download/v1.0.0/os.nammu.notes-1.0.0-signed.napp';
 const BROWSER_RELEASE_URL =
-  'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp';
+  'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.1/os.nammu.browser-1.0.1-signed.napp';
 
 /**
  * The bootstrap catalog contains public discovery metadata only. Package bytes remain in the
@@ -68,13 +68,13 @@ export const OFFICIAL_NAMMU_REGISTRY: NammuStoreRegistry = {
         'window.manage',
       ],
       release: {
-        version: '1.0.0',
+        version: '1.0.1',
         packageUrl: BROWSER_RELEASE_URL,
-        sha256: '541af4d497a43e7c2576ff3bd061565dc6fed07a84cd34019ba267a39d364ea6',
-        size: 626_055,
+        sha256: '81f3b2de0648507d6364d68aaa26edb0fad6af284f5746b4a35b898f48f10074',
+        size: 638_594,
         publishedAt: '2026-09-13',
         releaseNotes:
-          'First independent release. Preserves Browser tabs, private sessions, bookmarks, history, settings, new-tab workspaces, and the Core-owned Gecko/WebView2 runtime split.',
+          'Restores Find in Page, Print, Save Page, fullscreen, richer tab and bookmark commands, and Gecko protection preferences while preserving the Core-owned Gecko/WebView2 runtime split.',
       },
     },
     {

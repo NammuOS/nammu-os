@@ -141,6 +141,7 @@ export interface HostServices {
     instanceId: string,
     surfaceId: string,
     control: PackageSurfaceControl,
+    query?: string,
   ) => Promise<void>;
   onWebSurfaceSetBounds?: (
     instanceId: string,
@@ -470,12 +471,28 @@ export class CapabilityBroker {
       }
       case 'control': {
         const control = String(params.control ?? '') as PackageSurfaceControl;
-        if (!['reload', 'stop', 'go-back', 'go-forward', 'mute', 'unmute'].includes(control)) {
+        if (![
+          'reload', 'stop', 'go-back', 'go-forward', 'mute', 'unmute',
+          'find', 'find-next', 'find-previous', 'clear-find', 'print', 'save-page',
+          'enable-tracking-protection', 'disable-tracking-protection',
+          'block-autoplay', 'allow-autoplay',
+        ].includes(control)) {
           throw { code: 'INVALID_INPUT', message: 'Unknown web-surface control.' };
+        }
+        const isFind = ['find', 'find-next', 'find-previous'].includes(control);
+        const query = isFind ? String(params.query ?? '').trim() : undefined;
+        const hasControlCharacter = query
+          ? Array.from(query).some((character) => {
+              const codePoint = character.codePointAt(0) ?? 0;
+              return codePoint <= 0x1f || codePoint === 0x7f;
+            })
+          : false;
+        if (isFind && (!query || query.length > 512 || hasControlCharacter)) {
+          throw { code: 'INVALID_INPUT', message: 'The find query is invalid.' };
         }
         if (!this.hostServices.onWebSurfaceControl)
           throw { code: 'UNAVAILABLE', message: 'Web-surface controls are unavailable.' };
-        await this.hostServices.onWebSurfaceControl(context.instanceId, id, control);
+        await this.hostServices.onWebSurfaceControl(context.instanceId, id, control, query);
         return { controlled: true };
       }
       case 'setBounds':

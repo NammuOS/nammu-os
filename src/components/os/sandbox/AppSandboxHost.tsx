@@ -11,7 +11,8 @@ import {
 } from '@/platform/sandbox/capabilityBroker';
 import type { PermissionIdentifier } from '@/platform/nmu/nappSpec';
 import {
-  createSandboxBridgeScript,
+  createSandboxBridgeSource,
+  createSandboxPackageLoaderScript,
   materializeSandboxDocument,
 } from '@/platform/sandbox/sandboxBridge';
 import { getPlatformCapabilities } from '@/platform';
@@ -160,10 +161,26 @@ export function AppSandboxHost({
           }
         }
 
-        htmlContent = await materializeSandboxDocument(htmlContent, appRecord.entry, (path) =>
-          scopedVfs.readAppText(path),
+        const scriptTemplate = (source: string, attributes = '') => {
+          const bytes = new TextEncoder().encode(source);
+          let binary = '';
+          for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+          }
+          const moduleAttribute = /\btype\s*=\s*(['"])module\1/i.test(attributes)
+            ? ' data-module="true"'
+            : '';
+          return `<template data-nammu-script${moduleAttribute}>${btoa(binary)}</template>`;
+        };
+        htmlContent = await materializeSandboxDocument(
+          htmlContent,
+          appRecord.entry,
+          (path) => scopedVfs.readAppText(path),
+          scriptTemplate,
         );
-        const bridgeScript = createSandboxBridgeScript(appId, instanceId, instanceNonce);
+        const bridgeScript = scriptTemplate(
+          createSandboxBridgeSource(appId, instanceId, instanceNonce),
+        );
         if (htmlContent.includes('<head>')) {
           htmlContent = htmlContent.replace('<head>', `<head>${bridgeScript}`);
         } else if (htmlContent.includes('<html>')) {
@@ -171,6 +188,10 @@ export function AppSandboxHost({
         } else {
           htmlContent = `${bridgeScript}\n${htmlContent}`;
         }
+        const loader = createSandboxPackageLoaderScript();
+        htmlContent = htmlContent.includes('</body>')
+          ? htmlContent.replace('</body>', `${loader}</body>`)
+          : `${htmlContent}\n${loader}`;
 
         if (isMounted) {
           setSrcDoc(htmlContent);
@@ -294,10 +315,10 @@ export function AppSandboxHost({
           const result = await platform.webSurfaces.navigate(surface.nativeId, url);
           if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
         },
-        onWebSurfaceControl: async (_, handle, control) => {
+        onWebSurfaceControl: async (_, handle, control, query) => {
           const surface = surfaceMapRef.current.get(handle);
           if (!surface) throw new Error('The host web surface no longer exists.');
-          const result = await platform.webSurfaces.control(surface.nativeId, control);
+          const result = await platform.webSurfaces.control(surface.nativeId, control, { query });
           if (result.status !== 'success') throw new Error(capabilityFailureMessage(result));
         },
         onWebSurfaceSetBounds: async (_, handle, bounds) => {
@@ -563,6 +584,8 @@ export function AppSandboxHost({
           ref={iframeRef}
           srcDoc={srcDoc}
           sandbox="allow-scripts"
+          allow="fullscreen"
+          allowFullScreen
           className="w-full h-full border-none bg-transparent"
           title={title || appId}
           onLoad={handleIframeLoad}

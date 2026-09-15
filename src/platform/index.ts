@@ -103,6 +103,7 @@ export type {
   SaveFileOptions,
   WebSurfaceBounds,
   WebSurfaceControl,
+  WebSurfaceControlOptions,
   WebSurfaceOwner,
   WebSurfaceOpenRequest,
   WebSurfaceSnapshot,

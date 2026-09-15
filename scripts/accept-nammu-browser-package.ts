@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { InMemoryNMUDatabase } from '../src/platform/nmu/nmuDatabase';
 import { NMUEngine } from '../src/platform/nmu/nmuEngine';
 import { getPublisherKeyring } from '../src/platform/nmu/packageSecurity';
@@ -33,8 +34,18 @@ async function buildSignedVersion(version: string): Promise<Uint8Array> {
   return signOfficialNapp(archive, privateKey);
 }
 
-const versionOne = await buildSignedVersion('1.0.0');
-const versionTwo = await buildSignedVersion('1.1.0');
+const immutableV100Url =
+  'https://github.com/NammuOS/nammu-browser/releases/download/v1.0.0/os.nammu.browser-1.0.0-signed.napp';
+const immutableV100Sha256 = '541af4d497a43e7c2576ff3bd061565dc6fed07a84cd34019ba267a39d364ea6';
+const versionOneResponse = await fetch(immutableV100Url, { redirect: 'follow' });
+if (!versionOneResponse.ok) {
+  throw new Error(`Immutable Browser v1.0.0 download failed (${versionOneResponse.status}).`);
+}
+const versionOne = new Uint8Array(await versionOneResponse.arrayBuffer());
+if (createHash('sha256').update(versionOne).digest('hex') !== immutableV100Sha256) {
+  throw new Error('Immutable Browser v1.0.0 digest changed.');
+}
+const versionTwo = await buildSignedVersion('1.0.1');
 const vfs = new InMemoryNammuVFS();
 const database = new InMemoryNMUDatabase();
 const engine = new NMUEngine(vfs, database, getPublisherKeyring());
@@ -72,7 +83,7 @@ const durableBookmarks = JSON.stringify([
 await data.writeUserData('settings.json', JSON.stringify({ nammu_browser_bookmarks: durableBookmarks }));
 
 const activating = await engine.update('os.nammu.browser', versionTwo);
-if (activating.state !== 'Activating' || activating.version !== '1.1.0') {
+if (activating.state !== 'Activating' || activating.version !== '1.0.1') {
   throw new Error('Browser update did not enter guarded activation.');
 }
 await engine.acknowledgeActivation('os.nammu.browser');
@@ -80,7 +91,13 @@ if ((await engine.rollback('os.nammu.browser')).version !== '1.0.0') {
   throw new Error('Browser rollback did not restore version 1.0.0.');
 }
 
-await engine.repair('os.nammu.browser', versionOne);
+const forwardUpdate = await engine.update('os.nammu.browser', versionTwo);
+if (forwardUpdate.state !== 'Activating' || forwardUpdate.version !== '1.0.1') {
+  throw new Error('Browser forward update did not reactivate v1.0.1.');
+}
+await engine.acknowledgeActivation('os.nammu.browser');
+
+await engine.repair('os.nammu.browser', versionTwo);
 if ((await database.getApp('os.nammu.browser'))?.state !== 'Installed') {
   throw new Error('Browser repair did not leave the package installed.');
 }
@@ -93,7 +110,7 @@ if (!(await vfs.exists('/userdata/os.nammu.browser/settings.json'))) {
   throw new Error('Browser user data was removed by data-retaining uninstall.');
 }
 
-await engine.install(versionOne, {
+await engine.install(versionTwo, {
   sourceRegistry: 'official',
   approvedPermissions: [...approvedPermissions],
 });
@@ -106,5 +123,5 @@ if (restoredSettings.nammu_browser_bookmarks !== durableBookmarks) {
 }
 
 process.stdout.write(
-  'Nammu Browser package acceptance passed: official signature, WebSurface authority, install, update, rollback, repair, data-retaining uninstall, reinstall, and recovery.\n',
+  'Nammu Browser package acceptance passed: immutable v1.0.0 install, signed v1.0.1 update, rollback, forward update, repair, data-retaining uninstall, v1.0.1 reinstall, and recovery.\n',
 );

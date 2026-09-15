@@ -89,7 +89,27 @@ export interface WebSurfaceSnapshot {
   visible: boolean;
 }
 
-export type WebSurfaceControl = 'reload' | 'stop' | 'go-back' | 'go-forward' | 'mute' | 'unmute';
+export type WebSurfaceControl =
+  | 'reload'
+  | 'stop'
+  | 'go-back'
+  | 'go-forward'
+  | 'mute'
+  | 'unmute'
+  | 'find'
+  | 'find-next'
+  | 'find-previous'
+  | 'clear-find'
+  | 'print'
+  | 'save-page'
+  | 'enable-tracking-protection'
+  | 'disable-tracking-protection'
+  | 'block-autoplay'
+  | 'allow-autoplay';
+
+export interface WebSurfaceControlOptions {
+  query?: string;
+}
 
 export interface WebSurfaceProxyEndpoint {
   protocol: 'http' | 'https' | 'socks4' | 'socks5';
@@ -100,7 +120,7 @@ export interface WebSurfaceProxyEndpoint {
 export interface WebSurfaceHandle {
   readonly id: string;
   navigate(url: string): Promise<void>;
-  control(control: WebSurfaceControl): Promise<void>;
+  control(control: WebSurfaceControl, options?: WebSurfaceControlOptions): Promise<void>;
   setBounds(bounds: WebSurfaceBounds): Promise<void>;
   setVisible(visible: boolean): Promise<void>;
   setZoom(zoom: number): Promise<void>;
@@ -349,9 +369,9 @@ export class NammuSDKClient implements NammuApp {
             ensureOpen();
             await this.call('webSurfaces.navigate', { id, capability, url });
           },
-          control: async (control) => {
+          control: async (control, options) => {
             ensureOpen();
-            await this.call('webSurfaces.control', { id, control });
+            await this.call('webSurfaces.control', { id, control, ...options });
           },
           setBounds: async (bounds) => {
             ensureOpen();
